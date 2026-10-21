@@ -45,6 +45,8 @@ I want to have a place to store these experimental V2 releases (.apk files) with
 
 That's why this repository exists. I'll publish V2 .apk files here as GitHub releases.
 
+You can have both V1 and V2 apps installed at the same time. They should be independent (for the most part) and not affect each other.
+
 ## The future
 
 Let's start here and see how it goes.
