@@ -1,125 +1,58 @@
-# LifeStreamer - Android app for IRL live streaming
+# LifeStreamerV2
 
-LifeStreamer is an Android app designed for IRL live streaming based on [StreamPack SDK](https://github.com/ThibaultBee/StreamPack).
+LifeStreamer is an Android app designed for IRL live streaming.
 
-[<img src="docs/google-play-store.svg">](https://play.google.com/store/apps/details?id=com.dimadesu.lifestreamer)
+For original (stable) LifeStreamer (version 1) go here https://github.com/dimadesu/LifeStreamer.
 
-## Features
+LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy experiments without affecting V1.
 
-- Restream RTMP feed or USB video/audio (UVC) from action camera like DJI Osmo Action 4 as SRT HEVC/H.265 with amazing dynamic/adaptive bitrate algorithm from [Belabox](https://belabox.net/) or [Moblin](https://github.com/eerimoq/moblin).
-- SRTLA connection bonding. Combine internet from multiple networks or SIM cards to improve resilience. Alternatively, use SRTLA bonding via [Bond Bunny](https://github.com/dimadesu/bond-bunny) app.
-- Moblink streamer server. Use additional phones as bonding connections using [Moblink](https://github.com/eerimoq/moblink) relay app.
-- Can use feed from any RTMP or SRT server as source. For Android I built [MediaSrvr](https://github.com/dimadesu/MediaSrvr) app that can run RTMP server on Android devices.
-- USB as source. Works with DJI Osmo Action 4 in 'Webcam' mode when connected to phone with one USB-C to USB-C cable. Also can work with Elgato Cam Link even when connected via USB hub. Feel free to test other UVC devices, like capture cards. I will mostly target DJI OA4 and Cam Link for now. Note: Phones can lower USB audio quality when USB video is used.
-- Capture Android device screen (screen sharing).
-- Background mode (foreground service) allows streaming with app in background, phone locked and screen off. Phone limits access to resources in this mode, so performance can be worse. Test first and consider lowering video encoder settings and bitrate. Note: Performance has improved significantly since switching from "debug" to "release" builds.
-- Aggressive infinite reconnect when app loses connection.
-- Audio monitoring for all audio sources.
-- Switch between all video and audio sources while streaming.
-- A lot of features come from StreamPack by default, check the list [here](https://github.com/ThibaultBee/StreamPack?tab=readme-ov-file#features).
+## The vision for V1
 
-![LifeStreamer screenshot](docs/LifeStreamer-screenshot.png)
+Original LifeStreamer (V1) is supposed to be as small as possible, to be very stable and reliable.
 
-Share ideas or report issues in Discord https://discord.gg/2UzEkU2AJW or create Git issues.
+I was always hesitant to endlessly add more features to it.
 
-## Sources
+LS V1:
+- Inputs: various video/audio sources
+- Input switcher
+- Video/audio monitor
+- Outputs: RTMP/SRT/SRTLA with adaptive bitrate.
 
-### Video
+A lot of people already use it and, in a way, it's perfect and complete as it is. It is sort of in a maintenance mode. I don't want to add any major changes to it for now.
 
-- Android device cameras.
-- Android device screen capture. [Watch screen sharing demo.](https://www.youtube.com/watch?v=jTrFwXJfr5c)
-- RTMP video. [Watch RTMP source demo.](https://www.youtube.com/watch?v=_zlWsQYxrE4)
-- SRT video.
-- USB video (UVC). [Watch USB source demo.](https://www.youtube.com/watch?v=RlPWbekqPx4)
+I plan to do a long term maintenance on V1 and keep updating it when new Android versions come out. It's easier to manage (test and fix) when there is less code and features overall.
 
-### Audio
+## The vision for V2
 
-- Android device microphones.
-- USB audio: USB headphones, USB audio interfaces, wireless mic receivers, etc.
-  - With USB video LifeStreamer is using USB audio from USB camera if available.
-- Mics from Bluetooth headphones, earbuds, etc.
-- For RTMP and SRT sources app uses Media Projection Audio to record RTMP/SRT player audio - kind of like phone screen recorder.
-- Record device's audio output (system audio).
+For LS V2 I want to take apart V1 and reimagine UI and make room for more features.
 
-![LifeStreamer app: inputs and outputs diagram](docs/LifeStreamer-inputs-outputs-diagram.png)
+I want to add and remove features and try things without breaking anything in version 1.
 
-## Apps that can work together
+LS V2 ideas:
+- Process video:
+  - Video filters
+  - Overlays
+  - Video composition (combining multiple video sources): split-screen, picture-in-picture
+- Reimagine UI and settings
+  - Web server UI (kinda like Belabox has)
+  - Try multiple alternative UIs (layouts)
+- Don't be scared to take things apart, make them modular and reassamble in new ways.
+- Etc.
 
-See the [demo video on YouTube](https://www.youtube.com/watch?v=_zlWsQYxrE4).
+## GitHub releases
 
-- [MediaSrvr](https://github.com/dimadesu/MediaSrvr) - Runs RTMP server on Android phone. You can publish RTMP stream to it from an action camera, for example.
-- LifeStreamer - Can use RTMP as source: playback RTMP stream from server and restream it as SRT with great dynamic bitrate.
-- [Bond Bunny](https://github.com/dimadesu/bond-bunny) - You can use LifeStreamer to publish SRT stream into Bond Bunny app. Bond Bunny accepts SRT as input and forwards packets to SRTLA server like Belabox Cloud. Uses multiple networks to improve stream quality.
-- [DJI Remote](https://github.com/dimadesu/dji-remote) - Remote control DJI cameras via Bluetooth. Configure and start RTMP livestream faster than official DJI Mimo app.
+I want to have a place to store these experimental V2 releases (.apk files) without polluting main V1 project.
 
-## How to install
+That's why this repository exists. I'll publish V2 .apk files here as GitHub releases.
 
-### Google Play Store
+## The future
 
-You can install app from Google Play Store. Follow [this link](https://play.google.com/store/apps/details?id=com.dimadesu.lifestreamer).
+Let's start here and see how it goes.
 
-### GitHub releases
+Maybe this can become a completely new app.
 
-I was originally releasing .apk files using [GitHub releases](https://github.com/dimadesu/LifeStreamer/releases). I plan to continue releasing on GitHub as a backup.
+Maybe some ideas from here can be added to V1.
 
-Open [GitHub releases page](https://github.com/dimadesu/LifeStreamer/releases) on your phone, download .apk file and install.
+Maybe some day this will replace V1.
 
-#### ⚠️ Note on GitHub VS. Google Play Store releases
-
-GitHub and Play Store releases are signed with different keys, which means they are incompatible with one another. You have to delete one version to install the other.
-
-## My goals
-
-My original motiviation for this project was to improve live streaming for action cameras like DJI Osmo Action 4 or GoPro.
-As of now (September 2025) they can only stream RTMP which usually diconnects a lot on unstable internet.
-I want to restream RTMP as SRT HEVC with great dynamic bitrate algorithm. That should fix it.
-
-## Why StreamPack
-
-Main features StreamPack provides out of the box that make sense to have as a base for this project:
-
-- Ability to stream via SRT or RTMP.
-- H.265 (aka HEVC) or H.264.
-- Basic dynamic bitrate algorithm for SRT (it calls it "bitrate regulator").
-- Foundation for implementing service to allow continue streaming in background with phone locked and screen off.
-- It's designed to be extendable with custom video and audio sources.
-
-### Demo apps
-
-StreamPack includes 2 great demo apps that can use phone cameras or screen recorder for live streaming.
-
-## Recommended solutions to most issues
-
-**General workaround for issues: kill LifeStreamer app/service and start fresh. Sometimes something in settings glitches out - wipe app data or reinstall.**
-
-**Settings can be changed during the stream, but won't apply until you restart the stream.**
-
-**Note: Max/target bitrate under bitrate regulation in settings can be changed on the fly during the stream - no need to restart the stream to apply.**
-
-Use recommended workarounds if you encounter issues.
-
-## Apps that can stream SRT on Android
-
-- IRL Pro (free)
-- Larix Broadcaster (subscription)
-- Larix Screencaster (subscription)
-- Can do HDMI/USB/UVC as input:
-  - USB Camera (free with ads) / USB Camera Pro (one-time payment to remove ads)
-  - CameraFi (free version with ads or subscription)
-
-## Similar/related projects
-
-- [IRL Pro](https://irlpro.app/)
-- [BELABOX](https://belabox.net/)
-- [Moblin](https://github.com/eerimoq/moblin)
-- [Moblink](https://github.com/eerimoq/moblink)
-
-## FAQ
-
-### Chat?
-
-There are existing chat apps for Android like [Stream Buddy](https://play.google.com/store/apps/details?id=com.streamomation.streamerchat). I suggest you do side-by-side view with LifeStramer and chat app if your phone has this feature or use 2nd phone for chat.
-
-### Overlays?
-
-I highly recommend adding overlays in OBS that restreams SRT.
+Not sure yet.
