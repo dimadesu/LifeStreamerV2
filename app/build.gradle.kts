@@ -13,14 +13,14 @@ android {
     namespace = "com.dimadesu.lifestreamer"
 
     defaultConfig {
-        applicationId = "com.dimadesu.lifestreamer"
+        applicationId = "com.dimadesu.lifestreamer.v2"
 
         minSdk = 24
         targetSdk = 36
         compileSdk = 36
 
         versionCode = 45
-        versionName = "1.46.4"
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
