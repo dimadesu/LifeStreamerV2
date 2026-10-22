@@ -76,6 +76,10 @@
 
     <!-- Settings -->
     <string name="settings">Settings</string>
+    <string name="settings_section_endpoint_key">settings_section_endpoint_key</string>
+    <string name="settings_section_video_key">settings_section_video_key</string>
+    <string name="settings_section_audio_key">settings_section_audio_key</string>
+    <string name="settings_section_rtmp_source_key">settings_section_rtmp_source_key</string>
 
     <string name="warning">Warning</string>
     <plurals name="camera_frame_rate_not_supported">
