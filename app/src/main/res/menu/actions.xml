@@ -7,33 +7,38 @@
         android:title="@string/action_settings"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_rtmp_help"
+        android:id="@+id/action_datastore"
         android:orderInCategory="101"
+        android:title="@string/action_datastore"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_rtmp_help"
+        android:orderInCategory="102"
         android:title="@string/action_rtmp_help"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_srt_help"
-        android:orderInCategory="102"
+        android:orderInCategory="103"
         android:title="@string/action_srt_help"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_uvc_help"
-        android:orderInCategory="103"
+        android:orderInCategory="104"
         android:title="@string/action_uvc_help"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_known_issues"
-        android:orderInCategory="104"
+        android:orderInCategory="105"
         android:title="@string/action_known_issues"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_faq"
-        android:orderInCategory="105"
+        android:orderInCategory="106"
         android:title="@string/action_faq"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_quit"
-        android:orderInCategory="106"
+        android:orderInCategory="107"
         android:title="@string/action_quit"
         app:showAsAction="never" />
 </menu>

@@ -62,6 +62,9 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.settings.SettingsActivity" />
+        <activity
+            android:name=".ui.datastore.DataStoreActivity"
+            android:label="@string/title_activity_datastore" />
         <activity android:name=".ui.help.RtmpHelpActivity" />
         <activity android:name=".ui.help.SrtHelpActivity" />
         <activity android:name=".ui.help.UvcHelpActivity" />
