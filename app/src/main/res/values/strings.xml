@@ -2,6 +2,7 @@
     <string name="app_name">LifeStreamerV2</string>
 
     <string name="action_settings">Settings</string>
+    <string name="action_datastore">DataStore</string>
     <string name="action_rtmp_help">How to use RTMP as source</string>
     <string name="action_srt_help">How to use SRT as source</string>
     <string name="action_uvc_help">How to use USB source</string>
@@ -9,6 +10,23 @@
     <string name="action_known_issues">Known issues and workarounds</string>
     <string name="action_quit">Quit</string>
     <string name="menu_actions">Menu actions</string>
+
+    <!-- DataStore Viewer -->
+    <string name="title_activity_datastore">DataStore</string>
+    <string name="datastore_empty">DataStore is empty.\n\nNo preferences have been stored yet. Change any setting in Settings to see them stored here.</string>
+    <string name="datastore_no_matching_keys">No matching keys found for \"%1$s\"</string>
+    <string name="datastore_summary_keys">%1$d keys</string>
+    <string name="datastore_summary_filtered">%1$d of %2$d keys</string>
+    <string name="datastore_summary_empty">0 keys</string>
+    <string name="datastore_copied">DataStore content copied to clipboard</string>
+    <string name="datastore_copy">Copy</string>
+    <string name="datastore_share">Share</string>
+    <string name="datastore_share_title">Share DataStore Content</string>
+    <string name="datastore_filter_hint">Filter keys or values…</string>
+    <string name="datastore_format_key_value">Key-Value</string>
+    <string name="datastore_format_json">JSON</string>
+    <string name="datastore_nothing_to_copy">DataStore is empty, nothing to copy</string>
+    <string name="datastore_nothing_to_share">DataStore is empty, nothing to share</string>
 
     <!-- Camera Streaming Service -->
     <string name="streaming_channel_name">Camera Streaming</string>
@@ -58,6 +76,10 @@
 
     <!-- Settings -->
     <string name="settings">Settings</string>
+    <string name="settings_section_endpoint_key">settings_section_endpoint_key</string>
+    <string name="settings_section_video_key">settings_section_video_key</string>
+    <string name="settings_section_audio_key">settings_section_audio_key</string>
+    <string name="settings_section_rtmp_source_key">settings_section_rtmp_source_key</string>
 
     <string name="warning">Warning</string>
     <plurals name="camera_frame_rate_not_supported">

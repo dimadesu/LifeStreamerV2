@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:fragment="com.dimadesu.lifestreamer.ui.settings.EndpointSettingsFragment"
+        app:key="@string/settings_section_endpoint_key"
+        app:title="@string/endpoint" />
+
+    <Preference
+        app:fragment="com.dimadesu.lifestreamer.ui.settings.VideoSettingsFragment"
+        app:key="@string/settings_section_video_key"
+        app:title="@string/video" />
+
+    <Preference
+        app:fragment="com.dimadesu.lifestreamer.ui.settings.AudioSettingsFragment"
+        app:key="@string/settings_section_audio_key"
+        app:title="@string/audio" />
+
+    <Preference
+        app:fragment="com.dimadesu.lifestreamer.ui.settings.RtmpSourceSettingsFragment"
+        app:key="@string/settings_section_rtmp_source_key"
+        app:title="@string/rtmp_source_category_title" />
+
+</PreferenceScreen>

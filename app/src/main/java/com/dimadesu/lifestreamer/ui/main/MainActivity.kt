@@ -20,12 +20,14 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuInflater
+import android.view.MenuItem
 import android.widget.PopupMenu
 import androidx.appcompat.app.AppCompatActivity
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainActivityBinding
 import com.dimadesu.lifestreamer.rtmp.audio.MediaProjectionService
 import com.dimadesu.lifestreamer.services.CameraStreamerService
+import com.dimadesu.lifestreamer.ui.datastore.DataStoreActivity
 import com.dimadesu.lifestreamer.ui.settings.SettingsActivity
 import com.dimadesu.lifestreamer.ui.help.FaqHelpActivity
 import com.dimadesu.lifestreamer.ui.help.KnownIssuesActivity
@@ -55,7 +57,7 @@ class MainActivity : AppCompatActivity() {
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                .replace(R.id.container, PreviewFragment())
+                .replace(R.id.container, com.dimadesu.lifestreamer.ui.main.compose.PreviewComposeFragment())
                 .commitNow()
         }
 
@@ -76,7 +78,7 @@ class MainActivity : AppCompatActivity() {
             val current = supportFragmentManager.findFragmentById(R.id.container)
             if (current == null) {
                 supportFragmentManager.beginTransaction()
-                    .replace(R.id.container, PreviewFragment())
+                    .replace(R.id.container, com.dimadesu.lifestreamer.ui.main.compose.PreviewComposeFragment())
                     .commitNow()
             }
         }
@@ -86,6 +88,8 @@ class MainActivity : AppCompatActivity() {
         // Unbind first: a started+bound service ignores stopService() until
         // every client unbinds. PreviewViewModel otherwise unbinds only in
         // onCleared(), which runs after the activity is already finishing.
+        (supportFragmentManager.findFragmentById(R.id.container) as? com.dimadesu.lifestreamer.ui.main.compose.PreviewComposeFragment)
+            ?.prepareForExit()
         (supportFragmentManager.findFragmentById(R.id.container) as? PreviewFragment)
             ?.prepareForExit()
 
@@ -118,6 +122,10 @@ class MainActivity : AppCompatActivity() {
             when (it.itemId) {
                 R.id.action_settings -> {
                     goToSettingsActivity()
+                    true
+                }
+                R.id.action_datastore -> {
+                    goToDataStoreActivity()
                     true
                 }
                 R.id.action_rtmp_help -> {
@@ -157,6 +165,11 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    private fun goToDataStoreActivity() {
+        val intent = Intent(this, DataStoreActivity::class.java)
+        startActivity(intent)
+    }
+
     private fun goToRtmpHelpActivity() {
         val intent = Intent(this, RtmpHelpActivity::class.java)
         startActivity(intent)
@@ -185,6 +198,44 @@ class MainActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.actions, menu)
         return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                goToSettingsActivity()
+                true
+            }
+            R.id.action_datastore -> {
+                goToDataStoreActivity()
+                true
+            }
+            R.id.action_rtmp_help -> {
+                goToRtmpHelpActivity()
+                true
+            }
+            R.id.action_srt_help -> {
+                goToSrtHelpActivity()
+                true
+            }
+            R.id.action_uvc_help -> {
+                goToUvcHelpActivity()
+                true
+            }
+            R.id.action_faq -> {
+                goToFaqHelpActivity()
+                true
+            }
+            R.id.action_known_issues -> {
+                goToKnownIssuesActivity()
+                true
+            }
+            R.id.action_quit -> {
+                exitApp()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     companion object {
