@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                .replace(R.id.container, PreviewFragment())
+                .replace(R.id.container, com.dimadesu.lifestreamer.ui.main.compose.PreviewComposeFragment())
                 .commitNow()
         }
 
@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
             val current = supportFragmentManager.findFragmentById(R.id.container)
             if (current == null) {
                 supportFragmentManager.beginTransaction()
-                    .replace(R.id.container, PreviewFragment())
+                    .replace(R.id.container, com.dimadesu.lifestreamer.ui.main.compose.PreviewComposeFragment())
                     .commitNow()
             }
         }
@@ -88,6 +88,8 @@ class MainActivity : AppCompatActivity() {
         // Unbind first: a started+bound service ignores stopService() until
         // every client unbinds. PreviewViewModel otherwise unbinds only in
         // onCleared(), which runs after the activity is already finishing.
+        (supportFragmentManager.findFragmentById(R.id.container) as? com.dimadesu.lifestreamer.ui.main.compose.PreviewComposeFragment)
+            ?.prepareForExit()
         (supportFragmentManager.findFragmentById(R.id.container) as? PreviewFragment)
             ?.prepareForExit()
 
