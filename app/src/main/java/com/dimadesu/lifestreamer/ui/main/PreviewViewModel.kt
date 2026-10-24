@@ -212,6 +212,33 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             onErrorMessage = { _streamerErrorLiveData.postValue(it) }
         )
 
+    // Controller for UVC (USB camera) source
+    val uvcSourceController: com.dimadesu.lifestreamer.ui.main.controllers.UvcSourceController =
+        com.dimadesu.lifestreamer.ui.main.controllers.UvcSourceController(
+            application = application,
+            scope = viewModelScope,
+            streamerProvider = { serviceStreamer },
+            lastUsedCameraIdProvider = { lastUsedCameraId },
+            onLastUsedCameraIdChanged = { lastUsedCameraId = it },
+            defaultCameraIdProvider = { application.cameraManager.cameras.firstOrNull() ?: "0" },
+            testBitmapProvider = { testBitmap },
+            onBeforeSourceSwitch = { removeBitrateRegulatorIfNeeded() },
+            onAfterSourceSwitch = {
+                readdBitrateRegulatorIfNeeded()
+                if (_isMonitorAudioOn.value == true) {
+                    applyMonitorAudioState()
+                }
+            },
+            onUvcActiveChanged = { active ->
+                if (active) {
+                    _activeRtmpIndex.postValue(null)
+                    _isScreenSource.postValue(false)
+                }
+            },
+            onToastMessage = { _toastMessageLiveData.postValue(it) },
+            onErrorMessage = { _streamerErrorLiveData.postValue(it) }
+        )
+
     // Controller for foreground service connection and flow observation
     val streamerServiceConnection: com.dimadesu.lifestreamer.ui.main.controllers.StreamerServiceConnection = com.dimadesu.lifestreamer.ui.main.controllers.StreamerServiceConnection(
         application = application,
@@ -436,23 +463,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         BitmapFactory.decodeResource(application.resources, R.drawable.img_test)
 
     /**
-     * UVC Camera helper for USB camera access
-     */
-    private var uvcCameraHelper: com.herohan.uvcapp.CameraHelper? = null
-    
-    /**
-     * Flag to prevent duplicate UVC reconnection attempts.
-     * Set when reconnection starts, cleared when complete or failed.
-     */
-    @Volatile
-    private var uvcReconnectionInProgress = false
-
-    /**
      * User intent flags - track what the user toggled ON (not what fallback is active)
      * These allow buttons to show correct state even when source falls back to bitmap
      */
     private val _activeRtmpIndex = MutableLiveData<Int?>(null)
-    private val _userToggledUvc = MutableLiveData<Boolean>(false)
+    private val _userToggledUvc: MutableLiveData<Boolean> get() = uvcSourceController._userToggledUvc
     private val _isScreenSource: MutableLiveData<Boolean> get() = screenSourceController._isScreenSource
 
     /**
@@ -1061,21 +1076,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         audioRoutingController.setAudioSourceBasedOnVideoSource()
     }
 
-    /**
-     * Switch to bitmap fallback for UVC source disconnect.
-     * Only switches video - audio stays on microphone (already set for UVC).
-     */
     private suspend fun switchToUvcBitmapFallback(streamer: SingleStreamer, bitmap: Bitmap) {
-        try {
-            // Add delay before switching sources to allow previous sources to fully release
-            kotlinx.coroutines.delay(300)
-            
-            // Set video to bitmap - audio stays unchanged (already on microphone for UVC)
-            streamer.setVideoSource(BitmapSourceFactory(bitmap))
-            Log.i(TAG, "Switched to UVC bitmap fallback (audio unchanged)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to set UVC bitmap fallback source: ${e.message}", e)
-        }
+        uvcSourceController.switchToUvcBitmapFallback(streamer, bitmap)
     }
 
     /**
@@ -3110,338 +3112,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
-    fun toggleUvcSource() {
-        val currentStreamer = serviceStreamer
-        if (currentStreamer == null) {
-            Log.e(TAG, "Streamer service not available for UVC source toggle")
-            _streamerErrorLiveData.postValue("Service not available")
-            return
-        }
-
-        val videoSource = currentStreamer.videoInput?.sourceFlow?.value
-
-        viewModelScope.launch {
-            try {
-                when (videoSource) {
-                    is UvcVideoSource -> {
-                        Log.i(TAG, "Switching from UVC to Camera source")
-                        
-                        // Mark that user toggled UVC OFF (back to camera)
-                        _userToggledUvc.postValue(false)
-                        _isScreenSource.postValue(false)
-                        
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
-                        // Switch back to camera (audio unchanged)
-                        delay(300)
-                        currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
-                        
-                        // Now explicitly release the CameraHelper since user toggled UVC OFF
-                        // (UvcVideoSource.release() no longer releases it to allow reconnection)
-                        uvcCameraHelper?.let { helper ->
-                            try {
-                                helper.closeCamera()
-                                helper.release()
-                                Log.d(TAG, "Released CameraHelper after user toggled UVC OFF")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error releasing CameraHelper: ${e.message}")
-                            }
-                        }
-                        uvcCameraHelper = null
-                        
-                        // Re-add bitrate regulator if streaming with SRT
-                        readdBitrateRegulatorIfNeeded()
-                        
-                        // Reapply audio monitoring if toggle is ON
-                        if (_isMonitorAudioOn.value == true) {
-                            applyMonitorAudioState()
-                        }
-                        
-                        Log.i(TAG, "Switched to camera source")
-                    }
-                    is ICameraSource -> {
-                        Log.i(TAG, "Switching from Camera to UVC source")
-                        
-                        // Remember current camera
-                        lastUsedCameraId = videoSource.cameraId
-                        Log.d(TAG, "Saved camera ID: $lastUsedCameraId")
-                        
-                        // Release any existing CameraHelper before creating a new one
-                        uvcCameraHelper?.let { oldHelper ->
-                            try {
-                                oldHelper.closeCamera()
-                                oldHelper.release()
-                                Log.d(TAG, "Released old CameraHelper before creating new one")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error releasing old CameraHelper: ${e.message}")
-                            }
-                        }
-                        uvcCameraHelper = null
-                        
-                        // Track whether we've already done the source switch synchronously
-                        // (when permission is already granted). This prevents double-switch
-                        // when onDeviceOpen is called. Use AtomicBoolean for thread-safe visibility.
-                        val sourceSwitchedSynchronously = java.util.concurrent.atomic.AtomicBoolean(false)
-                        
-                        // Always create a fresh CameraHelper instance
-                        uvcCameraHelper = com.herohan.uvcapp.CameraHelper().apply {
-                            setStateCallback(object : com.herohan.uvcapp.ICameraHelper.StateCallback {
-                                override fun onAttach(device: android.hardware.usb.UsbDevice) {
-                                    Log.d(TAG, "UVC camera attached: ${device.deviceName}")
-                                    
-                                    // Check if we should auto-reconnect to UVC after a disconnect
-                                    val isUvcToggleOn = _userToggledUvc.value ?: false
-                                    val currentVideoSource = currentStreamer.videoInput?.sourceFlow?.value
-                                    val isOnBitmapFallback = currentVideoSource is IBitmapSource
-                                    
-                                    if (isUvcToggleOn && isOnBitmapFallback && !uvcReconnectionInProgress) {
-                                        Log.i(TAG, "UVC camera re-attached while on bitmap fallback - auto-reconnecting")
-                                        uvcReconnectionInProgress = true
-                                        // Select device to trigger onDeviceOpen -> onCameraOpen flow
-                                        // This will switch back to UVC source automatically
-                                        selectDevice(device)
-                                    } else if (uvcReconnectionInProgress) {
-                                        Log.d(TAG, "UVC reconnection already in progress, ignoring duplicate attach")
-                                    }
-                                }
-                                
-                                override fun onDeviceOpen(device: android.hardware.usb.UsbDevice, isFirstOpen: Boolean) {
-                                    val alreadySwitched = sourceSwitchedSynchronously.get()
-                                    Log.d(TAG, "UVC device opened (isFirstOpen=$isFirstOpen, alreadySwitched=$alreadySwitched, reconnecting=$uvcReconnectionInProgress)")
-                                    
-                                    // Check if we're reconnecting after a disconnect (on bitmap fallback)
-                                    val currentVideoSource = currentStreamer.videoInput?.sourceFlow?.value
-                                    val isOnBitmapFallback = currentVideoSource is IBitmapSource
-                                    val isUvcToggleOn = _userToggledUvc.value ?: false
-                                    
-                                    // Handle reconnection: if we're on bitmap fallback, UVC toggle is still ON,
-                                    // and reconnection is in progress (to prevent duplicate switches)
-                                    if (isOnBitmapFallback && isUvcToggleOn && uvcReconnectionInProgress) {
-                                        Log.i(TAG, "UVC device reopened while on bitmap fallback - switching back to UVC source")
-                                        viewModelScope.launch {
-                                            try {
-                                                // Remove bitrate regulator if streaming with SRT
-                                                removeBitrateRegulatorIfNeeded()
-                                                
-                                                // Switch back to UVC source
-                                                delay(300)
-                                                currentStreamer.setVideoSource(UvcVideoSource.Factory(this@apply))
-                                                
-                                                // Re-add bitrate regulator if streaming with SRT
-                                                readdBitrateRegulatorIfNeeded()
-                                                
-                                                // Reapply audio monitoring if toggle is ON
-                                                if (_isMonitorAudioOn.value == true) {
-                                                    applyMonitorAudioState()
-                                                }
-                                                
-                                                Log.i(TAG, "Switched back to UVC source after reconnection")
-                                            } catch (e: Exception) {
-                                                Log.e(TAG, "Error switching back to UVC after reconnection: ${e.message}", e)
-                                                _streamerErrorLiveData.postValue("Failed to reconnect UVC: ${e.message}")
-                                            } finally {
-                                                uvcReconnectionInProgress = false
-                                            }
-                                        }
-                                    }
-                                    // If this is first open after permission grant AND we haven't already switched
-                                    // synchronously (i.e., permission was just granted via dialog), switch video source now.
-                                    // Skip if reconnection is in progress (will be handled above)
-                                    else if (isFirstOpen && !alreadySwitched && !uvcReconnectionInProgress) {
-                                        Log.i(TAG, "First open after permission grant - switching to UVC source")
-                                        viewModelScope.launch {
-                                            try {
-                                                // Mark that user toggled UVC ON
-                                                _userToggledUvc.postValue(true)
-                                                _isScreenSource.postValue(false)
-                                                _activeRtmpIndex.postValue(null)
-                                                
-                                                // Remove bitrate regulator if streaming with SRT
-                                                removeBitrateRegulatorIfNeeded()
-                                                
-                                                // Switch to UVC source (audio source unchanged - Android handles USB audio routing)
-                                                delay(300)
-                                                currentStreamer.setVideoSource(UvcVideoSource.Factory(this@apply))
-                                                
-                                                // Re-add bitrate regulator if streaming with SRT
-                                                readdBitrateRegulatorIfNeeded()
-                                                
-                                                // Reapply audio monitoring if toggle is ON
-                                                if (_isMonitorAudioOn.value == true) {
-                                                    applyMonitorAudioState()
-                                                }
-                                                
-                                                Log.i(TAG, "Switched to UVC source after permission grant")
-                                            } catch (e: Exception) {
-                                                Log.e(TAG, "Error switching to UVC after permission: ${e.message}", e)
-                                                _streamerErrorLiveData.postValue("Failed to switch to UVC: ${e.message}")
-                                            }
-                                        }
-                                    } else if (isFirstOpen) {
-                                        Log.d(TAG, "Skipping source switch in onDeviceOpen - already switched synchronously")
-                                    }
-                                    
-                                    // Open the camera after device is opened - use saved video config if available
-                                    // (includes format type, resolution, and frame rate)
-                                    val savedVideoConfig = getSavedUvcVideoConfig(device)
-                                    openCamera(savedVideoConfig)
-                                }
-                                
-                                override fun onCameraOpen(device: android.hardware.usb.UsbDevice) {
-                                    Log.i(TAG, "UVC camera opened and ready")
-                                    // Camera is now ready - notify the UvcVideoSource so it can
-                                    // re-add surfaces and start preview properly
-                                    val videoSource = currentStreamer.videoInput?.sourceFlow?.value
-                                    if (videoSource is UvcVideoSource) {
-                                        videoSource.onCameraReady()
-                                    } else {
-                                        // Fallback: just call startPreview on CameraHelper directly
-                                        Log.d(TAG, "Video source is not UvcVideoSource, calling startPreview directly")
-                                        startPreview()
-                                    }
-                                }
-                                
-                                override fun onCameraClose(device: android.hardware.usb.UsbDevice) {
-                                    Log.d(TAG, "UVC camera closed")
-                                }
-                                
-                                override fun onDeviceClose(device: android.hardware.usb.UsbDevice) {
-                                    Log.d(TAG, "UVC device closed")
-                                }
-                                
-                                override fun onDetach(device: android.hardware.usb.UsbDevice) {
-                                    Log.w(TAG, "UVC camera detached - device=${device.deviceName}")
-                                    
-                                    // Clear reconnection flag since device is detached
-                                    uvcReconnectionInProgress = false
-                                    
-                                    // Only switch to fallback if UVC source is actually active
-                                    // If UVC toggle is OFF, this detach might be from UvcTestActivity or other code
-                                    val isUvcActive = _userToggledUvc.value ?: false
-                                    if (!isUvcActive) {
-                                        Log.d(TAG, "UVC toggle is OFF, ignoring detach event")
-                                        return
-                                    }
-                                    
-                                    Log.w(TAG, "UVC toggle is ON - switching to fallback (toggle stays ON)")
-                                    viewModelScope.launch {
-                                        try {
-                                            // Use UVC-specific fallback that keeps microphone audio
-                                            // (not MediaProjection which is for RTMP player audio)
-                                            switchToUvcBitmapFallback(
-                                                currentStreamer,
-                                                testBitmap
-                                            )
-                                            // Keep UVC toggle ON - user can plug cable back in
-                                            // and toggle will reconnect automatically
-                                        } catch (e: Exception) {
-                                            Log.e(TAG, "Error switching to fallback: ${e.message}", e)
-                                        }
-                                    }
-                                }
-                                
-                                override fun onCancel(device: android.hardware.usb.UsbDevice) {
-                                    Log.d(TAG, "UVC camera permission cancelled")
-                                    // Clear reconnection flag since permission was cancelled
-                                    uvcReconnectionInProgress = false
-                                    _toastMessageLiveData.postValue("USB permission denied")
-                                }
-                            })
-                        }
-                        
-                        // Get available UVC devices
-                        val helper = uvcCameraHelper
-                        if (helper == null) {
-                            _streamerErrorLiveData.postValue("Failed to initialize UVC camera helper")
-                            Log.e(TAG, "Failed to initialize camera helper")
-                            return@launch
-                        }
-                        
-                        val deviceList = helper.deviceList
-                        if (deviceList.isNullOrEmpty()) {
-                            _streamerErrorLiveData.postValue("No USB camera connected")
-                            Log.w(TAG, "No UVC devices found")
-                            return@launch
-                        }
-                        
-                        // Select the first available device
-                        val device = deviceList[0]
-                        Log.i(TAG, "Selecting UVC device: ${device.deviceName}")
-                        
-                        // Check if we have permission for this USB device
-                        val usbManager = application.getSystemService(android.content.Context.USB_SERVICE) as android.hardware.usb.UsbManager
-                        if (!usbManager.hasPermission(device)) {
-                            Log.d(TAG, "No USB permission yet - requesting permission")
-                            _toastMessageLiveData.postValue("USB permission required")
-                            // Request permission - onDeviceOpen will be called automatically after grant
-                            helper.selectDevice(device) // This will trigger permission dialog
-                            // The source switch will happen in onDeviceOpen callback when isFirstOpen=true
-                            return@launch
-                        }
-                        
-                        // We have permission - proceed with source switch
-                        Log.d(TAG, "USB permission already granted - switching source now")
-                        
-                        // Mark that we're doing the source switch synchronously (not in onDeviceOpen)
-                        sourceSwitchedSynchronously.set(true)
-                        
-                        // Mark that user toggled UVC ON (only after confirming device is available AND we have permission)
-                        _userToggledUvc.postValue(true)
-                        _isScreenSource.postValue(false)
-                        _activeRtmpIndex.postValue(null)
-                        
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
-                        // Switch to UVC source first
-                        delay(300)
-                        currentStreamer.setVideoSource(UvcVideoSource.Factory(helper))
-                        
-                        // Re-add bitrate regulator if streaming with SRT
-                        readdBitrateRegulatorIfNeeded()
-                        
-                        // Reapply audio monitoring if toggle is ON
-                        if (_isMonitorAudioOn.value == true) {
-                            applyMonitorAudioState()
-                        }
-                        
-                        // Then select the device (this will trigger onDeviceOpen -> onCameraOpen)
-                        helper.selectDevice(device)
-                        
-                        Log.i(TAG, "Switched to UVC source with BT-aware audio")
-                    }
-                    else -> {
-                        // We're on bitmap or other source (likely bitmap fallback from disconnected UVC)
-                        // Switch back to camera instead of trying to reconnect UVC
-                        Log.i(TAG, "Switching from ${videoSource?.javaClass?.simpleName} to Camera source")
-                        
-                        // Clear UVC toggle flag (user wants camera now)
-                        _userToggledUvc.postValue(false)
-                        
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
-                        delay(300)
-                        currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
-                        
-                        // Re-add bitrate regulator if streaming with SRT
-                        readdBitrateRegulatorIfNeeded()
-                        
-                        // Reapply audio monitoring if toggle is ON
-                        if (_isMonitorAudioOn.value == true) {
-                            applyMonitorAudioState()
-                        }
-                        
-                        Log.i(TAG, "Switched to camera source")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error toggling UVC source: ${e.message}", e)
-                _streamerErrorLiveData.postValue("Failed to toggle UVC source: ${e.message}")
-            }
-        }
-    }
+    fun toggleUvcSource() = uvcSourceController.toggleUvcSource()
 
     val isCameraSource: LiveData<Boolean>
         get() = serviceReadyFlow.flatMapLatest { ready ->
@@ -3461,7 +3132,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     /**
      * Expose user toggle state for UVC button
      */
-    val isUvcSource: LiveData<Boolean> = _userToggledUvc
+    val isUvcSource: LiveData<Boolean> get() = uvcSourceController.isUvcSource
 
     val isScreenSource: LiveData<Boolean> get() = screenSourceController.isScreenSource
 
@@ -3679,17 +3350,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         currentRtmpPlayer = null
         
         // Clean up UVC camera helper
-        uvcCameraHelper?.let { helper ->
-            try {
-                helper.stopPreview()
-                helper.closeCamera()
-                helper.release()
-                Log.i(TAG, "Released UVC camera helper in onCleared()")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to release UVC camera helper: ${e.message}")
-            }
-        }
-        uvcCameraHelper = null
+        uvcSourceController.release()
         
         // try {
         //     streamer.releaseBlocking()
@@ -3728,29 +3389,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         mediaProjectionTokenStore.release()
     }
 
-    /**
-     * Retrieves the saved video config for a specific USB device from SharedPreferences.
-     * The Size object contains format type (YUV/MJPEG), resolution (width x height), and frame rate (fps).
-     * This matches the key format used in UvcTestActivity.setSavedPreviewSize().
-     */
-    private fun getSavedUvcVideoConfig(device: android.hardware.usb.UsbDevice): com.serenegiant.usb.Size? {
-        val key = "saved_preview_size_" + com.serenegiant.usb.USBMonitor.getProductKey(device)
-        val prefs = application.getSharedPreferences("uvc_camera_prefs", Context.MODE_PRIVATE)
-        val formatJson = prefs.getString(key, null)
-        if (formatJson.isNullOrEmpty()) {
-            Log.d(TAG, "No saved video format found for device: ${device.deviceName}")
-            return null
-        }
-        return try {
-            val gson = com.google.gson.Gson()
-            val format = gson.fromJson(formatJson, com.serenegiant.usb.Size::class.java)
-            Log.d(TAG, "Loaded saved video format: type=${format.type}, ${format.width}x${format.height}@${format.fps}fps for device: ${device.deviceName}")
-            format
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse saved video format: ${e.message}")
-            null
-        }
-    }
 
     /**
      * Refresh audio debug information by reading current audio configuration from the streamer.
