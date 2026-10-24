@@ -3980,6 +3980,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }.asLiveData()
 
+    val currentCameraIdLiveData: LiveData<String?>
+        get() = serviceReadyFlow.flatMapLatest { ready ->
+            if (ready && serviceStreamer != null) {
+                serviceStreamer!!.videoInput?.sourceFlow?.map { source ->
+                    (source as? ICameraSource)?.cameraId
+                } ?: kotlinx.coroutines.flow.flowOf(null)
+            } else {
+                kotlinx.coroutines.flow.flowOf(null)
+            }
+        }.asLiveData()
+
     /**
      * Expose user toggle state for UVC button
      */

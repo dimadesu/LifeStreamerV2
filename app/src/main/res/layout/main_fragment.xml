@@ -159,137 +159,14 @@
 
         </ScrollView>
 
-        <!-- Scrollable single column layout for all buttons -->
-        <ScrollView
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/sourceControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="0dp"
             android:layout_marginTop="76dp"
-            android:fillViewport="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="bottom">
-
-                <!-- Camera selection buttons container -->
-                <LinearLayout
-                    android:id="@+id/cameraButtonsContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone" />
-
-                <!--
-                <ImageButton
-                    android:id="@+id/switchCameraButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/switch_camera_source"
-                    android:onLongClick="@{() -> viewmodel.switchBackToFront()}"
-                    android:src="@drawable/ic_baseline_cameraswitch_24"
-                    app:goneUnless="@{viewmodel.isCameraSource}"
-                    app:tint="@android:color/white" />
-                -->
-
-                <Button
-                    android:id="@+id/switchSourceButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="RTMP SRC"
-                    android:backgroundTint='@{viewmodel.isRtmpSource ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource &amp;&amp; (viewmodel.activeRtmpIndex == null || viewmodel.activeRtmpIndex == 1)}" />
-
-                <!-- Container for dynamically added RTMP source buttons (RTMP SRC 2, 3, ...) -->
-                <LinearLayout
-                    android:id="@+id/rtmpSourceButtonsContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    app:goneUnless="@{!viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/rtmpSrvrButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="RTMP SRVR"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{!viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/toggleUvcButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="USB SRC"
-                    android:minWidth="50dp"
-                    android:backgroundTint='@{viewmodel.isUvcSource ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isRtmpSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/uvcTestButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="USB SRC ⚙️"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{!viewmodel.isRtmpSource &amp;&amp; !viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/toggleScreenButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SCREEN"
-                    android:minWidth="50dp"
-                    android:backgroundTint='@{viewmodel.isScreenSource ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isRtmpSource &amp;&amp; !viewmodel.isUvcSource}" />
-
-                <Button
-                    android:id="@+id/monitorAudioButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="MONITOR &#x1F3A4;"
-                    android:backgroundTint='@{viewmodel.isMonitorAudioOn ? @color/active_button_green : @color/button_gray}' />
-
-                <Button
-                    android:id="@+id/bluetoothToggleButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="50dp"
-                    android:text="&#x1F3A4;"
-                    android:drawableStart="@drawable/ic_bluetooth"
-                    android:onClick="@{() -> viewmodel.setUseBluetoothMic(!viewmodel.useBluetoothMic.getValue())}"
-                    android:backgroundTint='@{viewmodel.useBluetoothMic.getValue() ? @color/active_button_green : @color/button_gray}'
-                    android:visibility="@{viewmodel.showBluetoothToggle ? android.view.View.VISIBLE : android.view.View.GONE}" />
-
-                <Button
-                    android:id="@+id/systemAudioToggleButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="AUDIO OUT"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{!viewmodel.isRtmpSource}" />
-
-                <Button
-                    android:id="@+id/audioDebugToggleButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="AUDIO SRC"
-                    android:backgroundTint='@{viewmodel.isAudioDebugOverlayVisible ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isRtmpSource}" />
-
-                <Button
-                    android:id="@+id/srtlaStatsButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SRTLA STATS"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{viewmodel.isSrtlaEndpoint}" />
-
-            </LinearLayout>
-
-        </ScrollView>
+            app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Bitrate and stream status on the same line (top-right) -->
         <LinearLayout
