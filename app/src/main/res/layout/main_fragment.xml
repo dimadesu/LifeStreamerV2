@@ -443,9 +443,9 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:rotation="-90"
-            app:layout_constraintBottom_toBottomOf="@+id/settingsScrollView"
-            app:layout_constraintEnd_toEndOf="@+id/settingsScrollView"
-            app:layout_constraintTop_toTopOf="@+id/settingsScrollView">
+            app:layout_constraintBottom_toBottomOf="@+id/cameraControlsComposeView"
+            app:layout_constraintEnd_toEndOf="@+id/cameraControlsComposeView"
+            app:layout_constraintTop_toTopOf="@+id/cameraControlsComposeView">
 
             <com.google.android.material.slider.Slider
                 android:layout_width="match_parent"
@@ -476,75 +476,13 @@
                 app:goneUnless="@{viewmodel.showLensDistanceSlider}" />
         </LinearLayout>
 
-        <ScrollView
-            android:id="@+id/settingsScrollView"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/cameraControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="0dp"
             android:layout_marginEnd="16dp"
-            android:fillViewport="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/audioLevelContainer"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout
-                android:id="@+id/settingsLayout"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="bottom">
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/turn_on_off_torch"
-                    android:onClick="@{() -> viewmodel.toggleFlash()}"
-                    android:src="@drawable/ic_baseline_flash_on_24"
-                    app:goneUnless="@{viewmodel.isFlashAvailable &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_white_balance"
-                    android:onClick="@{() -> viewmodel.toggleAutoWhiteBalanceMode()}"
-                    android:src="@drawable/ic_baseline_wb_auto_24"
-                    app:goneUnless="@{viewmodel.isAutoWhiteBalanceAvailable &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_exposure_compensation"
-                    android:onClick="@{() -> viewmodel.toggleExposureSlider()}"
-                    android:src="@drawable/ic_baseline_exposure_24"
-                    app:goneUnless="@{viewmodel.isExposureCompensationAvailable() &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_zoom_ratio"
-                    android:onClick="@{() -> viewmodel.toggleZoomSlider()}"
-                    android:src="@drawable/ic_baseline_zoom_in_24"
-                    app:goneUnless="@{viewmodel.isZoomAvailable() &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_auto_focus_mode"
-                    android:onClick="@{() -> viewmodel.toggleAutoFocusMode()}"
-                    android:src="@drawable/ic_baseline_center_focus_strong_24"
-                    app:goneUnless="@{viewmodel.isAutoFocusModeAvailable() &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <androidx.compose.ui.platform.ComposeView
-                    android:id="@+id/composeMuteButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-
-            </LinearLayout>
-
-        </ScrollView>
+            app:layout_constraintEnd_toEndOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>
