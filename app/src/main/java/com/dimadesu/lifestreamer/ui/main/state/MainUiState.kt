@@ -24,12 +24,20 @@ data class StreamStatusState(
     val rtmpStatus: String? = null
 )
 
+data class CameraDeviceInfo(
+    val id: String,
+    val displayName: String,
+    val facing: String = ""
+)
+
 data class VideoSourceState(
     val isCamera: Boolean = true,
     val isUvc: Boolean = false,
     val isScreen: Boolean = false,
     val isRtmp: Boolean = false,
     val activeRtmpIndex: Int? = null,
+    val availableCameras: List<CameraDeviceInfo> = emptyList(),
+    val selectedCameraId: String? = null,
     val isFlashOn: Boolean = false,
     val isAutoWhiteBalanceOn: Boolean = true,
     val isAutoFocusOn: Boolean = true,

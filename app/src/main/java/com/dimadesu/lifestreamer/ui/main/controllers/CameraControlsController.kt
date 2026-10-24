@@ -16,6 +16,8 @@ import com.dimadesu.lifestreamer.utils.setNextCameraId
 import com.dimadesu.lifestreamer.utils.switchBackToFront
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
+import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
+import io.github.thibaultbee.streampack.core.interfaces.setCameraId
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +64,33 @@ class CameraControlsController(
     // Available camera list
     private val _availableCameras = MutableStateFlow<List<com.dimadesu.lifestreamer.ui.main.PreviewViewModel.CameraInfo>>(emptyList())
     val availableCameras: StateFlow<List<com.dimadesu.lifestreamer.ui.main.PreviewViewModel.CameraInfo>> = _availableCameras.asStateFlow()
+
+    // Active camera ID
+    private val _currentCameraId = MutableStateFlow<String?>(null)
+    val currentCameraId: StateFlow<String?> = _currentCameraId.asStateFlow()
+
+    fun updateCurrentCamera(cameraId: String?) {
+        _currentCameraId.value = cameraId
+    }
+
+    fun setCameraId(cameraId: String) {
+        val currentStreamer = streamerProvider() ?: return
+        val videoSource = currentStreamer.videoInput?.sourceFlow?.value
+        if (videoSource is ICameraSource) {
+            scope.launch(defaultDispatcher) {
+                videoSourceMutex.withLock {
+                    try {
+                        (currentStreamer as? IWithVideoSource)?.setCameraId(cameraId)
+                        _currentCameraId.value = cameraId
+                        Log.i(TAG, "Switched to camera ID: $cameraId")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to switch camera: ${e.message}", e)
+                        onErrorMessage("Failed to switch camera: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
 
     fun hideSliders() {
         _showZoomSlider.value = false

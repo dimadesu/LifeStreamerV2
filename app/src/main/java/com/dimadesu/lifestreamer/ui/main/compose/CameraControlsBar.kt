@@ -40,6 +40,7 @@ import com.dimadesu.lifestreamer.ui.main.state.VideoSourceState
 fun CameraControlsBar(
     videoSourceState: VideoSourceState,
     isMuted: Boolean,
+    onToggleCamera: () -> Unit = {},
     onToggleFlash: () -> Unit,
     onToggleAutoWhiteBalance: () -> Unit,
     onToggleExposureSlider: () -> Unit,
@@ -89,6 +90,14 @@ fun CameraControlsBar(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (videoSourceState.showCameraControls) {
+                // Switch / Toggle Camera Button
+                CameraActionButton(
+                    iconRes = R.drawable.ic_baseline_cameraswitch_24,
+                    contentDescription = "Switch Camera",
+                    isActive = false,
+                    onClick = onToggleCamera
+                )
+
                 // Torch / Flash
                 CameraActionButton(
                     iconRes = R.drawable.ic_baseline_flash_on_24,

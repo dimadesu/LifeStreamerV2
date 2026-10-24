@@ -37,6 +37,7 @@ fun SourceBar(
     videoSourceState: VideoSourceState,
     rtmpSourceCount: Int = 1,
     onCameraClick: () -> Unit,
+    onSelectCamera: (cameraId: String) -> Unit = {},
     onRtmpClick: (index: Int) -> Unit,
     onRtmpServerClick: () -> Unit,
     onUvcClick: () -> Unit,
@@ -53,6 +54,24 @@ fun SourceBar(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.Start
     ) {
+        // Camera Devices: visible when on Camera source (equivalent to legacy cameraButtonsContainer)
+        val showCameraDevices = !videoSourceState.isRtmp && !videoSourceState.isUvc && !videoSourceState.isScreen
+        AnimatedVisibility(
+            visible = showCameraDevices && videoSourceState.availableCameras.isNotEmpty(),
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                videoSourceState.availableCameras.forEach { camera ->
+                    SourceChip(
+                        text = camera.displayName,
+                        isActive = camera.id == videoSourceState.selectedCameraId,
+                        onClick = { onSelectCamera(camera.id) }
+                    )
+                }
+            }
+        }
+
         // RTMP Sources: visible only when not in UVC or Screen mode
         val showRtmp = !videoSourceState.isUvc && !videoSourceState.isScreen
         AnimatedVisibility(

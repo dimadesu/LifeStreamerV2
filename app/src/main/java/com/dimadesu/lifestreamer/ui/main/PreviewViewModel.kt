@@ -756,7 +756,41 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 }
         }
 
-        // Status-to-notification messaging removed; UI no longer shows sliding panel
+        // Synchronize available camera list and active camera ID into uiState
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                cameraControlsController.availableCameras,
+                cameraControlsController.currentCameraId
+            ) { cameras, currentId ->
+                val cameraDeviceInfos = cameras.map {
+                    com.dimadesu.lifestreamer.ui.main.state.CameraDeviceInfo(
+                        id = it.id,
+                        displayName = it.displayName,
+                        facing = it.facing
+                    )
+                }
+                updateUiState { current ->
+                    current.copy(
+                        videoSource = current.videoSource.copy(
+                            availableCameras = cameraDeviceInfos,
+                            selectedCameraId = currentId
+                        )
+                    )
+                }
+            }.collect { }
+        }
+
+        // Observe current active camera from streamer sourceFlow
+        viewModelScope.launch {
+            serviceReadyFlow.collect { ready ->
+                if (ready) {
+                    serviceStreamer?.videoInput?.sourceFlow?.collect { source ->
+                        val cameraId = (source as? io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource)?.cameraId
+                        cameraControlsController.updateCurrentCamera(cameraId)
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -2308,6 +2342,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleCamera() = cameraControlsController.toggleCamera()
+
+    fun setCameraId(cameraId: String) = cameraControlsController.setCameraId(cameraId)
     
     /**
      * Toggle audio monitoring - intelligently switches between RTMP audio and microphone monitoring
@@ -2637,6 +2673,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetMute -> setMute(event.isMuted)
             is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleCamera -> toggleCamera()
             is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SwitchBackToFront -> { switchBackToFront() }
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SelectCamera -> setCameraId(event.cameraId)
             is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleScreenSource -> toggleScreenSource(event.launcher)
             is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleUvcSource -> toggleUvcSource()
             is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleRtmpSource -> toggleVideoSource(event.launcher, event.index)

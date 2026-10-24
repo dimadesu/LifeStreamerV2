@@ -55,6 +55,7 @@ fun MainScreenOverlay(
             videoSourceState = uiState.videoSource,
             rtmpSourceCount = rtmpSourceCount,
             onCameraClick = { onEvent(MainUiEvent.ToggleCamera) },
+            onSelectCamera = { camId -> onEvent(MainUiEvent.SelectCamera(camId)) },
             onRtmpClick = onRtmpClick,
             onRtmpServerClick = onOpenRtmpServer,
             onUvcClick = { onEvent(MainUiEvent.ToggleUvcSource) },
@@ -84,6 +85,7 @@ fun MainScreenOverlay(
         CameraControlsBar(
             videoSourceState = uiState.videoSource,
             isMuted = uiState.audioSource.isMuted,
+            onToggleCamera = { onEvent(MainUiEvent.ToggleCamera) },
             onToggleFlash = { onEvent(MainUiEvent.ToggleFlash) },
             onToggleAutoWhiteBalance = { onEvent(MainUiEvent.ToggleAutoWhiteBalance) },
             onToggleExposureSlider = { onEvent(MainUiEvent.ToggleExposureSlider) },

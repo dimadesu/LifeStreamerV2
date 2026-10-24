@@ -16,6 +16,7 @@ sealed interface MainUiEvent {
     // Video Source selection & switching
     object ToggleCamera : MainUiEvent
     object SwitchBackToFront : MainUiEvent
+    data class SelectCamera(val cameraId: String) : MainUiEvent
     data class ToggleScreenSource(val launcher: ActivityResultLauncher<Intent>? = null) : MainUiEvent
     object ToggleUvcSource : MainUiEvent
     data class ToggleRtmpSource(val launcher: ActivityResultLauncher<Intent>? = null, val index: Int = 1) : MainUiEvent
