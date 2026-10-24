@@ -711,6 +711,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     
     val availableCamerasLiveData: LiveData<List<CameraInfo>> = cameraControlsController.availableCameras.asLiveData()
 
+    // Unified UI State for Jetpack Compose (must be initialized before init block runs)
+    private val _uiState = kotlinx.coroutines.flow.MutableStateFlow(com.dimadesu.lifestreamer.ui.main.state.MainUiState())
+    val uiState: kotlinx.coroutines.flow.StateFlow<com.dimadesu.lifestreamer.ui.main.state.MainUiState> = _uiState
+
+    fun updateUiState(transform: (com.dimadesu.lifestreamer.ui.main.state.MainUiState) -> com.dimadesu.lifestreamer.ui.main.state.MainUiState) {
+        _uiState.value = transform(_uiState.value)
+    }
+
     init {
         // Bind to streaming service for background streaming capability
         bindToStreamerService()
@@ -2654,13 +2662,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     fun reloadAndApplyAudioSettingsIfChanged() = audioDebugController.reloadAndApplyAudioSettingsIfChanged()
 
-    // Unified UI State for Jetpack Compose
-    private val _uiState = kotlinx.coroutines.flow.MutableStateFlow(com.dimadesu.lifestreamer.ui.main.state.MainUiState())
-    val uiState: kotlinx.coroutines.flow.StateFlow<com.dimadesu.lifestreamer.ui.main.state.MainUiState> = _uiState
-
-    fun updateUiState(transform: (com.dimadesu.lifestreamer.ui.main.state.MainUiState) -> com.dimadesu.lifestreamer.ui.main.state.MainUiState) {
-        _uiState.value = transform(_uiState.value)
-    }
 
     /**
      * Centralized event handler for Jetpack Compose UI interactions.
