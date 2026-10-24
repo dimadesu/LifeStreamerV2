@@ -143,6 +143,21 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     @SuppressLint("StaticFieldLeak")
     private var streamerService: CameraStreamerService? = null
 
+    // Controller for camera controls and camera switching
+    val cameraControlsController = com.dimadesu.lifestreamer.ui.main.controllers.CameraControlsController(
+        application = application,
+        scope = viewModelScope,
+        streamerProvider = { serviceStreamer },
+        videoSourceMutex = videoSourceMutex,
+        defaultDispatcher = defaultDispatcher,
+        onToastMessage = { _toastMessageLiveData.postValue(it) },
+        onErrorMessage = { _streamerErrorLiveData.postValue(it) }
+    ).apply {
+        onExposureCompensationChanged = { notifyPropertyChanged(BR.exposureCompensation) }
+        onZoomRatioChanged = { notifyPropertyChanged(BR.zoomRatio) }
+        onLensDistanceChanged = { notifyPropertyChanged(BR.lensDistance) }
+    }
+
     // Direct service binder reference for invoking service APIs safely
     private var serviceBinder: CameraStreamerService.CameraStreamerServiceBinder? = null
 
@@ -653,14 +668,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     val reconnectionStatusLiveData: LiveData<String?> = _reconnectionStatusLiveData
 
     // Camera information for button creation
-    data class CameraInfo(
-        val id: String,
-        val displayName: String,
-        val facing: String
-    )
+    data class CameraInfo(val id: String, val displayName: String, val facing: String)
     
-    private val _availableCamerasLiveData = MutableLiveData<List<CameraInfo>>(emptyList())
-    val availableCamerasLiveData: LiveData<List<CameraInfo>> = _availableCamerasLiveData
+    val availableCamerasLiveData: LiveData<List<CameraInfo>> = cameraControlsController.availableCameras.asLiveData()
 
     init {
         // Bind to streaming service for background streaming capability
@@ -2786,57 +2796,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
-    fun switchBackToFront(): Boolean {
-        /**
-         * If video frame rate is not supported by the new camera, streamer will throw an
-         * exception instead of crashing. You can either catch the exception or check if the
-         * configuration is valid for the new camera with [Context.isFrameRateSupported].
-         */
-        val videoSource = streamer?.videoInput?.sourceFlow?.value
-        if (videoSource is ICameraSource) {
-            viewModelScope.launch(defaultDispatcher) {
-                videoSourceMutex.withLock {
-                    streamer?.switchBackToFront(application)
-                }
-            }
-        }
-        return true
-    }
+    fun switchBackToFront(): Boolean = cameraControlsController.switchBackToFront()
 
     @RequiresPermission(Manifest.permission.CAMERA)
-    fun toggleCamera() {
-        /**
-         * If video frame rate is not supported by the new camera, streamer will throw an
-         * exception instead of crashing. You can either catch the exception or check if the
-         * configuration is valid for the new camera with [Context.isFrameRateSupported].
-         */
-        val currentStreamer = serviceStreamer
-        if (currentStreamer == null) {
-            Log.e(TAG, "Streamer service not available for camera toggle")
-            _streamerErrorLiveData.postValue("Service not available")
-            return
-        }
-
-        val videoSource = currentStreamer.videoInput?.sourceFlow?.value
-        if (videoSource is ICameraSource) {
-            viewModelScope.launch(defaultDispatcher) {
-                videoSourceMutex.withLock {
-                    try {
-                        // Add delay before switching camera to allow previous camera to fully release
-                        // This prevents resource conflicts when hot-swapping cameras
-                        delay(300)
-                        currentStreamer.setNextCameraId(application)
-                        Log.i(TAG, "Camera toggled successfully")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to toggle camera", e)
-                        _streamerErrorLiveData.postValue("Camera toggle failed: ${e.message}")
-                    }
-                }
-            }
-        } else {
-            Log.w(TAG, "Video source is not a camera source, cannot toggle")
-        }
-    }
+    fun toggleCamera() = cameraControlsController.toggleCamera()
     
     /**
      * Toggle audio monitoring - intelligently switches between RTMP audio and microphone monitoring
@@ -3302,55 +3265,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     /**
      * Load available cameras and update LiveData
      */
-    fun loadAvailableCameras() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val cameraManager = application.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-                val cameraIds = cameraManager.cameraIdList
-                
-                val cameraList = cameraIds.mapNotNull { id ->
-                    try {
-                        val characteristics = cameraManager.getCameraCharacteristics(id)
-                        val facingConst = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
-                        val facing = when (facingConst) {
-                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT -> "Front"
-                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK -> "Back"
-                            else -> "External"
-                        }
-                        
-                        // Get FOV info
-                        val focalArr = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                        val physicalSize = characteristics.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE) as? android.util.SizeF
-                        val fovLabel = if (focalArr != null && focalArr.isNotEmpty()) {
-                            val firstFocal = focalArr.first()
-                            if (physicalSize != null) {
-                                val sensorDiag = kotlin.math.sqrt(physicalSize.width * physicalSize.width + physicalSize.height * physicalSize.height)
-                                val fovRad = 2.0 * kotlin.math.atan((sensorDiag / (2.0 * firstFocal)).toDouble())
-                                val fovDeg = (fovRad * 180.0 / kotlin.math.PI).toInt()
-                                "${fovDeg}°"
-                            } else {
-                                val formattedAll = focalArr.joinToString(",") { "%.1f".format(it) }
-                                "f=${formattedAll}mm"
-                            }
-                        } else {
-                            ""
-                        }
-                        
-                        val displayName = "$facing ${fovLabel}".trim()
-                        CameraInfo(id, displayName, facing)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to get camera characteristics for $id: ${e.message}")
-                        null
-                    }
-                }
-                
-                _availableCamerasLiveData.postValue(cameraList)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to load cameras: ${e.message}")
-                _availableCamerasLiveData.postValue(emptyList())
-            }
-        }
-    }
+    fun loadAvailableCameras() = cameraControlsController.loadAvailableCameras()
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleVideoSource(mediaProjectionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>? = null, rtmpIndex: Int = 1) {
@@ -3412,9 +3327,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         }
 
                         // Hide camera-specific sliders when switching away from camera
-                        showZoomSlider.value = false
-                        showExposureSlider.value = false
-                        showLensDistanceSlider.value = false
+                        cameraControlsController.hideSliders()
 
                         // Hide BT toggle - RTMP uses MediaProjection audio, not microphone
                         _showBluetoothToggle.postValue(false)
@@ -4011,9 +3924,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     _isScreenSource.postValue(true)
                     _activeRtmpIndex.postValue(null)
                     _userToggledUvc.postValue(false)
-                    showZoomSlider.value = false
-                    showExposureSlider.value = false
-                    showLensDistanceSlider.value = false
+                    cameraControlsController.hideSliders()
                     
                     if (proj != null) {
                         switchToMediaProjectionVideoSource(currentStreamer, proj)
@@ -4205,254 +4116,49 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }.asLiveData()
 
-    val isFlashAvailable = MutableLiveData(false)
-    fun toggleFlash() {
-        cameraSettings?.let {
-            viewModelScope.launch {
-                try {
-                    val isCurrentlyEnabled = it.flash.isEnable
-                    it.flash.setIsEnable(!isCurrentlyEnabled)
-                    
-                    // Show toast with flash state
-                    val message = if (!isCurrentlyEnabled) "Torch: On" else "Torch: Off"
-                    _toastMessageLiveData.postValue(message)
-                } catch (t: Throwable) {
-                    Log.w(TAG, "toggleFlash failed (camera session may be closed): ${t.message}")
-                }
-            }
-        } ?: Log.e(TAG, "Camera settings is not accessible")
-    }
+    val isFlashAvailable: LiveData<Boolean> = cameraControlsController.isFlashAvailable.asLiveData()
+    fun toggleFlash() = cameraControlsController.toggleFlash()
 
-    val isAutoWhiteBalanceAvailable = MutableLiveData(false)
-    fun toggleAutoWhiteBalanceMode() {
-        cameraSettings?.let { settings ->
-            viewModelScope.launch {
-                try {
-                    val awbModes = settings.whiteBalance.availableAutoModes
-                    val index = awbModes.indexOf(settings.whiteBalance.autoMode)
-                    val newMode = awbModes[(index + 1) % awbModes.size]
-                    settings.whiteBalance.setAutoMode(newMode)
-                    
-                    // Show toast with white balance mode name
-                    val modeName = getWhiteBalanceModeName(newMode)
-                    _toastMessageLiveData.postValue("White Balance: $modeName")
-                } catch (t: Throwable) {
-                    Log.w(TAG, "toggleAutoWhiteBalanceMode failed (camera session may be closed): ${t.message}")
-                }
-            }
-        } ?: Log.e(TAG, "Camera settings is not accessible")
-    }
+    val isAutoWhiteBalanceAvailable: LiveData<Boolean> = cameraControlsController.isAutoWhiteBalanceAvailable.asLiveData()
+    fun toggleAutoWhiteBalanceMode() = cameraControlsController.toggleAutoWhiteBalanceMode()
 
-    private fun getWhiteBalanceModeName(mode: Int): String {
-        return when (mode) {
-            CaptureResult.CONTROL_AWB_MODE_OFF -> "Off"
-            CaptureResult.CONTROL_AWB_MODE_AUTO -> "Auto"
-            CaptureResult.CONTROL_AWB_MODE_INCANDESCENT -> "Incandescent"
-            CaptureResult.CONTROL_AWB_MODE_FLUORESCENT -> "Fluorescent"
-            CaptureResult.CONTROL_AWB_MODE_WARM_FLUORESCENT -> "Warm Fluorescent"
-            CaptureResult.CONTROL_AWB_MODE_DAYLIGHT -> "Daylight"
-            CaptureResult.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT -> "Cloudy"
-            CaptureResult.CONTROL_AWB_MODE_TWILIGHT -> "Twilight"
-            CaptureResult.CONTROL_AWB_MODE_SHADE -> "Shade"
-            else -> "Unknown"
-        }
-    }
+    val showExposureSlider: LiveData<Boolean> = cameraControlsController.showExposureSlider.asLiveData()
+    fun toggleExposureSlider() = cameraControlsController.toggleExposureSlider()
 
-    val showExposureSlider = MutableLiveData(false)
-    fun toggleExposureSlider() {
-        showExposureSlider.postValue(!(showExposureSlider.value)!!)
-    }
-
-    val isExposureCompensationAvailable = MutableLiveData(false)
-    val exposureCompensationRange = MutableLiveData<Range<Int>>()
-    val exposureCompensationStep = MutableLiveData<Rational>()
+    val isExposureCompensationAvailable: LiveData<Boolean> = cameraControlsController.isExposureCompensationAvailable.asLiveData()
+    val exposureCompensationRange: LiveData<Range<Int>?> = cameraControlsController.exposureCompensationRange.asLiveData()
+    val exposureCompensationStep: LiveData<Rational?> = cameraControlsController.exposureCompensationStep.asLiveData()
     var exposureCompensation: Float
-        @Bindable get() {
-            val settings = cameraSettings
-            return if (settings != null && settings.isActiveFlow.value) {
-                settings.exposure.compensation * settings.exposure.availableCompensationStep.toFloat()
-            } else {
-                0f
-            }
-        }
+        @Bindable get() = cameraControlsController.exposureCompensation
         set(value) {
-            cameraSettings?.let { settings ->
-                settings.exposure.let {
-                    viewModelScope.launch {
-                        try {
-                            if (settings.isActiveFlow.value) {
-                                it.setCompensation((value / it.availableCompensationStep.toFloat()).toInt())
-                            }
-                            notifyPropertyChanged(BR.exposureCompensation)
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Setting exposure compensation failed (camera session may be closed): ${t.message}")
-                        }
-                    }
-                }
-            } ?: Log.e(TAG, "Camera settings is not accessible")
+            cameraControlsController.exposureCompensation = value
         }
 
-    val showZoomSlider = MutableLiveData(false)
-    fun toggleZoomSlider() {
-        showZoomSlider.postValue(!(showZoomSlider.value)!!)
-    }
+    val showZoomSlider: LiveData<Boolean> = cameraControlsController.showZoomSlider.asLiveData()
+    fun toggleZoomSlider() = cameraControlsController.toggleZoomSlider()
 
-    val isZoomAvailable = MutableLiveData(false)
-    val zoomRatioRange = MutableLiveData<Range<Float>>()
+    val isZoomAvailable: LiveData<Boolean> = cameraControlsController.isZoomAvailable.asLiveData()
+    val zoomRatioRange: LiveData<Range<Float>?> = cameraControlsController.zoomRatioRange.asLiveData()
     var zoomRatio: Float
-        @Bindable get() {
-            val settings = cameraSettings
-            return if (settings != null && settings.isActiveFlow.value) {
-                runBlocking {
-                    settings.zoom.getZoomRatio()
-                }
-            } else {
-                1f
-            }
-        }
+        @Bindable get() = cameraControlsController.zoomRatio
         set(value) {
-            cameraSettings?.let { settings ->
-                viewModelScope.launch {
-                    try {
-                        if (settings.isActiveFlow.value) {
-                            settings.zoom.setZoomRatio(value)
-                        }
-                        notifyPropertyChanged(BR.zoomRatio)
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Setting zoom failed (camera session may be closed): ${t.message}")
-                    }
-                }
-            } ?: Log.e(TAG, "Camera settings is not accessible")
+            cameraControlsController.zoomRatio = value
         }
 
-    val isAutoFocusModeAvailable = MutableLiveData(false)
-    fun toggleAutoFocusMode() {
-        cameraSettings?.let {
-            viewModelScope.launch {
-                try {
-                    val afModes = it.focus.availableAutoModes
-                    val index = afModes.indexOf(it.focus.autoMode)
-                    val newMode = afModes[(index + 1) % afModes.size]
-                    it.focus.setAutoMode(newMode)
-                    
-                    // Show toast with auto focus mode name
-                    val modeName = getAutoFocusModeName(newMode)
-                    _toastMessageLiveData.postValue("Focus: $modeName")
-                    
-                    if (it.focus.autoMode == CaptureResult.CONTROL_AF_MODE_OFF) {
-                        showLensDistanceSlider.postValue(true)
-                    } else {
-                        showLensDistanceSlider.postValue(false)
-                    }
-                } catch (t: Throwable) {
-                    Log.w(TAG, "toggleAutoFocusMode failed (camera session may be closed): ${t.message}")
-                }
-            }
-        } ?: Log.e(TAG, "Camera settings is not accessible")
-    }
+    val isAutoFocusModeAvailable: LiveData<Boolean> = cameraControlsController.isAutoFocusModeAvailable.asLiveData()
+    fun toggleAutoFocusMode() = cameraControlsController.toggleAutoFocusMode()
 
-    private fun getAutoFocusModeName(mode: Int): String {
-        return when (mode) {
-            CaptureResult.CONTROL_AF_MODE_OFF -> "Manual"
-            CaptureResult.CONTROL_AF_MODE_AUTO -> "Auto"
-            CaptureResult.CONTROL_AF_MODE_MACRO -> "Macro"
-            CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO -> "Continuous Video"
-            CaptureResult.CONTROL_AF_MODE_CONTINUOUS_PICTURE -> "Continuous Picture"
-            CaptureResult.CONTROL_AF_MODE_EDOF -> "EDOF"
-            else -> "Unknown"
-        }
-    }
-
-    val showLensDistanceSlider = MutableLiveData(false)
-    val lensDistanceRange = MutableLiveData<Range<Float>>()
+    val showLensDistanceSlider: LiveData<Boolean> = cameraControlsController.showLensDistanceSlider.asLiveData()
+    val lensDistanceRange: LiveData<Range<Float>?> = cameraControlsController.lensDistanceRange.asLiveData()
     var lensDistance: Float
-        @Bindable get() {
-            val settings = cameraSettings
-            return if ((settings != null) &&
-                settings.isActiveFlow.value
-            ) {
-                settings.focus.lensDistance
-            } else {
-                0f
-            }
-        }
+        @Bindable get() = cameraControlsController.lensDistance
         set(value) {
-            cameraSettings?.let { settings ->
-                settings.focus.let {
-                    viewModelScope.launch {
-                        try {
-                            if (settings.isActiveFlow.value) {
-                                it.setLensDistance(value)
-                            }
-                            notifyPropertyChanged(BR.lensDistance)
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Setting lens distance failed (camera session may be closed): ${t.message}")
-                        }
-                    }
-                }
-            } ?: Log.e(TAG, "Camera settings is not accessible")
+            cameraControlsController.lensDistance = value
         }
 
     private fun notifySourceChanged() {
-        val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
-        if (videoSource is ICameraSource) {
-            notifyCameraChanged(videoSource)
-        } else {
-            isFlashAvailable.postValue(false)
-            isAutoWhiteBalanceAvailable.postValue(false)
-            isExposureCompensationAvailable.postValue(false)
-            isZoomAvailable.postValue(false)
-            isAutoFocusModeAvailable.postValue(false)
-        }
-    }
-
-    private fun notifyCameraChanged(videoSource: ICameraSource) {
-        val settings = videoSource.settings
-        // Set optical stabilization first
-        // Do not set both video and optical stabilization at the same time
-        viewModelScope.launch {
-            if (settings.isActiveFlow.value) {
-                if (settings.stabilization.isOpticalAvailable) {
-                    settings.stabilization.setIsEnableOptical(true)
-                } else {
-                    settings.stabilization.setIsEnableVideo(true)
-                }
-            }
-        }
-
-        // Flash
-        isFlashAvailable.postValue(settings.flash.isAvailable)
-
-        // WB
-        isAutoWhiteBalanceAvailable.postValue(settings.whiteBalance.availableAutoModes.size > 1)
-
-        // Exposure
-        isExposureCompensationAvailable.postValue(
-            !settings.exposure.availableCompensationRange.isEmpty
-        )
-        exposureCompensationRange.postValue(
-            Range(
-                (settings.exposure.availableCompensationRange.lower * settings.exposure.availableCompensationStep.toFloat()).toInt(),
-                (settings.exposure.availableCompensationRange.upper * settings.exposure.availableCompensationStep.toFloat()).toInt()
-            )
-        )
-        exposureCompensationStep.postValue(settings.exposure.availableCompensationStep)
-        exposureCompensation = 0f
-
-        // Zoom
-        isZoomAvailable.postValue(
-            !settings.zoom.availableRatioRange.isEmpty
-        )
-        zoomRatioRange.postValue(settings.zoom.availableRatioRange)
-        zoomRatio = 1.0f
-
-        // Focus
-        isAutoFocusModeAvailable.postValue(settings.focus.availableAutoModes.size > 1)
-
-        // Lens distance
-        showLensDistanceSlider.postValue(false)
-        lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
-        lensDistance = 0f
+        val videoSource = streamer?.videoInput?.sourceFlow?.value
+        cameraControlsController.onSourceChanged(videoSource)
     }
 
     /**
