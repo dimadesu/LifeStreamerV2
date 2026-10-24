@@ -172,6 +172,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         onErrorMessage = { _streamerErrorLiveData.postValue(it) }
     )
 
+    // Controller for VU meter / audio level monitoring
+    val audioLevelMonitor = com.dimadesu.lifestreamer.ui.main.controllers.AudioLevelMonitor(
+        scope = viewModelScope,
+        streamerProvider = { serviceStreamer },
+        isUiInForegroundProvider = { isUiInForeground }
+    )
+
     // Direct service binder reference for invoking service APIs safely
     private var serviceBinder: CameraStreamerService.CameraStreamerServiceBinder? = null
 
@@ -208,8 +215,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     val bluetoothConnectRequestLiveData: LiveData<Unit?> get() = _bluetoothConnectRequestLiveData
     
     // Audio level monitoring
-    private val _audioLevelFlow = MutableStateFlow(com.dimadesu.lifestreamer.audio.AudioLevel.SILENT)
-    val audioLevelFlow: StateFlow<com.dimadesu.lifestreamer.audio.AudioLevel> = _audioLevelFlow.asStateFlow()
+    val audioLevelFlow: StateFlow<com.dimadesu.lifestreamer.audio.AudioLevel> = audioLevelMonitor.audioLevelFlow
 
     // Encoder stats display
     private val _encoderStatsLiveData = MutableLiveData<String?>(null)
@@ -2632,130 +2638,19 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
     
-    // Job for observing audio config changes and starting pre-stream capture
-    private var audioConfigObserverJob: kotlinx.coroutines.Job? = null
-    private var startCaptureJob: kotlinx.coroutines.Job? = null
-    private var stopCaptureJob: kotlinx.coroutines.Job? = null
-    private var vuMeterWatchdogJob: kotlinx.coroutines.Job? = null
-    private var vuMeterEffect: com.dimadesu.lifestreamer.audio.VuMeterEffect? = null
-    @Volatile private var lastAudioLevelTimeMs = 0L
-    
     /**
      * Set up audio level monitoring on the streamer's audio processor.
      * This works for ALL audio sources (mic, Bluetooth, ExoPlayer/MediaProjection).
      */
     private fun setupAudioLevelMonitoring() {
-        if (!isUiInForeground) {
-            Log.i(TAG, "Skipping setupAudioLevelMonitoring because UI is in background")
-            return
-        }
-        val streamer = serviceStreamer ?: return
-        val audioProcessor = streamer.audioInput?.processor ?: run {
-            Log.w(TAG, "Audio processor not available for level monitoring")
-            return
-        }
-        
-        // Remove any previous effect
-        vuMeterEffect?.let { audioProcessor.remove(it) }
-        vuMeterWatchdogJob?.cancel()
-        vuMeterWatchdogJob = null
-        lastAudioLevelTimeMs = 0L
-        
-        // Create new VuMeterEffect using IConsumerAudioEffect plugin (runs on background coroutine)
-        val effect = com.dimadesu.lifestreamer.audio.VuMeterEffect { levels ->
-            // Only stamp time on non-silent frames so the watchdog can detect both:
-            // (a) no frames arriving (source transitions) and
-            // (b) frames arriving with zero amplitude (e.g. MediaProjection when nothing plays)
-            val isEffectivelySilent = levels.rms < 0.0001f && levels.peak < 0.0001f
-                    && levels.rmsRight < 0.0001f && levels.peakRight < 0.0001f
-            if (!isEffectivelySilent) {
-                lastAudioLevelTimeMs = System.currentTimeMillis()
-            }
-            _audioLevelFlow.value = levels
-        }
-        vuMeterEffect = effect
-        audioProcessor.add(effect)
-
-        // Watchdog: reset to SILENT if no non-silent audio frames arrive for 1500ms.
-        // Resets lastAudioLevelTimeMs after firing so it doesn't repeatedly re-emit
-        // until new non-silent audio arrives — prevents flicker during brief silent gaps.
-        vuMeterWatchdogJob = viewModelScope.launch {
-            while (true) {
-                delay(200)
-                val lastTime = lastAudioLevelTimeMs
-                if (lastTime > 0 && System.currentTimeMillis() - lastTime > 1500) {
-                    lastAudioLevelTimeMs = 0L // Prevent re-firing until new non-silent audio
-                    _audioLevelFlow.value = com.dimadesu.lifestreamer.audio.AudioLevel.SILENT
-                }
-            }
-        }
-        
-        // Observe the streamer's audioConfigFlow for channel count changes
-        audioConfigObserverJob?.cancel()
-        audioConfigObserverJob = viewModelScope.launch {
-            streamer.audioConfigFlow.collect { audioConfig ->
-                if (audioConfig != null) {
-                    try {
-                        val channelCount = io.github.thibaultbee.streampack.core.elements.encoders.AudioCodecConfig.getNumberOfChannels(audioConfig.channelConfig)
-                        effect.channelCount = channelCount
-                        Log.i(TAG, "Audio level monitoring: channelCount=$channelCount")
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Failed to get channel count: ${t.message}")
-                        effect.channelCount = 1
-                    }
-                }
-            }
-        }
-        
-        // Start capture once the audio source is ready AND configured so the VU meter works before streaming.
-        // We must wait for BOTH sourceFlow (source exists) AND audioConfigFlow (configure() was called
-        // on the AudioRecord - without this, AudioRecord is null and startCapture() throws).
-        startCaptureJob?.cancel()
-        startCaptureJob = viewModelScope.launch {
-            try {
-                val audioInput = streamer.audioInput ?: return@launch
-                audioInput.sourceFlow.filterNotNull().first()     // source is set
-                streamer.audioConfigFlow.filterNotNull().first()   // configure() has been called on source
-                audioInput.startCapture()
-                Log.i(TAG, "Audio capture started for VU meter")
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to start audio capture: ${t.message}")
-            }
-        }
-        
-        Log.i(TAG, "Audio level monitoring enabled")
+        audioLevelMonitor.setupAudioLevelMonitoring()
     }
     
     /**
      * Disable audio level monitoring (e.g., when not streaming to save CPU).
      */
     private fun disableAudioLevelMonitoring() {
-        try {
-            audioConfigObserverJob?.cancel()
-            audioConfigObserverJob = null
-            startCaptureJob?.cancel()
-            startCaptureJob = null
-            vuMeterWatchdogJob?.cancel()
-            vuMeterWatchdogJob = null
-            lastAudioLevelTimeMs = 0L
-            vuMeterEffect?.let { effect ->
-                serviceStreamer?.audioInput?.processor?.remove(effect)
-                effect.close()
-            }
-            vuMeterEffect = null
-            _audioLevelFlow.value = com.dimadesu.lifestreamer.audio.AudioLevel.SILENT
-            // stopCapture is a suspend function — launch it and let it complete independently
-            val audioInput = serviceStreamer?.audioInput
-            stopCaptureJob?.cancel()
-            stopCaptureJob = viewModelScope.launch {
-                try {
-                    audioInput?.stopCapture()
-                    Log.i(TAG, "Audio capture stopped for VU meter")
-                } catch (t: Throwable) {
-                    Log.w(TAG, "Failed to stop audio capture: ${t.message}")
-                }
-            }
-        } catch (_: Throwable) {}
+        audioLevelMonitor.disableAudioLevelMonitoring()
     }
 
     /**
@@ -2764,11 +2659,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      * stop capture first and restart it after.
      */
     private suspend fun applyAudioConfigSafely(streamer: io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer, config: io.github.thibaultbee.streampack.core.elements.encoders.AudioCodecConfig) {
-        val wasMonitoring = vuMeterEffect != null
+        val wasMonitoring = audioLevelMonitor.isMonitoringActive
         if (wasMonitoring) disableAudioLevelMonitoring()
         streamer.setAudioConfig(config)
         if (wasMonitoring) setupAudioLevelMonitoring()
     }
+
 
     fun setMute(isMuted: Boolean) {
         // Perform mute operations off the main thread to avoid blocking UI.
