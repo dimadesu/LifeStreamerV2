@@ -22,6 +22,7 @@ import io.github.thibaultbee.streampack.core.streamers.single.ISingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.pipelines.StreamerPipeline
+import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
 import io.github.thibaultbee.streampack.services.StreamerService
 import io.github.thibaultbee.streampack.services.utils.StreamerFactory
 import android.content.pm.ServiceInfo
@@ -113,6 +114,26 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
 
     val currentRotation: Int get() = rotationTracker.currentRotation
     val lockedStreamRotation: Int? get() = rotationTracker.lockedStreamRotation
+
+    // Stream session manager for starting, stopping, encoder waiting, and bitrate regulation
+    val streamSessionManager by lazy {
+        StreamSessionManager(
+            context = this,
+            storageRepository = storageRepository,
+            streamConfigurationHelper = streamConfigurationHelper,
+            streamerProvider = { streamer },
+            rotationTracker = rotationTracker
+        )
+    }
+
+    suspend fun startStream(descriptor: MediaDescriptor? = null): Result<Unit> {
+        return streamSessionManager.startSession(descriptor)
+    }
+
+    suspend fun stopStream(closeTimeoutMs: Long = 3000): Boolean {
+        return streamSessionManager.stopSession(closeTimeoutMs)
+    }
+
 
     // Cached stream orientation setting — updated from DataStore flow on each change
     @Volatile
@@ -454,26 +475,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
                             // This allows ViewModel to cancel reconnection timer immediately
                             _userStoppedFromNotification.emit(Unit)
                             
-                            streamer?.stopStream()
-
-                            // Stop embedded SRTLA proxy if it was running for this stream
-                            val srtlaConfig = storageRepository.srtlaConfigFlow.first()
-                            if (srtlaConfig != null && SrtlaManager.isRunning) {
-                                SrtlaManager.stop()
-                            }
-                            
-                            // Unlock stream rotation since streaming has stopped
-                            unlockStreamRotation()
-                            
-                            // Close the endpoint to allow fresh connection on next start
-                            try {
-                                withTimeout(3000) {
-                                    streamer?.close()
-                                }
-                                Log.i(TAG, "Endpoint closed after stop from notification")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error closing endpoint after notification stop: ${e.message}", e)
-                            }
+                            streamSessionManager.stopSession(3000)
                         } catch (e: Exception) {
                             Log.w(TAG, "Stop from notification failed: ${e.message}")
                         } finally {
@@ -777,22 +779,8 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
      * 
      * @return Pair of (isValid, errorMessage). If valid, errorMessage is null.
      */
-    private fun validateSourcesConfigured(): Pair<Boolean, String?> {
-        val currentStreamer = streamer
-        val videoInput = (currentStreamer as? io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource)?.videoInput
-        val audioInput = (currentStreamer as? IWithAudioSource)?.audioInput
-        
-        val videoSource = videoInput?.sourceFlow?.value
-        val audioSource = audioInput?.sourceFlow?.value
-        
-        return if (videoSource == null || audioSource == null) {
-            val errorMsg = "video source=${videoSource != null}, audio source=${audioSource != null}"
-            false to errorMsg
-        } else {
-            Log.d(TAG, "Sources validated - video: ${videoSource.javaClass.simpleName}, audio: ${audioSource.javaClass.simpleName}")
-            true to null
-        }
-    }
+    fun validateSourcesConfigured(): Pair<Boolean, String?> = streamSessionManager.validateSourcesConfigured()
+
     
     private fun acquireNetworkWakeLock() = wakeLockManager.acquireNetworkWakeLock()
     private fun releaseNetworkWakeLock() = wakeLockManager.releaseNetworkWakeLock()
@@ -820,33 +808,9 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
      */
     private suspend fun startStreamFromConfiguredEndpoint() {
         try {
-            // Lock stream rotation BEFORE starting to ensure consistent orientation
-            rotationTracker.applyPreStreamRotation()
-            
-            // Streamer is guaranteed to be available (lazy initialized)
-            val currentStreamer = streamer
-
-            // Check if sources are configured - wait for them to become available
-            // Cast to IWithVideoSource and IWithAudioSource to access inputs
-            val videoInput = (currentStreamer as? io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource)?.videoInput
-            val audioInput = (currentStreamer as? IWithAudioSource)?.audioInput
-            
-            // Wait up to 3 seconds for sources to be initialized by ViewModel
-            val sourcesReady = withTimeoutOrNull(3000) {
-                while (videoInput?.sourceFlow?.value == null || audioInput?.sourceFlow?.value == null) {
-                    delay(200)
-                }
-                true
-            } ?: false
-            
-            val hasVideoSource = videoInput?.sourceFlow?.value != null
-            val hasAudioSource = audioInput?.sourceFlow?.value != null
-            
-            Log.i(TAG, "startStreamFromConfiguredEndpoint: Source check after waiting - Video: $hasVideoSource, Audio: $hasAudioSource")
-            
-            if (!hasVideoSource || !hasAudioSource) {
-                // Sources still not available after waiting - this means ViewModel hasn't initialized them
-                // This can happen if user clicks Start in notification before opening the app
+            // Wait up to 3 seconds for sources to be ready
+            val sourcesReady = streamSessionManager.waitForSourcesReady(3000)
+            if (!sourcesReady) {
                 val errorMsg = "Sources not initialized - please start from app first"
                 Log.w(TAG, errorMsg)
                 customNotificationUtils.notify(onErrorNotification(Throwable(errorMsg)) ?: onCreateNotification())
@@ -854,130 +818,16 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
                 return
             }
 
-            // Read configured endpoint descriptor
-            val descriptor = try {
-                storageRepository.endpointDescriptorFlow.first()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to read endpoint descriptor from storage: ${e.message}")
-                customNotificationUtils.notify(onErrorNotification(Throwable("No endpoint configured")) ?: onCreateNotification())
-                return
-            }
-
-            // Final validation: Ensure both sources are still configured right before starting stream
-            val (sourcesValid, sourceError) = validateSourcesConfigured()
-            if (!sourcesValid) {
-                val errorMsg = "Cannot start stream: $sourceError"
-                Log.e(TAG, "startStreamFromConfiguredEndpoint: $errorMsg")
-                customNotificationUtils.notify(onErrorNotification(Throwable(errorMsg)) ?: onCreateNotification())
-                serviceScope.launch { _criticalErrors.emit(errorMsg) }
-                return
-            }
-            Log.i(TAG, "startStreamFromConfiguredEndpoint: Final source validation passed")
-
-            Log.i(TAG, "startStreamFromConfiguredEndpoint: opening descriptor $descriptor")
-            // Indicate start sequence
             try { _serviceStreamStatus.tryEmit(StreamStatus.STARTING) } catch (_: Throwable) {}
+            try { _serviceStreamStatus.tryEmit(StreamStatus.CONNECTING) } catch (_: Throwable) {}
 
-            // If SRTLA mode, start the embedded SRTLA proxy before opening the SRT connection.
-            // SrtlaManager.start() is a suspend fun that returns once the listen port is bound.
-            // Moblink tunnel activation is handled internally by SrtlaManager.
-            val srtlaConfig = storageRepository.srtlaConfigFlow.first()
-            if (srtlaConfig != null) {
-                Log.i(TAG, "SRTLA mode: starting embedded SRTLA proxy (${srtlaConfig.receiverHost}:${srtlaConfig.receiverPort})")
-                SrtlaManager.start(this, srtlaConfig.receiverHost, srtlaConfig.receiverPort, srtlaConfig.listenPort)
-            }
-
-            try {
-                // Indicate we're attempting to connect/open
-                try { _serviceStreamStatus.tryEmit(StreamStatus.CONNECTING) } catch (_: Throwable) {}
-                // Use NonCancellable for camera configuration to prevent "Broken pipe" errors
-                // if coroutine is cancelled during camera setup
-                withTimeout(5000) { // 5s open timeout
-                    // withContext(NonCancellable) {
-                        currentStreamer.open(descriptor)
-                    // }
-                }
-                
-                // Wait for encoders to be initialized after open
-                // This prevents the race condition where video encoder isn't ready after rapid stop/start
-                Log.d(TAG, "startStreamFromConfiguredEndpoint: Waiting for encoders to initialize...")
-                val encodersReady = withTimeoutOrNull(5000) {
-                    while ((currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder == null 
-                           || (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder == null) {
-                        delay(200)
-                    }
-                    true
-                } ?: false
-                
-                if (!encodersReady) {
-                    val videoEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder != null
-                    val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
-                    val errorMsg = "Encoders not ready after open (video=$videoEncoderExists, audio=$audioEncoderExists)"
-                    Log.e(TAG, "startStreamFromConfiguredEndpoint: $errorMsg")
-                    customNotificationUtils.notify(onErrorNotification(Throwable(errorMsg)) ?: onCreateNotification())
-                    serviceScope.launch { _criticalErrors.emit(errorMsg) }
-                    return
-                }
-                val videoEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder != null
-                val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
-                Log.i(TAG, "startStreamFromConfiguredEndpoint: Encoders ready - video=$videoEncoderExists, audio=$audioEncoderExists")
-                
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to open endpoint descriptor: ${e.message}")
-                // Don't set ERROR status - keep CONNECTING so ViewModel can trigger reconnection
-                // The ViewModel's critical errors observer will detect this and trigger handleDisconnection
-                // Don't call notify(onCreateNotification()) here - let the status observer handle it
-                // to avoid overwriting the CONNECTING notification
-                // Emit critical error for ViewModel to observe and trigger reconnection
-                serviceScope.launch { _criticalErrors.emit("Open failed: ${e.message}") }
-                return
-            }
-
-            try {
-                // We're ready to start streaming
-                try { _serviceStreamStatus.tryEmit(StreamStatus.CONNECTING) } catch (_: Throwable) {}
-                
-                // Protect startStream() from cancellation to prevent camera configuration errors
-                // withContext(NonCancellable) {
-                    currentStreamer.startStream()
-                // }
-                
-                // Reset video config bitrate to clear any modified bitrate from previous stream's regulator
-                // We do this directly on the encoder AFTER startStream() so the codec is in a valid state
-                // to receive parameter updates, avoiding StreamPack skipping identical configurations.
-                streamConfigurationHelper.applySafeInitialBitrate(
-                    currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
-                    TAG
-                )
-                
-                // Don't set STREAMING immediately - let getEffectiveServiceStatus() 
-                // derive it from isStreamingFlow.value to ensure accuracy
-                Log.i(TAG, "startStream() called successfully, waiting for isStreamingFlow to confirm")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to start stream after open: ${e.message}")
-                // Don't set ERROR status - keep CONNECTING so ViewModel can trigger reconnection
-                // The ViewModel's critical errors observer will detect this and trigger handleDisconnection
-                // Don't call notify(onCreateNotification()) here - let the status observer handle it
-                // to avoid overwriting the CONNECTING notification
-                // Emit critical error for ViewModel to observe and trigger reconnection
+            val result = streamSessionManager.startSession()
+            result.onFailure { e ->
+                Log.w(TAG, "startStreamFromConfiguredEndpoint failed: ${e.message}")
                 serviceScope.launch { _criticalErrors.emit("Start failed: ${e.message}") }
-                return
+            }.onSuccess {
+                Log.i(TAG, "startStreamFromConfiguredEndpoint: stream started successfully")
             }
-
-            // If SRT or RTMP sink, possibly attach bitrate regulator controller based on stored config
-            try {
-                streamConfigurationHelper.attachBitrateRegulator(
-                    currentStreamer as? IVideoSingleStreamer,
-                    descriptor.type.sinkType,
-                    TAG
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to attach bitrate regulator: ${e.message}")
-            }
-
-            Log.i(TAG, "startStreamFromConfiguredEndpoint: stream started successfully")
-            // Notify UI of success via notification / status flow; no dialog needed
-            // Keep API surface unchanged for future use
         } catch (e: Exception) {
             Log.w(TAG, "startStreamFromConfiguredEndpoint error: ${e.message}")
         }

@@ -813,143 +813,39 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      * @param shouldSuppressErrors If true, errors won't be posted to streamerErrorLiveData (for auto-retry)
      */
     private suspend fun startServiceStreaming(descriptor: MediaDescriptor, shouldSuppressErrors: Boolean = false): Boolean {
-        return try {
-            // Check if user stopped before we even start
-            if (service?.userStoppedManually?.value == true) {
-                Log.i(TAG, "startServiceStreaming: User stopped manually, aborting")
-                return false
-            }
-            
-            Log.i(TAG, "startServiceStreaming: Opening streamer with descriptor: $descriptor")
-
-            val currentStreamer = serviceStreamer
-            if (currentStreamer == null) {
-                Log.e(TAG, "startServiceStreaming: serviceStreamer is null!")
-                if (!shouldSuppressErrors) {
-                    _streamerErrorLiveData.postValue("Service streamer not available")
-                }
-                return false
-            }
-
-            // Validate that both video and audio sources are configured before starting stream
-            val (sourcesValid, sourceError) = validateSourcesConfigured(currentStreamer)
-            if (!sourcesValid) {
-                Log.e(TAG, "startServiceStreaming: Cannot start stream: $sourceError")
-                if (!shouldSuppressErrors) {
-                    _streamerErrorLiveData.postValue("Missing video or audio source - please reinitialize")
-                }
-                return false
-            }
-            Log.i(TAG, "startServiceStreaming: Sources validated successfully")
-
-            // Validate RTMP URL format
-            val uri = descriptor.uri.toString()
-            if (uri.startsWith("rtmp://")) {
-                Log.i(TAG, "startServiceStreaming: Attempting RTMP connection to $uri")
-                val host = uri.substringAfter("://").substringBefore("/")
-                Log.i(TAG, "startServiceStreaming: RTMP host: $host")
-            }
-
-            Log.i(TAG, "startServiceStreaming: serviceStreamer available, calling open()...")
-
-            // If SRTLA mode, start the embedded SRTLA proxy before opening the SRT connection.
-            // SrtlaManager.start() is a suspend function — it returns only after the native
-            // listen port is bound (~300 ms), so no extra delay is needed here.
-            // Moblink tunnel activation is handled internally by SrtlaManager.
-            val srtlaConfig = storageRepository.srtlaConfigFlow.first()
-            if (srtlaConfig != null) {
-                Log.i(TAG, "SRTLA mode: starting embedded SRTLA proxy (${srtlaConfig.receiverHost}:${srtlaConfig.receiverPort})")
-                SrtlaManager.start(getApplication(), srtlaConfig.receiverHost, srtlaConfig.receiverPort, srtlaConfig.listenPort)
-            }
-
-            // Add timeout to prevent hanging
-            // Run on IO dispatcher to prevent blocking UI thread
-            withTimeout(5000) { // 5 second timeout
-                withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    currentStreamer.open(descriptor)
-                }
-            }
-            Log.i(TAG, "startServiceStreaming: open() completed, calling startStream()...")
-            
-            // Wait for encoders to be initialized after open
-            // This prevents the race condition where video encoder isn't ready after rapid stop/start
-            Log.d(TAG, "startServiceStreaming: Waiting for encoders to initialize...")
-            val encodersReady = kotlinx.coroutines.withTimeoutOrNull(5000) {
-                while ((currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder == null 
-                       || (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder == null) {
-                    kotlinx.coroutines.delay(200)
-                }
-                true
-            } ?: false
-            
-            if (!encodersReady) {
-                val videoEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder != null
-                val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
-                val errorMsg = "Encoders not ready (video=$videoEncoderExists, audio=$audioEncoderExists)"
-                Log.e(TAG, "startServiceStreaming: $errorMsg")
-                if (!shouldSuppressErrors) {
-                    _streamerErrorLiveData.postValue(errorMsg)
-                }
-                return false
-            }
-            val videoEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder != null
-            val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
-            Log.i(TAG, "startServiceStreaming: Encoders ready - video=$videoEncoderExists, audio=$audioEncoderExists")
-            
-            // Apply saved rotation BEFORE starting stream (during reconnection)
-            // This is the critical window where rotation can be set
-            service?.getSavedStreamingOrientation()?.let { savedRotation ->
-                Log.i(TAG, "startServiceStreaming: Applying saved rotation $savedRotation before starting stream")
-                try {
-                    currentStreamer.setTargetRotation(savedRotation)
-                    Log.i(TAG, "startServiceStreaming: Successfully applied saved rotation $savedRotation")
-                } catch (e: Exception) {
-                    Log.e(TAG, "startServiceStreaming: Failed to apply saved rotation: ${e.message}")
-                }
-            }
-            
-            // Check if user stopped before calling the blocking startStream()
-            if (service?.userStoppedManually?.value == true) {
-                Log.i(TAG, "startServiceStreaming: User stopped manually before startStream(), aborting")
-                return false
-            }
-
-            // Protect startStream() from cancellation to prevent camera configuration errors
-            // Run on IO dispatcher to prevent blocking UI thread during RTMP connectStream()
-            withContext(kotlinx.coroutines.Dispatchers.IO) {
-                currentStreamer.startStream()
-                
-                // Reset video config bitrate to clear any modified bitrate from previous stream's regulator
-                // We do this directly on the encoder AFTER startStream() so the codec is in a valid state
-                // to receive parameter updates, avoiding StreamPack skipping identical configurations.
-                streamConfigurationHelper.applySafeInitialBitrate(
-                    currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
-                    TAG
-                )
-            }
-            Log.i(TAG, "startServiceStreaming: Stream started successfully")
-            
-            // Add bitrate regulator for SRT and RTMP streams
-            streamConfigurationHelper.attachBitrateRegulator(
-                currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
-                descriptor.type.sinkType,
-                TAG
-            )
-            
-            true
-        } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "startServiceStreaming failed: Timeout opening connection to ${descriptor.uri}")
-            if (!shouldSuppressErrors) {
-                _streamerErrorLiveData.postValue("Connection timeout - check server address and network")
-            }
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "startServiceStreaming failed: ${e.message}", e)
-            if (!shouldSuppressErrors) {
-                _streamerErrorLiveData.postValue("Stream start failed: ${e.message}")
-            }
-            false
+        // Check if user stopped before we even start
+        if (service?.userStoppedManually?.value == true) {
+            Log.i(TAG, "startServiceStreaming: User stopped manually, aborting")
+            return false
         }
+        val currentService = service
+        if (currentService == null) {
+            Log.e(TAG, "startServiceStreaming: service is null!")
+            if (!shouldSuppressErrors) {
+                _streamerErrorLiveData.postValue("Streaming service not available")
+            }
+            return false
+        }
+
+        val result = currentService.startStream(descriptor)
+        return result.fold(
+            onSuccess = {
+                Log.i(TAG, "startServiceStreaming: Stream started successfully via service")
+                true
+            },
+            onFailure = { e ->
+                Log.e(TAG, "startServiceStreaming failed: ${e.message}", e)
+                if (!shouldSuppressErrors) {
+                    val msg = if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                        "Connection timeout - check server address and network"
+                    } else {
+                        "Stream start failed: ${e.message}"
+                    }
+                    _streamerErrorLiveData.postValue(msg)
+                }
+                false
+            }
+        )
     }
 
     /**
@@ -1048,29 +944,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     private suspend fun stopServiceStreaming(): Boolean {
-        return try {
-            Log.i(TAG, "stopServiceStreaming: Stopping stream...")
-            serviceStreamer?.stopStream()
-            Log.i(TAG, "stopServiceStreaming: Stream stopped successfully")
-
-            // Stop embedded SRTLA proxy if it was running
-            if (SrtlaManager.isRunning) {
-                Log.i(TAG, "stopServiceStreaming: Stopping embedded SRTLA proxy")
-                withContext(kotlinx.coroutines.Dispatchers.IO) { SrtlaManager.stop() }
-            }
-
-            // Don't stop the service - keep it alive like notification stop does
-            // This prevents race conditions where ViewModel tries to access destroyed service
-            // The service will stay alive in the background ready for next stream
-            // val serviceIntent = Intent(application, CameraStreamerService::class.java)
-            // application.stopService(serviceIntent)
-            // Log.i(TAG, "stopServiceStreaming: Stopped CameraStreamerService foreground service")
-
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "stopServiceStreaming failed: ${e.message}", e)
-            false
-        }
+        return service?.stopStream() ?: false
     }
 
     /**
