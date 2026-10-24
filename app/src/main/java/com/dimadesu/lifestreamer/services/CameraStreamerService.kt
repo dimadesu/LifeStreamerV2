@@ -130,10 +130,18 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
     // Wake lock manager to prevent CPU/audio silencing and network throttling
     private val wakeLockManager by lazy { ServiceWakeLockManager(this) }
     
-    // Create our own NotificationUtils instance for custom notifications
-    private val customNotificationUtils: NotificationUtils by lazy {
-        NotificationUtils(this, "camera_streaming_channel", 1001)
+    // Service notification manager handles notification building, channels, and pending intents
+    private val notificationManager by lazy {
+        ServiceNotificationManager(
+            service = this,
+            notificationIconResourceId = notificationIconResourceId,
+            streamerProvider = { streamer },
+            streamingStartTimeProvider = { streamingStartTime },
+            isCurrentlyMutedProvider = { isCurrentlyMuted() },
+            isReconnectingProvider = { _isReconnecting.value }
+        )
     }
+    private val customNotificationUtils: NotificationUtils get() = notificationManager.notificationUtils
     // Track streaming start time for uptime display
     private var streamingStartTime: Long? = null
     // Uptime flow (milliseconds since streamingStartTime) for UI consumption
@@ -151,7 +159,9 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
     
     private var statusUpdaterJob: Job? = null
     // Cache last notification state to avoid re-posting identical notifications
-    private var lastNotificationKey: String? = null
+    private var lastNotificationKey: String?
+        get() = notificationManager.lastNotificationKey
+        set(value) { notificationManager.lastNotificationKey = value }
     // Critical error flow for the UI to show dialogs (non-transient errors)
     // Use replay=0 because we'll handle notification-start timing differently
     private val _criticalErrors = kotlinx.coroutines.flow.MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 1)
@@ -194,12 +204,12 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
     // Signal when user manually stops from notification (for ViewModel to cancel reconnection)
     private val _userStoppedFromNotification = MutableSharedFlow<Unit>(replay = 0)
     val userStoppedFromNotification = _userStoppedFromNotification.asSharedFlow()
-    // Cached PendingIntents for notification actions to avoid recreating/cancelling them
-    private lateinit var startPendingIntent: PendingIntent
-    private lateinit var stopPendingIntent: PendingIntent
-    private lateinit var mutePendingIntent: PendingIntent
-    private lateinit var exitPendingIntent: PendingIntent
-    private lateinit var openPendingIntent: PendingIntent
+    // Cached PendingIntents for notification actions (delegated to notificationManager)
+    val startPendingIntent: PendingIntent get() = notificationManager.startPendingIntent
+    val stopPendingIntent: PendingIntent get() = notificationManager.stopPendingIntent
+    val mutePendingIntent: PendingIntent get() = notificationManager.mutePendingIntent
+    val exitPendingIntent: PendingIntent get() = notificationManager.exitPendingIntent
+    val openPendingIntent: PendingIntent get() = notificationManager.openPendingIntent
     
     // Audio permission checker for debugging
     /**
@@ -226,7 +236,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         // starting foreground notification. This prevents the system from using
         // an existing channel with sound.
         try {
-            customNotificationUtils.createNotificationChannel(
+            notificationManager.createNotificationChannel(
                 channelNameResourceId,
                 channelDescriptionResourceId
             )
@@ -366,38 +376,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
     }
 
     private fun initNotificationPendingIntents() {
-        // Use service intents instead of broadcasts - Samsung blocks broadcast receivers
-        val startIntent = Intent(this@CameraStreamerService, CameraStreamerService::class.java).apply {
-            action = ACTION_START_STREAM
-        }
-        startPendingIntent = PendingIntent.getService(this@CameraStreamerService, 0, startIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-
-        val stopIntent = Intent(this@CameraStreamerService, CameraStreamerService::class.java).apply {
-            action = ACTION_STOP_STREAM
-        }
-        stopPendingIntent = PendingIntent.getService(this@CameraStreamerService, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-
-        val muteIntent = Intent(this@CameraStreamerService, CameraStreamerService::class.java).apply {
-            action = ACTION_TOGGLE_MUTE
-        }
-        mutePendingIntent = PendingIntent.getService(this@CameraStreamerService, 2, muteIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-
-        val exitActivityIntent = Intent(this@CameraStreamerService, MainActivity::class.java).apply {
-            setAction(ACTION_EXIT_APP)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        exitPendingIntent = PendingIntent.getActivity(
-            this@CameraStreamerService,
-            4,
-            exitActivityIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val tapOpenIntent = Intent(this@CameraStreamerService, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            setAction(ACTION_OPEN_FROM_NOTIFICATION)
-        }
-        openPendingIntent = PendingIntent.getActivity(this@CameraStreamerService, 3, tapOpenIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        notificationManager.initPendingIntents()
     }
 
     override fun onDestroy() {
@@ -688,78 +667,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
 
     // Build the notification and its key in the same way as the status updater
     private fun buildNotificationForStatus(status: StreamStatus): Pair<Notification, String> {
-        val title = getString(R.string.service_notification_title)
-
-        // Compute canonical status label
-        val statusLabel = when (status) {
-            StreamStatus.STREAMING -> getString(R.string.status_streaming)
-            StreamStatus.STARTING -> getString(R.string.status_starting)
-            StreamStatus.CONNECTING -> getString(R.string.status_connecting)
-            StreamStatus.ERROR -> getString(R.string.status_error)
-            else -> getString(R.string.status_not_streaming)
-        }
-
-        // When streaming, append uptime to the content (e.g., "Live • 00:01:23")
-        val content = if (status == StreamStatus.STREAMING) {
-            val uptimeMillis = System.currentTimeMillis() - (streamingStartTime ?: System.currentTimeMillis())
-            val uptime = try { formatUptime(uptimeMillis) } catch (_: Throwable) { "" }
-            if (uptime.isNotEmpty()) "$statusLabel • $uptime" else statusLabel
-        } else statusLabel
-
-        // Determine mute/unmute label and pending intents
-        val muteLabel = currentMuteLabel()
-        // Show Start button when not streaming and not in a transitional state
-        val showStart = status == StreamStatus.NOT_STREAMING
-        // Show Stop button when streaming or attempting to connect
-        val showStop = status == StreamStatus.STREAMING || 
-                      status == StreamStatus.CONNECTING || 
-                      status == StreamStatus.STARTING
-
-        // Only read bitrate and FPS when streaming
-        val videoEncoderRef = if (status == StreamStatus.STREAMING) {
-            (streamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder
-        } else null
-        val videoBitrate = videoEncoderRef?.bitrate
-        val fpsText = try {
-            videoEncoderRef?.getStats()?.let { s -> "%.1f fps".format(java.util.Locale.US, s.outputFps) }
-        } catch (_: Throwable) { null }
-
-        val bitrateText = videoBitrate?.let { b -> if (b >= 1_000_000) String.format(java.util.Locale.US, "%.2f Mbps", b / 1_000_000.0) else String.format(java.util.Locale.US, "%d kb/s", b / 1000) } ?: ""
-
-        val contentWithBitrate = if (status == StreamStatus.STREAMING) {
-            val vb = videoBitrate?.let { b -> if (b >= 1_000_000) String.format(java.util.Locale.US, "%.2f Mbps", b / 1_000_000.0) else String.format(java.util.Locale.US, "%d kb/s", b / 1000) } ?: ""
-            // content already contains statusLabel when streaming (e.g., "Live • 00:01:23"),
-            // so avoid appending the statusLabel again. Just add bitrate and FPS after whatever
-            // content we've computed.
-            val fpsAppend = fpsText?.let { " • $it" } ?: ""
-            "$content • $vb$fpsAppend"
-        } else content
-
-        // Avoid duplicating the status label. Use contentWithBitrate directly as the
-        // notification's content text; the small status label (statusLabel) is used by
-        // the collapsed header where appropriate via NotificationUtils.
-        val finalContentText = contentWithBitrate
-        
-        val isFg = status == StreamStatus.STREAMING || status == StreamStatus.CONNECTING
-
-        val notification = customNotificationUtils.createServiceNotification(
-            title = title,
-            content = finalContentText,
-            iconResourceId = notificationIconResourceId,
-            // Keep foreground during STREAMING and CONNECTING (includes reconnection)
-            isForeground = isFg,
-            showStart = showStart,
-            showStop = showStop,
-            startPending = startPendingIntent,
-            stopPending = stopPendingIntent,
-            muteLabel = muteLabel,
-            mutePending = mutePendingIntent,
-            exitPending = exitPendingIntent,
-            openPending = openPendingIntent
-        )
-
-        val key = listOf(status.name, isCurrentlyMuted(), content, bitrateText, fpsText ?: "", statusLabel).joinToString("|")
-        return Pair(notification, key)
+        return notificationManager.buildNotificationForStatus(status)
     }
 
     // Decide the effective status using streamer immediate state when available,
@@ -796,12 +704,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
 
     // Format uptime milliseconds to a human readable H:MM:SS or M:SS string
     private fun formatUptime(ms: Long): String {
-        if (ms <= 0) return ""
-        val totalSeconds = ms / 1000
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        return if (hours > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds) else String.format(java.util.Locale.US, "%d:%02d", minutes, seconds)
+        return notificationManager.formatUptime(ms)
     }
 
 
@@ -866,20 +769,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
      * @return Notification object
      */
     private fun createDefaultNotification(content: String): Notification {
-        return customNotificationUtils.createServiceNotification(
-            title = getString(R.string.service_notification_title),
-            content = content,
-            iconResourceId = notificationIconResourceId,
-            isForeground = true,
-            showStart = true,
-            showStop = false,
-            startPending = startPendingIntent,
-            stopPending = stopPendingIntent,
-            muteLabel = currentMuteLabel(),
-            mutePending = mutePendingIntent,
-            exitPending = exitPendingIntent,
-            openPending = openPendingIntent
-        )
+        return notificationManager.createDefaultNotification(content)
     }
     
     /**
@@ -1513,30 +1403,17 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
 
     // Helper to compute the localized mute/unmute label based on current audio state
     private fun currentMuteLabel(): String {
-        return if (isCurrentlyMuted()) getString(R.string.service_notification_action_unmute) else getString(R.string.service_notification_action_mute)
+        return notificationManager.currentMuteLabel()
     }
 
     override fun onCreateNotification(): Notification {
-        return createDefaultNotification(
+        return notificationManager.createDefaultNotification(
             content = getString(R.string.service_notification_text_created)
         )
     }
 
     override fun onOpenNotification(): Notification? {
-        return customNotificationUtils.createServiceNotification(
-            title = getString(R.string.service_notification_title),
-            content = getString(R.string.status_streaming),
-            iconResourceId = notificationIconResourceId,
-            isForeground = true,
-            showStart = false,
-            showStop = true,
-            startPending = startPendingIntent,
-            stopPending = stopPendingIntent,
-            muteLabel = currentMuteLabel(),
-            mutePending = mutePendingIntent,
-            exitPending = exitPendingIntent,
-            openPending = openPendingIntent
-        )
+        return notificationManager.createOpenNotification()
     }
 
     override fun onErrorNotification(t: Throwable): Notification? {
@@ -1546,42 +1423,10 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         try {
             serviceScope.launch { _criticalErrors.emit(errorMessage) }
         } catch (_: Throwable) {}
-        return customNotificationUtils.createServiceNotification(
-            title = getString(R.string.service_notification_title),
-            content = errorMessage,
-            iconResourceId = notificationIconResourceId,
-            isForeground = false,
-            showStart = true,
-            showStop = false,
-            startPending = startPendingIntent,
-            stopPending = stopPendingIntent,
-            muteLabel = currentMuteLabel(),
-            mutePending = mutePendingIntent,
-            exitPending = exitPendingIntent,
-            openPending = openPendingIntent
-        )
+        return notificationManager.createErrorNotification(errorMessage)
     }
 
     override fun onCloseNotification(): Notification? {
-        // Don't show "Not streaming" if we're in reconnection mode
-        if (_isReconnecting.value) {
-            Log.d(TAG, "onCloseNotification: Suppressing notification during reconnection")
-            return null
-        }
-        
-        return customNotificationUtils.createServiceNotification(
-            title = getString(R.string.service_notification_title),
-            content = getString(R.string.status_not_streaming),
-            iconResourceId = notificationIconResourceId,
-            isForeground = false,
-            showStart = true,
-            showStop = false,
-            startPending = startPendingIntent,
-            stopPending = stopPendingIntent,
-            muteLabel = currentMuteLabel(),
-            mutePending = mutePendingIntent,
-            exitPending = exitPendingIntent,
-            openPending = openPendingIntent
-        )
+        return notificationManager.createCloseNotification()
     }
 }
