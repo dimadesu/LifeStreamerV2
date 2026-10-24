@@ -538,19 +538,10 @@
                     app:goneUnless="@{viewmodel.isAutoFocusModeAvailable() &amp;&amp; viewmodel.showCameraControls}"
                     app:tint="@android:color/white" />
 
-                <ToggleButton
+                <androidx.compose.ui.platform.ComposeView
+                    android:id="@+id/composeMuteButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="12dp"
-                    android:contentDescription="@string/mute_unmute_microphone"
-                    android:drawableTop="@drawable/ic_toggle_mic_button"
-                    android:checked="@{viewmodel.isMutedLiveData}"
-                    android:onCheckedChanged="@{(_, checked) -> viewmodel.setMute(checked)}"
-                    android:textOff=""
-                    android:textOn=""
-                    app:tint="@android:color/white" />
+                    android:layout_height="wrap_content" />
 
             </LinearLayout>
 

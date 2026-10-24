@@ -44,6 +44,7 @@ import android.widget.ToggleButton
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -53,6 +54,7 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainFragmentBinding
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
+import com.dimadesu.lifestreamer.ui.main.compose.MuteButton
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
@@ -113,6 +115,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     @SuppressLint("MissingPermission")
     private fun bindProperties() {
+        binding.composeMuteButton.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                MuteButton(viewModel = previewViewModel)
+            }
+        }
+
         childFragmentManager.setFragmentResultListener(
             ExplanationDialogFragment.SYS_AUDIO_TAG, viewLifecycleOwner
         ) { _, result ->
