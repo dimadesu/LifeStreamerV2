@@ -126,9 +126,10 @@ fun CameraControlsBar(
                 }
             }
 
-            MuteButton(
-                isMuted = isMuted,
-                onToggleMute = onToggleMute
+            CameraControlButton(
+                iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
+                contentDescription = stringResource(R.string.mute_unmute_microphone),
+                onClick = onToggleMute
             )
         }
     }
