@@ -427,13 +427,11 @@
 
         </ScrollView>
 
-        <ToggleButton
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/liveButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/live"
-            android:textOff="@string/live"
-            android:textOn="@string/stop"
+            android:layout_marginBottom="16dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent" />

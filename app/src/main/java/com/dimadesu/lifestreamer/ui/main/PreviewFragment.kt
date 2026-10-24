@@ -54,6 +54,7 @@ import com.dimadesu.lifestreamer.databinding.MainFragmentBinding
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
@@ -141,24 +142,27 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        binding.liveButton.setOnClickListener {
-            // Use streamStatus as single source of truth for determining action
-            val currentStatus = previewViewModel.streamStatus.value
-            Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
-            
-            when (currentStatus) {
-                StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
-                    // Start streaming
-                    Log.d(TAG, "Starting stream...")
-                    startStreamIfPermissions(previewViewModel.requiredPermissions)
-                }
-                StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
-                    // Stop streaming or cancel connection attempt
-                    Log.d(TAG, "Stopping stream...")
-                    stopStream()
-                }
+        binding.liveButton.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LiveButton(
+                    viewModel = previewViewModel,
+                    onClick = {
+                        val currentStatus = previewViewModel.streamStatus.value
+                        Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
+                        when (currentStatus) {
+                            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                                Log.d(TAG, "Starting stream...")
+                                startStreamIfPermissions(previewViewModel.requiredPermissions)
+                            }
+                            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                                Log.d(TAG, "Stopping stream...")
+                                stopStream()
+                            }
+                        }
+                    }
+                )
             }
-            // Note: Button state will be updated by streamStatus observer
         }
 
         // Commented out along with the switchCameraButton in XML
@@ -381,41 +385,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        // Observe streamStatus as single source of truth for button state
-        lifecycleScope.launch {
-            previewViewModel.streamStatus.collect { status ->
-                Log.d(TAG, "Stream status changed to: $status")
-                // Check if we're reconnecting - if so, keep button as "Stop"
-                val isReconnecting = previewViewModel.isReconnectingLiveData.value ?: false
-                
-                when (status) {
-                    StreamStatus.ERROR, StreamStatus.NOT_STREAMING -> {
-                        // Only reset button to "Start" if NOT reconnecting
-                        if (!isReconnecting && binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream error/stopped - resetting button to Start")
-                            binding.liveButton.isChecked = false
-                        } else if (isReconnecting && !binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream stopped but reconnecting - keeping button as Stop")
-                            binding.liveButton.isChecked = true
-                        }
-                    }
-                    StreamStatus.STARTING, StreamStatus.CONNECTING -> {
-                        // Keep button in "Stop" state during connection attempts
-                        if (!binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream starting/connecting - setting button to Stop")
-                            binding.liveButton.isChecked = true
-                        }
-                    }
-                    StreamStatus.STREAMING -> {
-                        // Ensure button shows "Stop" when streaming
-                        if (!binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream active - ensuring button shows Stop")
-                            binding.liveButton.isChecked = true
-                        }
-                    }
-                }
-            }
-        }
 
         // Apply orientation setting changes in real-time when not streaming
         lifecycleScope.launch {
@@ -632,23 +601,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
     }
 
-    /**
-     * Sync button state to match the current stream status.
-     * This is needed because StateFlow won't re-emit if the value hasn't changed,
-     * which can happen when returning from background after starting from notification.
-     */
-    private fun syncButtonState(status: StreamStatus?) {
-        val isReconnecting = previewViewModel.isReconnectingLiveData.value ?: false
-        val shouldBeChecked = when (status) {
-            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> true
-            StreamStatus.ERROR, StreamStatus.NOT_STREAMING, null -> isReconnecting
-        }
-        
-        if (binding.liveButton.isChecked != shouldBeChecked) {
-            Log.d(TAG, "syncButtonState: Updating button from ${binding.liveButton.isChecked} to $shouldBeChecked (status: $status, reconnecting: $isReconnecting)")
-            binding.liveButton.isChecked = shouldBeChecked
-        }
-    }
 
     private fun startStream() {
         Log.d(TAG, "startStream() called - checking if MediaProjection is required")
@@ -819,9 +771,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                                        currentStatus == com.dimadesu.lifestreamer.models.StreamStatus.CONNECTING ||
                                        currentStatus == com.dimadesu.lifestreamer.models.StreamStatus.STREAMING
             
-            // Sync button state immediately - StateFlow won't re-emit if value hasn't changed
-            // This handles returning from background after starting from notification
-            syncButtonState(currentStatus)
             
             if (isInStreamingProcess) {
                 Log.d(TAG, "onResume: Secondary check - restoring orientation from Service (status: $currentStatus)")
