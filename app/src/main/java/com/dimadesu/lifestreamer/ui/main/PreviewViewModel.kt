@@ -188,6 +188,30 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             onRequestBluetoothPermission = { _bluetoothConnectRequestLiveData.postValue(Unit) }
         )
 
+    // Controller for screen capture / MediaProjection video source
+    val screenSourceController: com.dimadesu.lifestreamer.ui.main.controllers.ScreenSourceController =
+        com.dimadesu.lifestreamer.ui.main.controllers.ScreenSourceController(
+            application = application,
+            scope = viewModelScope,
+            streamerProvider = { serviceStreamer },
+            serviceBinderProvider = { serviceBinder },
+            mediaProjectionTokenStore = mediaProjectionTokenStore,
+            cameraControlsController = cameraControlsController,
+            fpsProvider = { videoConfigLiveData.value?.fps ?: 30 },
+            lastUsedCameraIdProvider = { lastUsedCameraId },
+            onLastUsedCameraIdChanged = { lastUsedCameraId = it },
+            onScreenSourceActiveChanged = { active ->
+                if (active) {
+                    _activeRtmpIndex.postValue(null)
+                    _userToggledUvc.postValue(false)
+                }
+            },
+            onBeforeSourceSwitch = { removeBitrateRegulatorIfNeeded() },
+            onAfterSourceSwitch = { readdBitrateRegulatorIfNeeded() },
+            onAudioRoutingUpdateRequired = { setAudioSourceBasedOnVideoSource() },
+            onErrorMessage = { _streamerErrorLiveData.postValue(it) }
+        )
+
     // Controller for foreground service connection and flow observation
     val streamerServiceConnection: com.dimadesu.lifestreamer.ui.main.controllers.StreamerServiceConnection = com.dimadesu.lifestreamer.ui.main.controllers.StreamerServiceConnection(
         application = application,
@@ -429,7 +453,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     private val _activeRtmpIndex = MutableLiveData<Int?>(null)
     private val _userToggledUvc = MutableLiveData<Boolean>(false)
-    private val _isScreenSource = MutableLiveData<Boolean>(false)
+    private val _isScreenSource: MutableLiveData<Boolean> get() = screenSourceController._isScreenSource
 
     /**
      * Camera settings.
@@ -3439,116 +3463,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     val isUvcSource: LiveData<Boolean> = _userToggledUvc
 
-    val isScreenSource: LiveData<Boolean> = _isScreenSource
+    val isScreenSource: LiveData<Boolean> get() = screenSourceController.isScreenSource
 
-    fun toggleScreenSource(mediaProjectionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>? = null) {
-        val currentStreamer = serviceStreamer
-        if (currentStreamer == null) {
-            _streamerErrorLiveData.postValue("Service not available")
-            return
-        }
+    fun toggleScreenSource(mediaProjectionLauncher: androidx.activity.result.ActivityResultLauncher<Intent>? = null) =
+        screenSourceController.toggleScreenSource(mediaProjectionLauncher)
 
-        val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
-
-        viewModelScope.launch {
-            if (_isScreenSource.value != true) {
-                // Switching to Screen Source
-                Log.i(TAG, "Switching to Screen source")
-
-                val cachedProjection = streamingMediaProjection ?: startupMediaProjection ?: mediaProjectionHelper.getMediaProjection()
-                // A cached token that already had its virtual display stopped can't be reused for
-                // createVirtualDisplay — Android throws a SecurityException. Request a fresh one instead.
-                val needProjection = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
-                        && (cachedProjection == null || MediaProjectionVideoSourceFactory.isProjectionExhaustedForVideo(cachedProjection))
-
-                val doScreenSwitch: suspend (MediaProjection?) -> Unit = { proj ->
-                    _isScreenSource.postValue(true)
-                    _activeRtmpIndex.postValue(null)
-                    _userToggledUvc.postValue(false)
-                    cameraControlsController.hideSliders()
-                    
-                    if (proj != null) {
-                        switchToMediaProjectionVideoSource(currentStreamer, proj)
-                    } else {
-                        _streamerErrorLiveData.postValue("Failed to get MediaProjection")
-                    }
-                    // If a fresh token was requested above (needProjection == true), requestProjection()
-                    // may have called release() on the previous MediaProjection to start a clean service,
-                    // stopping it outright. Any audio source still built on that old token (e.g. AUDIO OUT
-                    // / SYS AUDIO) would otherwise keep silently reading from a dead projection. Re-run
-                    // audio source selection so it picks up the current (possibly new) token.
-                    setAudioSourceBasedOnVideoSource()
-                    // MediaProjectionService (ID 1001) may have overwritten the
-                    // CameraStreamerService notification — restore it.
-                    try { serviceBinder?.refreshNotification() } catch (_: Throwable) {}
-                }
-
-                if (needProjection) {
-                    if (mediaProjectionLauncher != null) {
-                        Log.i(TAG, "Requesting MediaProjection for Screen Recording")
-                        mediaProjectionHelper.requestProjection(mediaProjectionLauncher) { projection ->
-                            viewModelScope.launch {
-                                if (projection == null) {
-                                    _streamerErrorLiveData.postValue("MediaProjection permission denied - staying on camera source")
-                                    return@launch
-                                }
-                                startupMediaProjection = projection
-                                if (isCurrentlyStreaming) streamingMediaProjection = projection
-
-                                doScreenSwitch(projection)
-                            }
-                        }
-                    } else {
-                        _streamerErrorLiveData.postValue("MediaProjection permission required")
-                    }
-                } else {
-                    doScreenSwitch(cachedProjection)
-                }
-            } else {
-                // Switching off Screen Source
-                Log.i(TAG, "Switching off Screen source")
-                _isScreenSource.postValue(false)
-
-                if (streamingMediaProjection == null && startupMediaProjection == null) {
-                    mediaProjectionHelper.release()
-                }
-
-                kotlinx.coroutines.delay(300)
-                removeBitrateRegulatorIfNeeded()
-                
-                val cameraId = lastUsedCameraId
-                if (cameraId != null) {
-                    currentStreamer.setVideoSource(CameraSourceFactory(cameraId))
-                    Log.i(TAG, "Switched back to camera video (restored camera: $cameraId)")
-                } else {
-                    currentStreamer.setVideoSource(CameraSourceFactory(application))
-                    Log.i(TAG, "Switched to camera video (default camera)")
-                }
-                
-                readdBitrateRegulatorIfNeeded()
-            }
-        }
-    }
-    
-    private suspend fun switchToMediaProjectionVideoSource(currentStreamer: SingleStreamer, projection: MediaProjection) {
-        removeBitrateRegulatorIfNeeded()
-        val videoSource = currentStreamer.videoInput?.sourceFlow?.value
-        if (videoSource is ICameraSource) {
-            lastUsedCameraId = videoSource.cameraId
-        }
-        
-        val useCfr = true // Or whatever config you want
-        if (useCfr) {
-            val fps = videoConfigLiveData.value?.fps ?: 30
-            Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to CFR MediaProjection source with fps=$fps")
-            currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection, fps))
-        } else {
-            Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to default MediaProjection source")
-            currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection))
-        }
-        
-        readdBitrateRegulatorIfNeeded()
-    }
+    private suspend fun switchToMediaProjectionVideoSource(currentStreamer: SingleStreamer, projection: MediaProjection) =
+        screenSourceController.switchToMediaProjectionVideoSource(currentStreamer, projection)
 
     /**
      * Expose user toggle state for RTMP button.
