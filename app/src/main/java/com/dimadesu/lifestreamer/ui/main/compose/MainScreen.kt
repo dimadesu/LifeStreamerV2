@@ -17,19 +17,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.state.MainUiEvent
 import com.dimadesu.lifestreamer.ui.main.state.MainUiState
 
 /**
  * Root Compose overlay for the Main Screen.
  * Places the status bar, source switcher, audio panel, camera controls,
- * and status banners over the camera/video preview.
+ * live toggle button, and status banners over the camera/video preview.
  */
 @Composable
 fun MainScreenOverlay(
     uiState: MainUiState,
+    streamStatus: StreamStatus = StreamStatus.NOT_STREAMING,
     rtmpSourceCount: Int = 1,
     onEvent: (MainUiEvent) -> Unit,
+    onLiveClick: () -> Unit = {},
+    onScreenClick: () -> Unit = { onEvent(MainUiEvent.ToggleScreenSource()) },
+    onRtmpClick: (index: Int) -> Unit = { idx -> onEvent(MainUiEvent.ToggleRtmpSource(index = idx)) },
     onOpenRtmpServer: () -> Unit = {},
     onOpenUvcSettings: () -> Unit = {},
     onToggleSystemAudio: () -> Unit = {},
@@ -50,11 +55,11 @@ fun MainScreenOverlay(
             videoSourceState = uiState.videoSource,
             rtmpSourceCount = rtmpSourceCount,
             onCameraClick = { onEvent(MainUiEvent.ToggleCamera) },
-            onRtmpClick = { idx -> onEvent(MainUiEvent.ToggleRtmpSource(index = idx)) },
+            onRtmpClick = onRtmpClick,
             onRtmpServerClick = onOpenRtmpServer,
             onUvcClick = { onEvent(MainUiEvent.ToggleUvcSource) },
             onUvcSettingsClick = onOpenUvcSettings,
-            onScreenClick = { onEvent(MainUiEvent.ToggleScreenSource()) },
+            onScreenClick = onScreenClick,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = 8.dp)
@@ -93,7 +98,17 @@ fun MainScreenOverlay(
                 .padding(bottom = 16.dp, end = 16.dp)
         )
 
-        // 5. Center Reconnection Alert Banner
+        // 5. Bottom-Center Live / Stop Stream Button
+        LiveButton(
+            status = streamStatus,
+            isStreaming = uiState.stream.isStreaming,
+            onClick = onLiveClick,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
+
+        // 6. Center Reconnection Alert Banner
         AnimatedVisibility(
             visible = !uiState.stream.reconnectionStatus.isNullOrBlank(),
             enter = fadeIn(),

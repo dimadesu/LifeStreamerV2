@@ -28,6 +28,17 @@
             app:position="center"
             app:scaleMode="fit" />
 
+        <!-- Modern Jetpack Compose UI Overlay -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/composeOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Legacy XML controls hidden during Compose migration -->
         <!-- RTMP status message (centered) -->
         <TextView
             android:id="@+id/rtmpStatusText"
@@ -38,8 +49,8 @@
             android:textStyle="bold"
             android:padding="16dp"
             android:background="#80000000"
+            android:visibility="gone"
             android:text='@{viewmodel.rtmpStatusLiveData}'
-            app:goneUnless='@{viewmodel.rtmpStatusLiveData != null}'
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -55,8 +66,8 @@
             android:textStyle="bold"
             android:padding="16dp"
             android:background="#80000000"
+            android:visibility="gone"
             android:text='@{viewmodel.reconnectionStatusLiveData}'
-            app:goneUnless='@{viewmodel.reconnectionStatusLiveData != null}'
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
@@ -73,11 +84,11 @@
             android:elevation="100dp"
             android:clickable="true"
             android:focusable="true"
+            android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:goneUnless='@{viewmodel.audioDebugInfoLiveData != null &amp;&amp; !viewmodel.isRtmpSource}'>
+            app:layout_constraintEnd_toEndOf="parent">
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -165,6 +176,7 @@
             android:layout_height="0dp"
             android:layout_marginTop="76dp"
             android:fillViewport="true"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent">
@@ -303,6 +315,7 @@
             android:paddingEnd="5dp"
             android:layout_marginEnd="20dp"
             android:background="#80000000"
+            android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
@@ -357,6 +370,7 @@
             android:paddingEnd="5dp"
             android:layout_marginEnd="20dp"
             android:background="#80000000"
+            android:visibility="gone"
             app:layout_constraintTop_toBottomOf="@+id/bitrateStatusLayout"
             app:layout_constraintEnd_toEndOf="parent">
 
@@ -391,6 +405,7 @@
             android:paddingVertical="3dp"
             android:paddingHorizontal="5dp"
             android:background="#80000000"
+            android:visibility="gone"
             app:layout_constraintTop_toBottomOf="@+id/audioSourceLayout"
             app:layout_constraintStart_toStartOf="@+id/audioSourceLayout"
             app:layout_constraintEnd_toEndOf="@+id/audioSourceLayout">
@@ -434,6 +449,7 @@
             android:text="@string/live"
             android:textOff="@string/live"
             android:textOn="@string/stop"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
@@ -443,6 +459,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:rotation="-90"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="@+id/settingsScrollView"
             app:layout_constraintEnd_toEndOf="@+id/settingsScrollView"
             app:layout_constraintTop_toTopOf="@+id/settingsScrollView">
@@ -482,6 +499,7 @@
             android:layout_height="0dp"
             android:layout_marginEnd="16dp"
             android:fillViewport="true"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/audioLevelContainer"
             app:layout_constraintEnd_toEndOf="parent">

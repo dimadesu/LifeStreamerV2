@@ -28,6 +28,7 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICame
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
 import android.app.AppOpsManager
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.media.AudioManager
 import android.content.Intent
@@ -44,15 +45,19 @@ import android.widget.ToggleButton
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainFragmentBinding
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
+import com.dimadesu.lifestreamer.ui.main.compose.MainScreenOverlay
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
@@ -132,6 +137,9 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 previewViewModel.toggleVideoSource(mediaProjectionLauncher, rtmpIndex = rtmpIndex)
             }
         }
+
+        // Initialize Jetpack Compose overlay
+        setupComposeOverlay()
 
         binding.liveButton.setOnClickListener {
             // Use streamStatus as single source of truth for determining action
@@ -1235,6 +1243,77 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         } else {
             previewViewModel.toggleVideoSource(mediaProjectionLauncher, rtmpIndex = rtmpIndex)
+        }
+    }
+
+    /**
+     * Connects the modern Jetpack Compose MainScreenOverlay with PreviewViewModel's
+     * reactive StateFlows and Fragment-bound activity contracts.
+     */
+    private fun setupComposeOverlay() {
+        binding.composeOverlay.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val uiState by previewViewModel.uiState.collectAsStateWithLifecycle()
+                val streamStatus by previewViewModel.streamStatus.collectAsStateWithLifecycle()
+                val rtmpSourceCount by previewViewModel.rtmpSourceCountFlow.collectAsStateWithLifecycle(initialValue = 1)
+
+                MainScreenOverlay(
+                    uiState = uiState,
+                    streamStatus = streamStatus,
+                    rtmpSourceCount = rtmpSourceCount,
+                    onEvent = { event -> previewViewModel.onEvent(event) },
+                    onLiveClick = {
+                        val currentStatus = previewViewModel.streamStatus.value
+                        Log.d(TAG, "Compose Live button clicked - currentStatus: $currentStatus")
+                        when (currentStatus) {
+                            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                                startStreamIfPermissions(previewViewModel.requiredPermissions)
+                            }
+                            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                                stopStream()
+                            }
+                        }
+                    },
+                    onScreenClick = {
+                        previewViewModel.toggleScreenSource(mediaProjectionLauncher)
+                    },
+                    onRtmpClick = { idx ->
+                        toggleVideoSourceWithExplanation(rtmpIndex = idx)
+                    },
+                    onOpenRtmpServer = {
+                        val pkg = "com.dimadesu.mediasrvr"
+                        val launchIntent = requireContext().packageManager.getLaunchIntentForPackage(pkg)
+                        if (launchIntent != null) {
+                            startActivity(launchIntent)
+                        } else {
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")))
+                            } catch (e: ActivityNotFoundException) {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")))
+                            }
+                        }
+                    },
+                    onOpenUvcSettings = {
+                        val intent = Intent(requireContext(), com.dimadesu.lifestreamer.uvc.UvcTestActivity::class.java)
+                        startActivity(intent)
+                    },
+                    onToggleSystemAudio = {
+                        val isTurningOn = previewViewModel.useSystemAudioForCameraLiveData.value != true
+                        if (isTurningOn && !previewViewModel.sysAudioExplanationShown) {
+                            if (childFragmentManager.findFragmentByTag(ExplanationDialogFragment.SYS_AUDIO_TAG) == null) {
+                                ExplanationDialogFragment.newInstance(
+                                    R.string.audio_out_explanation_title,
+                                    R.string.audio_out_explanation_message,
+                                    ExplanationDialogFragment.SYS_AUDIO_TAG
+                                ).show(childFragmentManager, ExplanationDialogFragment.SYS_AUDIO_TAG)
+                            }
+                        } else {
+                            previewViewModel.toggleSystemAudioForCamera(mediaProjectionLauncher)
+                        }
+                    }
+                )
+            }
         }
     }
 

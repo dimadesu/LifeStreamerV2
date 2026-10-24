@@ -2422,6 +2422,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     /**
      * Number of configured RTMP source URLs.
      */
+    val rtmpSourceCountFlow: kotlinx.coroutines.flow.Flow<Int> = storageRepository.rtmpSourceCountFlow
     val rtmpSourceCount: LiveData<Int> = storageRepository.rtmpSourceCountFlow.asLiveData()
 
     /**
