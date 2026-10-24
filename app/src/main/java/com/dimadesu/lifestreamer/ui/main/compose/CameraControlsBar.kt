@@ -88,9 +88,10 @@ fun CameraControlsBar(
         Column(
             modifier = Modifier
                 .wrapContentHeight()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Bottom
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
             if (showCameraControls) {
                 if (isFlashAvailable) {
@@ -155,9 +156,7 @@ fun CameraControlButton(
             contentColor = Color.White
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-        modifier = modifier
-            .padding(vertical = 2.dp)
-            .size(44.dp)
+        modifier = modifier.size(44.dp)
     ) {
         Icon(
             painter = painterResource(id = iconRes),

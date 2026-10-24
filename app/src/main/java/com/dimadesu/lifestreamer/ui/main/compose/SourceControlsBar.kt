@@ -153,9 +153,9 @@ fun SourceControlsBar(
             modifier = Modifier
                 .wrapContentHeight()
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 4.dp),
+                .padding(bottom = 8.dp),
             horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom)
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
             // 1. Dynamic Camera Selection buttons
             if (showCameraControls && cameras.isNotEmpty()) {
@@ -292,8 +292,8 @@ fun SourceButton(
             contentColor = Color.White
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        modifier = modifier.defaultMinSize(minWidth = minWidth, minHeight = 36.dp)
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+        modifier = modifier.defaultMinSize(minWidth = minWidth, minHeight = 40.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

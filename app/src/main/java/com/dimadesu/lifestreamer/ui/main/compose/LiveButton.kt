@@ -3,7 +3,9 @@ package com.dimadesu.lifestreamer.ui.main.compose
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,7 +71,8 @@ fun LiveButton(
             contentColor = Color.White
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-        modifier = modifier
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        modifier = modifier.defaultMinSize(minWidth = 88.dp, minHeight = 40.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
