@@ -137,12 +137,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val videoSourceMutex = Mutex()
 
     // Service binding for background streaming
-    /**
-     * Service reference for background streaming (using the service abstraction)
-     */
-    @SuppressLint("StaticFieldLeak")
-    private var streamerService: CameraStreamerService? = null
-
     // Controller for camera controls and camera switching
     val cameraControlsController = com.dimadesu.lifestreamer.ui.main.controllers.CameraControlsController(
         application = application,
@@ -179,23 +173,83 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         isUiInForegroundProvider = { isUiInForeground }
     )
 
-    // Direct service binder reference for invoking service APIs safely
-    private var serviceBinder: CameraStreamerService.CameraStreamerServiceBinder? = null
+    // Controller for foreground service connection and flow observation
+    val streamerServiceConnection: com.dimadesu.lifestreamer.ui.main.controllers.StreamerServiceConnection = com.dimadesu.lifestreamer.ui.main.controllers.StreamerServiceConnection(
+        application = application,
+        scope = viewModelScope,
+        onConnected = { _, _, streamer ->
+            streamerFlow.value = streamer
+            setupAudioLevelMonitoring()
+        },
+        onDisconnected = {
+            disableAudioLevelMonitoring()
+            streamerFlow.value = null
+            streamerService?.setStreamStatus(StreamStatus.NOT_STREAMING)
+        },
+        onReconnectionStatus = { _reconnectionStatusLiveData.postValue(it) },
+        onBitrateUpdated = { _bitrateLiveData.postValue(it) },
+        onEncoderStatsUpdated = { _encoderStatsLiveData.postValue(it) },
+        onPassthroughStateChanged = { running ->
+            if (suppressPassthroughObserver) {
+                Log.d(TAG, "Suppressing passthrough state change during source switch (running=$running)")
+                return@StreamerServiceConnection
+            }
+            val videoSource = serviceStreamer?.videoInput?.sourceFlow?.value
+            val isRtmpSource = videoSource is RTMPVideoSource
+            if (!isRtmpSource && !_useSystemAudioForCamera) {
+                _isMonitorAudioOn.postValue(running)
+                Log.i(TAG, "Service passthrough running state observed: $running")
+            } else if (_useSystemAudioForCamera) {
+                Log.d(TAG, "Ignoring passthrough state change while SYS AUDIO is active (running=$running)")
+            } else {
+                Log.d(TAG, "Ignoring passthrough state change while on RTMP source (running=$running)")
+            }
+        },
+        onStreamStatusChanged = { svcStatus ->
+            try {
+                service?.setStreamStatus(svcStatus)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to map service status: ${t.message}")
+            }
+        },
+        onMutedChanged = { _isMutedLiveData.postValue(it) },
+        onScoStateChanged = { state ->
+            try { _scoStateLiveData.postValue(state.name) } catch (_: Throwable) {}
+            try {
+                when (state) {
+                    com.dimadesu.lifestreamer.audio.BluetoothAudioManager.ScoState.FAILED -> {
+                        _useBluetoothMic.postValue(false)
+                        streamerServiceConnection.setUseBluetoothMic(false)
+                        _toastMessageLiveData.postValue("Bluetooth mic unavailable")
+                    }
+                    com.dimadesu.lifestreamer.audio.BluetoothAudioManager.ScoState.DISCONNECTED -> {
+                        _useBluetoothMic.postValue(false)
+                        streamerServiceConnection.setUseBluetoothMic(false)
+                        _toastMessageLiveData.postValue("Bluetooth mic disconnected")
+                    }
+                    else -> {}
+                }
+            } catch (_: Throwable) {}
+        },
+        onBluetoothConnectRequested = {
+            try { _bluetoothConnectRequestLiveData.postValue(Unit) } catch (_: Throwable) {}
+        },
+        onUptimeUpdated = {
+            try { _uptimeLiveData.postValue(it) } catch (_: Throwable) {}
+        }
+    )
 
     /**
-     * Public getter for the service for foreground recovery
+     * Public getters for service, binder, and streamer from connection
      */
-    val service: CameraStreamerService? get() = streamerService
+    val streamerService: CameraStreamerService? get() = streamerServiceConnection.streamerService
+    val service: CameraStreamerService? get() = streamerServiceConnection.streamerService
+    val serviceBinder: CameraStreamerService.CameraStreamerServiceBinder? get() = streamerServiceConnection.serviceBinder
+    val serviceStreamer: SingleStreamer? get() = streamerServiceConnection.serviceStreamer
+    private val _serviceReady: StateFlow<Boolean> get() = streamerServiceConnection.isServiceReady
 
-    /**
-     * Current streamer instance from the service
-     */
-    var serviceStreamer: SingleStreamer? = null
-        private set
     // If rotation changes while streaming we queue it here and apply it when streaming stops
     private var pendingTargetRotation: Int? = null
-    private var serviceConnection: ServiceConnection? = null
-    private val _serviceReady = MutableStateFlow(false)
     private val streamerFlow = MutableStateFlow<SingleStreamer?>(null)
 
     // UI-visible current bitrate string
@@ -1154,215 +1208,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     @RequiresApi(Build.VERSION_CODES.O)
     private fun bindToStreamerService() {
-        Log.i(TAG, "Binding to CameraStreamerService...")
-
-        // Start the service explicitly so it runs independently of binding
-        // If service is already running, this will just reconnect to it
-        val serviceIntent = Intent(application, CameraStreamerService::class.java)
-        application.startForegroundService(serviceIntent)
-        Log.i(TAG, "Started/reconnected to CameraStreamerService as independent foreground service")
-
-        // Create custom service connection to get both streamer and service
-        val connection = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                if (binder is CameraStreamerService.CameraStreamerServiceBinder) {
-                    streamerService = binder.getService()
-                    // Keep direct binder reference for quick API calls
-                    serviceBinder = binder
-                    serviceStreamer = binder.streamer as SingleStreamer
-                    
-                    // Observe centralized reconnection status message from service
-                    try {
-                        val svc = binder.getService()
-                        viewModelScope.launch {
-                            svc.reconnectionStatusMessage.collect { message ->
-                                _reconnectionStatusLiveData.postValue(message)
-                            }
-                        }
-                        Log.i(TAG, "Observing centralized reconnection state from service")
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Failed to observe reconnection state from service: ${t.message}")
-                    }
-                    
-                    // Collect bitrate flow from service binder if available
-                    try {
-                        val svc = binder.getService()
-                        viewModelScope.launch {
-                            svc.currentBitrateFlow.collect { bits ->
-                                val text = bits?.let { b -> if (b >= 1_000_000) String.format(java.util.Locale.US, "%.2f Mbps", b / 1_000_000.0) else String.format(java.util.Locale.US, "%d kb/s", b / 1000) } ?: ""
-                                _bitrateLiveData.postValue(text)
-                            }
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Failed to collect bitrate from service: ${t.message}")
-                    }
-                    // Collect encoder stats flow from service
-                    try {
-                        val svc = binder.getService()
-                        viewModelScope.launch {
-                            svc.encoderStatsFlow.collect { statsText ->
-                                _encoderStatsLiveData.postValue(statsText)
-                            }
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Failed to collect encoder stats from service: ${t.message}")
-                    }
-                    // Observe passthrough running state so UI can reflect actual service state
-                    // Only sync when NOT on RTMP source (RTMP uses ExoPlayer volume, not passthrough)
-                    try {
-                        val svc = binder.getService()
-                        // First set UI to current snapshot so UI matches service immediately
-                        // But only if not on RTMP source
-                        try {
-                            val videoSource = serviceStreamer?.videoInput?.sourceFlow?.value
-                            val isRtmpSource = videoSource is RTMPVideoSource
-                            if (!isRtmpSource && !_useSystemAudioForCamera) {
-                                val snapshot = svc.isPassthroughRunning.value
-                                _isMonitorAudioOn.postValue(snapshot)
-                                Log.i(TAG, "Service passthrough running snapshot applied to UI: $snapshot")
-                            } else {
-                                Log.i(TAG, "Skipping passthrough snapshot sync (RTMP source uses ExoPlayer volume)")
-                            }
-                        } catch (_: Throwable) {}
-
-                        // Then observe for updates (only sync when not on RTMP and not during source switch)
-                        viewModelScope.launch {
-                            svc.isPassthroughRunning.collect { running ->
-                                if (suppressPassthroughObserver) {
-                                    Log.d(TAG, "Suppressing passthrough state change during source switch (running=$running)")
-                                    return@collect
-                                }
-                                val videoSource = serviceStreamer?.videoInput?.sourceFlow?.value
-                                val isRtmpSource = videoSource is RTMPVideoSource
-                                if (!isRtmpSource && !_useSystemAudioForCamera) {
-                                    _isMonitorAudioOn.postValue(running)
-                                    Log.i(TAG, "Service passthrough running state observed: $running")
-                                } else if (_useSystemAudioForCamera) {
-                                    Log.d(TAG, "Ignoring passthrough state change while SYS AUDIO is active (running=$running)")
-                                } else {
-                                    Log.d(TAG, "Ignoring passthrough state change while on RTMP source (running=$running)")
-                                }
-                            }
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Failed to observe passthrough running state: ${t.message}")
-                    }
-                    streamerFlow.value = serviceStreamer
-                    _serviceReady.value = true
-                    // Collect service-provided stream status and map it to ViewModel status
-                    try {
-                        val svcStatusFlow = binder.serviceStreamStatus()
-                        viewModelScope.launch {
-                            svcStatusFlow.collect { svcStatus ->
-                                try {
-                                    // The service now publishes the shared StreamStatus enum; assign directly
-                                    service?.setStreamStatus(svcStatus)
-                                } catch (t: Throwable) {
-                                    Log.w(TAG, "Failed to map service status: ${t.message}")
-                                }
-                            }
-                        }
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Failed to collect service status: ${t.message}")
-                        }
-                        // Note: Critical errors are already handled via throwableFlow observer
-                        // in observeStreamerFlows(). Don't collect criticalErrors here to avoid
-                        // duplicate error dialogs when mid-stream errors occur.
-                        // The service's onErrorNotification still updates the notification UI.
-                        
-                        // Collect isMuted flow to keep UI toggle in sync when mute is toggled via notification
-                        try {
-                            val isMutedFlow = binder.isMutedFlow()
-                            viewModelScope.launch {
-                                isMutedFlow.collect { muted ->
-                                    try {
-                                        _isMutedLiveData.postValue(muted)
-                                    } catch (t: Throwable) {
-                                        Log.w(TAG, "Failed to post isMuted state: ${t.message}")
-                                    }
-                                }
-                            }
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Failed to collect isMuted flow from service: ${t.message}")
-                        }
-                        // Collect SCO state flow if provided by binder
-                        try {
-                            val scoFlow = binder.scoStateFlow()
-                            viewModelScope.launch {
-                                scoFlow.collect { state ->
-                                    try { _scoStateLiveData.postValue(state.name) } catch (_: Throwable) {}
-
-                                    // If SCO failed or was unexpectedly disconnected, revert user toggle and notify UI
-                                    try {
-                                        when (state) {
-                                            com.dimadesu.lifestreamer.audio.BluetoothAudioManager.ScoState.FAILED -> {
-                                                _useBluetoothMic.postValue(false)
-                                                try { serviceBinder?.setUseBluetoothMic(false) } catch (_: Throwable) {}
-                                                try { _toastMessageLiveData.postValue("Bluetooth mic unavailable") } catch (_: Throwable) {}
-                                            }
-                                            com.dimadesu.lifestreamer.audio.BluetoothAudioManager.ScoState.DISCONNECTED -> {
-                                                _useBluetoothMic.postValue(false)
-                                                try { serviceBinder?.setUseBluetoothMic(false) } catch (_: Throwable) {}
-                                                try { _toastMessageLiveData.postValue("Bluetooth mic disconnected") } catch (_: Throwable) {}
-                                            }
-                                            else -> {}
-                                        }
-                                    } catch (_: Throwable) {}
-                                }
-                            }
-                            // Collect BLUETOOTH_CONNECT permission requests from service
-                            try {
-                                val permFlow = binder.bluetoothConnectPermissionRequests()
-                                viewModelScope.launch {
-                                    permFlow.collect {
-                                        try { _bluetoothConnectRequestLiveData.postValue(Unit) } catch (_: Throwable) {}
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                                Log.w(TAG, "Failed to collect BLUETOOTH_CONNECT requests: ${t.message}")
-                            }
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Failed to collect SCO state flow from service: ${t.message}")
-                        }
-                            // Collect uptime flow to display runtime in UI
-                            try {
-                                val uptimeFlow = binder.uptimeFlow()
-                                viewModelScope.launch {
-                                    uptimeFlow.collect { uptime ->
-                                        try {
-                                            _uptimeLiveData.postValue(uptime)
-                                        } catch (t: Throwable) {
-                                            Log.w(TAG, "Failed to post uptime state: ${t.message}")
-                                        }
-                                    }
-                                }
-                            } catch (t: Throwable) {
-                                Log.w(TAG, "Failed to collect uptime flow from service: ${t.message}")
-                            }
-                            
-                            // Set up audio level monitoring callback
-                            setupAudioLevelMonitoring()
-                            
-                    Log.i(TAG, "CameraStreamerService connected and ready - streaming state: ${binder.streamer.isStreamingFlow.value}")
-                }
-            }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                Log.w(TAG, "CameraStreamerService disconnected: $name")
-                disableAudioLevelMonitoring()
-                serviceStreamer = null
-                streamerService = null
-                serviceBinder = null
-                streamerFlow.value = null
-                _serviceReady.value = false
-                // Ensure UI status is cleared when the service disconnects
-                service?.setStreamStatus(StreamStatus.NOT_STREAMING)
-            }
-        }
-
-        // Use manual binding with custom connection - reuse the same intent
-        application.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
-        serviceConnection = connection
+        streamerServiceConnection.bind()
     }
 
     /**
@@ -4169,20 +4015,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     private fun unbindStreamerService() {
-        serviceConnection?.let { connection ->
-            try {
-                application.unbindService(connection)
-                Log.i(TAG, "Unbound from CameraStreamerService")
-            } catch (e: Exception) {
-                Log.w(TAG, "unbindService failed: ${e.message}")
-            }
-        }
-        streamerService = null
-        serviceBinder = null
-        serviceStreamer = null
-        serviceConnection = null
-        streamerFlow.value = null
-        _serviceReady.value = false
+        streamerServiceConnection.unbind()
     }
 
     private fun releaseMediaProjection() {
