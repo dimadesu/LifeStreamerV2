@@ -129,13 +129,8 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
     // Track passthrough restart job to prevent concurrent restarts
     private var passthroughRestartJob: kotlinx.coroutines.Job? = null
     
-    // Wake lock to prevent audio silencing
-    private lateinit var powerManager: PowerManager
-    private var wakeLock: PowerManager.WakeLock? = null
-    
-    // Network wake lock to prevent network I/O throttling during background streaming
-    // Especially important for SRT streaming
-    private var networkWakeLock: PowerManager.WakeLock? = null
+    // Wake lock manager to prevent CPU/audio silencing and network throttling
+    private val wakeLockManager by lazy { ServiceWakeLockManager(this) }
     
     // Create our own NotificationUtils instance for custom notifications
     private val customNotificationUtils: NotificationUtils by lazy {
@@ -225,9 +220,6 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         com.dimadesu.lifestreamer.audio.BluetoothAudioConfig.setEnabled(false)
         com.dimadesu.lifestreamer.audio.BluetoothAudioConfig.setPreferredDevice(null)
         Log.i(TAG, "Service onCreate: Reset BT config to default (disabled)")
-
-        // Initialize power manager and other services
-        powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
 
         // Detect current device rotation
         detectCurrentRotation()
@@ -467,8 +459,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         } catch (_: Exception) {}
 
         // Release wake locks if held
-        try { releaseWakeLock() } catch (_: Exception) {}
-        try { releaseNetworkWakeLock() } catch (_: Exception) {}
+        try { wakeLockManager.releaseAll() } catch (_: Exception) {}
 
         // Stop embedded SRTLA proxy if running (automatically parks Moblink relays)
         try { if (SrtlaManager.isRunning) SrtlaManager.stop() } catch (_: Exception) {}
@@ -960,34 +951,8 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         }
     }
 
-    /**
-     * Acquire wake lock to prevent audio silencing and ensure stable background recording
-     */
-    private fun acquireWakeLock() {
-        if (wakeLock == null) {
-            // Use PARTIAL_WAKE_LOCK for better compatibility across Android versions
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "StreamPack::StableBackgroundAudioRecording"
-            ).apply {
-                acquire() // No timeout - held until manually released
-                Log.i(TAG, "Wake lock acquired for stable background audio recording")
-            }
-        }
-    }
-
-    /**
-     * Release wake lock
-     */
-    private fun releaseWakeLock() {
-        wakeLock?.let { lock ->
-            if (lock.isHeld) {
-                lock.release()
-                Log.i(TAG, "Wake lock released")
-            }
-            wakeLock = null
-        }
-    }
+    private fun acquireWakeLock() = wakeLockManager.acquireWakeLock()
+    private fun releaseWakeLock() = wakeLockManager.releaseWakeLock()
     
     /**
      * Create a standard notification with default settings.
@@ -1035,34 +1000,8 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         }
     }
     
-    /**
-     * Acquire network wake lock to prevent network throttling in background
-     * Especially important for SRT streaming
-     */
-    private fun acquireNetworkWakeLock() {
-        if (networkWakeLock == null) {
-            networkWakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "LifeStreamer::NetworkUpload"
-            ).apply {
-                acquire() // No timeout - held until manually released
-                Log.i(TAG, "Network wake lock acquired for SRT/RTMP upload")
-            }
-        }
-    }
-    
-    /**
-     * Release network wake lock
-     */
-    private fun releaseNetworkWakeLock() {
-        networkWakeLock?.let { lock ->
-            if (lock.isHeld) {
-                lock.release()
-                Log.i(TAG, "Network wake lock released")
-            }
-            networkWakeLock = null
-        }
-    }
+    private fun acquireNetworkWakeLock() = wakeLockManager.acquireNetworkWakeLock()
+    private fun releaseNetworkWakeLock() = wakeLockManager.releaseNetworkWakeLock()
 
     /**
      * Handle foreground recovery - called when app returns to foreground
