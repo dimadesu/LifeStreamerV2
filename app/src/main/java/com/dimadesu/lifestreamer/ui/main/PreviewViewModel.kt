@@ -124,7 +124,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val storageRepository = DataStoreRepository(application, application.dataStore)
     private val streamConfigurationHelper = StreamConfigurationHelper(storageRepository)
     private val rotationRepository = RotationRepository.getInstance(application)
-    val mediaProjectionHelper = MediaProjectionHelper(application)
+    val mediaProjectionTokenStore = com.dimadesu.lifestreamer.ui.main.controllers.MediaProjectionTokenStore(application)
+    val mediaProjectionHelper: MediaProjectionHelper get() = mediaProjectionTokenStore.helper
     private val buildStreamerUseCase = BuildStreamerUseCase(application)
 
     // Dispatcher for camera/video source operations to avoid blocking Main thread with mutex
@@ -641,19 +642,20 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
     
     // MediaProjection session for streaming
-    private var streamingMediaProjection: MediaProjection? = null
+    var streamingMediaProjection: MediaProjection?
+        get() = mediaProjectionTokenStore.streamingMediaProjection
+        set(value) { mediaProjectionTokenStore.streamingMediaProjection = value }
 
     // MediaProjection token held outside of a stream session — acquired on first RTMP/SYS AUDIO use
-    private var startupMediaProjection: MediaProjection? = null
+    var startupMediaProjection: MediaProjection?
+        get() = mediaProjectionTokenStore.startupMediaProjection
+        set(value) { mediaProjectionTokenStore.startupMediaProjection = value }
 
     // Toggle: camera/UVC sources use full-phone system audio instead of mic
     private var _useSystemAudioForCamera = false
     val useSystemAudioForCameraLiveData = MutableLiveData(false)
 
-    fun hasMediaProjection(): Boolean =
-        startupMediaProjection != null
-                || streamingMediaProjection != null
-                || mediaProjectionHelper.getMediaProjection() != null
+    fun hasMediaProjection(): Boolean = mediaProjectionTokenStore.hasProjection()
 
     var rtmpAudioExplanationShown = false
     var sysAudioExplanationShown = false
@@ -753,12 +755,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // Try to recover a MediaProjection token from a still-running
         // MediaProjectionService (e.g. after the user swiped the UI from recents
         // but the foreground service survived).
-        mediaProjectionHelper.tryReconnect { projection ->
-            if (projection != null) {
-                Log.i(TAG, "Recovered MediaProjection from surviving service")
-                startupMediaProjection = projection
-            }
-        }
+        mediaProjectionTokenStore.tryReconnect()
 
         // Initialize LiveData flows
         viewModelScope.launch {
@@ -3997,7 +3994,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // MediaProjectionService may still be running as a foreground service, and
         // a new ViewModel (after UI recreation) can recover the token via tryReconnect().
         // Full release only happens in prepareForExit() when the user explicitly quits.
-        mediaProjectionHelper.unbind()
+        mediaProjectionTokenStore.unbind()
         Log.i(TAG, "PreviewViewModel cleared (MediaProjection service preserved for possible UI recreation)")
     }
 
@@ -4019,11 +4016,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     private fun releaseMediaProjection() {
-        try { streamingMediaProjection?.stop() } catch (_: Throwable) {}
-        streamingMediaProjection = null
-        try { startupMediaProjection?.stop() } catch (_: Throwable) {}
-        startupMediaProjection = null
-        mediaProjectionHelper.release()
+        mediaProjectionTokenStore.release()
     }
 
     /**
