@@ -2743,6 +2743,53 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     fun reloadAndApplyAudioSettingsIfChanged() = audioDebugController.reloadAndApplyAudioSettingsIfChanged()
 
+    // Unified UI State for Jetpack Compose
+    private val _uiState = kotlinx.coroutines.flow.MutableStateFlow(com.dimadesu.lifestreamer.ui.main.state.MainUiState())
+    val uiState: kotlinx.coroutines.flow.StateFlow<com.dimadesu.lifestreamer.ui.main.state.MainUiState> = _uiState
+
+    fun updateUiState(transform: (com.dimadesu.lifestreamer.ui.main.state.MainUiState) -> com.dimadesu.lifestreamer.ui.main.state.MainUiState) {
+        _uiState.value = transform(_uiState.value)
+    }
+
+    /**
+     * Centralized event handler for Jetpack Compose UI interactions.
+     */
+    fun onEvent(event: com.dimadesu.lifestreamer.ui.main.state.MainUiEvent) {
+        when (event) {
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.StartStream -> startStream()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.StartStreamWithProjection -> startStreamWithMediaProjection(event.launcher)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.StopStream -> stopStream()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetMute -> setMute(event.isMuted)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleCamera -> toggleCamera()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SwitchBackToFront -> { switchBackToFront() }
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleScreenSource -> toggleScreenSource(event.launcher)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleUvcSource -> toggleUvcSource()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleRtmpSource -> toggleVideoSource(event.launcher, event.index)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleFlash -> toggleFlash()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleAutoWhiteBalance -> toggleAutoWhiteBalanceMode()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleAutoFocus -> toggleAutoFocusMode()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleExposureSlider -> toggleExposureSlider()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleZoomSlider -> toggleZoomSlider()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleLensDistanceSlider -> toggleAutoFocusMode()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetExposure -> exposureCompensation = event.value
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetZoom -> zoomRatio = event.value
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetLensDistance -> lensDistance = event.value
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleMonitorAudio -> toggleMonitorAudio()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetUseBluetoothMic -> setUseBluetoothMic(event.enabled)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleSystemAudioForCamera -> toggleSystemAudioForCamera(event.launcher)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ToggleAudioDebugOverlay -> toggleAudioDebugOverlay()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.RefreshAudioDebugInfo -> refreshAudioDebugInfo()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ApplySelectedAudioSource -> applySelectedAudioSource()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.SetSrtlaStatsVisible -> setSrtlaStatsVisible(event.visible)
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ClearToast -> clearToastMessage()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ClearStreamerError -> clearStreamerError()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ClearEndpointError -> clearEndpointError()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.ClearBluetoothConnectRequest -> clearBluetoothConnectRequest()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.UiResumed -> onUiResumed()
+            is com.dimadesu.lifestreamer.ui.main.state.MainUiEvent.UiPaused -> onUiPaused()
+        }
+    }
+
     companion object {
         private const val TAG = "PreviewViewModel"
         
