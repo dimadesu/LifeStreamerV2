@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -142,9 +146,18 @@ fun CameraControlButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    IconButton(
+    Button(
         onClick = onClick,
-        modifier = modifier.size(48.dp)
+        shape = RoundedCornerShape(4.dp),
+        contentPadding = PaddingValues(0.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF616161),
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+        modifier = modifier
+            .padding(vertical = 2.dp)
+            .size(44.dp)
     ) {
         Icon(
             painter = painterResource(id = iconRes),
