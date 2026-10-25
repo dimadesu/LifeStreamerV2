@@ -14,6 +14,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#1E1E1E"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:keepScreenOn="true">
 
         <io.github.thibaultbee.streampack.ui.views.PreviewView
@@ -159,248 +161,23 @@
 
         </ScrollView>
 
-        <!-- Scrollable single column layout for all buttons -->
-        <ScrollView
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/sourceControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="0dp"
             android:layout_marginTop="76dp"
-            android:fillViewport="true"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent">
+            app:layout_constraintStart_toStartOf="parent" />
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="bottom">
-
-                <!-- Camera selection buttons container -->
-                <LinearLayout
-                    android:id="@+id/cameraButtonsContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone" />
-
-                <!--
-                <ImageButton
-                    android:id="@+id/switchCameraButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/switch_camera_source"
-                    android:onLongClick="@{() -> viewmodel.switchBackToFront()}"
-                    android:src="@drawable/ic_baseline_cameraswitch_24"
-                    app:goneUnless="@{viewmodel.isCameraSource}"
-                    app:tint="@android:color/white" />
-                -->
-
-                <Button
-                    android:id="@+id/switchSourceButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="RTMP SRC"
-                    android:backgroundTint='@{viewmodel.isRtmpSource ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource &amp;&amp; (viewmodel.activeRtmpIndex == null || viewmodel.activeRtmpIndex == 1)}" />
-
-                <!-- Container for dynamically added RTMP source buttons (RTMP SRC 2, 3, ...) -->
-                <LinearLayout
-                    android:id="@+id/rtmpSourceButtonsContainer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    app:goneUnless="@{!viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/rtmpSrvrButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="RTMP SRVR"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{!viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/toggleUvcButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="USB SRC"
-                    android:minWidth="50dp"
-                    android:backgroundTint='@{viewmodel.isUvcSource ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isRtmpSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/uvcTestButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="USB SRC ⚙️"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{!viewmodel.isRtmpSource &amp;&amp; !viewmodel.isUvcSource &amp;&amp; !viewmodel.isScreenSource}" />
-
-                <Button
-                    android:id="@+id/toggleScreenButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SCREEN"
-                    android:minWidth="50dp"
-                    android:backgroundTint='@{viewmodel.isScreenSource ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isRtmpSource &amp;&amp; !viewmodel.isUvcSource}" />
-
-                <Button
-                    android:id="@+id/monitorAudioButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="MONITOR &#x1F3A4;"
-                    android:backgroundTint='@{viewmodel.isMonitorAudioOn ? @color/active_button_green : @color/button_gray}' />
-
-                <Button
-                    android:id="@+id/bluetoothToggleButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="50dp"
-                    android:text="&#x1F3A4;"
-                    android:drawableStart="@drawable/ic_bluetooth"
-                    android:onClick="@{() -> viewmodel.setUseBluetoothMic(!viewmodel.useBluetoothMic.getValue())}"
-                    android:backgroundTint='@{viewmodel.useBluetoothMic.getValue() ? @color/active_button_green : @color/button_gray}'
-                    android:visibility="@{viewmodel.showBluetoothToggle ? android.view.View.VISIBLE : android.view.View.GONE}" />
-
-                <Button
-                    android:id="@+id/systemAudioToggleButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="AUDIO OUT"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{!viewmodel.isRtmpSource}" />
-
-                <Button
-                    android:id="@+id/audioDebugToggleButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="AUDIO SRC"
-                    android:backgroundTint='@{viewmodel.isAudioDebugOverlayVisible ? @color/active_button_green : @color/button_gray}'
-                    app:goneUnless="@{!viewmodel.isRtmpSource}" />
-
-                <Button
-                    android:id="@+id/srtlaStatsButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="SRTLA STATS"
-                    android:backgroundTint="@color/button_gray"
-                    app:goneUnless="@{viewmodel.isSrtlaEndpoint}" />
-
-            </LinearLayout>
-
-        </ScrollView>
-
-        <!-- Bitrate and stream status on the same line (top-right) -->
-        <LinearLayout
-            android:id="@+id/bitrateStatusLayout"
+        <!-- Top-right controls (stream stats, audio source indicator, VU meter) -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/topRightControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingBottom="2dp"
-            android:paddingStart="5dp"
-            android:paddingEnd="5dp"
             android:layout_marginEnd="20dp"
-            android:background="#80000000"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <TextView
-                android:id="@+id/fpsText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:layout_marginEnd="16dp"
-                android:text='@{viewmodel.encoderStatsLiveData}'
-                app:goneUnless='@{viewmodel.encoderStatsLiveData != null}' />
-
-            <TextView
-                android:id="@+id/uptimeText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:layout_marginEnd="16dp"
-                android:text='@{viewmodel.uptimeLiveData}'
-                app:goneUnless='@{viewmodel.uptimeLiveData != null}' />
-
-            <TextView
-                android:id="@+id/bitrateText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:layout_marginEnd="16dp"
-                android:text='@{viewmodel.bitrateLiveData}'
-                app:goneUnless='@{viewmodel.bitrateLiveData != null}' />
-
-            <TextView
-                android:id="@+id/streamStatusText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:text='@{viewmodel.streamStatusTextLiveData}' />
-
-        </LinearLayout>
-
-        <!-- Audio source indicator on the top-right -->
-        <LinearLayout
-            android:id="@+id/audioSourceLayout"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="2dp"
-            android:paddingStart="5dp"
-            android:paddingEnd="5dp"
-            android:layout_marginEnd="20dp"
-            android:background="#80000000"
-            app:layout_constraintTop_toBottomOf="@+id/bitrateStatusLayout"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <TextView
-                android:id="@+id/audioSourceText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:text='@{viewmodel.audioSourceIndicatorLiveData}'
-                app:goneUnless='@{viewmodel.audioSourceIndicatorLiveData != null}' />
-
-            <TextView
-                android:id="@+id/audioScoStatusText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:text='@{viewmodel.scoStateLiveData != null ? ("SCO: " + viewmodel.scoStateLiveData) : "SCO: unknown"}'
-                android:paddingStart="6dp"
-                android:visibility="gone" />
-
-        </LinearLayout>
-
-        <!-- Audio Level Meter Container -->
-        <LinearLayout
-            android:id="@+id/audioLevelContainer"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingVertical="3dp"
-            android:paddingHorizontal="5dp"
-            android:background="#80000000"
-            app:layout_constraintTop_toBottomOf="@+id/audioSourceLayout"
-            app:layout_constraintStart_toStartOf="@+id/audioSourceLayout"
-            app:layout_constraintEnd_toEndOf="@+id/audioSourceLayout">
-
-            <com.dimadesu.lifestreamer.ui.components.AudioLevelMeterView
-                android:id="@+id/audioLevelMeter"
-                android:layout_width="match_parent"
-                android:layout_height="14dp" />
-
-        </LinearLayout>
+            app:layout_constraintEnd_toEndOf="parent" />
 
         <ScrollView
             android:id="@+id/srtlaStatsScrollView"
@@ -413,7 +190,7 @@
             android:visibility="gone"
             app:layout_constrainedHeight="true"
             app:layout_constraintVertical_bias="1.0"
-            app:layout_constraintTop_toBottomOf="@+id/audioLevelContainer"
+            app:layout_constraintTop_toBottomOf="@+id/topRightControlsComposeView"
             app:layout_constraintBottom_toTopOf="@+id/liveButton"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
@@ -427,133 +204,45 @@
 
         </ScrollView>
 
-        <ToggleButton
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/cameraDrawerComposeView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:elevation="30dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <androidx.compose.ui.platform.ComposeView
             android:id="@+id/liveButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/live"
-            android:textOff="@string/live"
-            android:textOn="@string/stop"
+            android:layout_marginBottom="8dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
-        <LinearLayout
-            android:layout_width="200dp"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/cameraSlidersComposeView"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:rotation="-90"
-            app:layout_constraintBottom_toBottomOf="@+id/settingsScrollView"
-            app:layout_constraintEnd_toEndOf="@+id/settingsScrollView"
-            app:layout_constraintTop_toTopOf="@+id/settingsScrollView">
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintBottom_toBottomOf="@+id/cameraControlsComposeView"
+            app:layout_constraintEnd_toStartOf="@+id/cameraControlsComposeView"
+            app:layout_constraintTop_toTopOf="@+id/cameraControlsComposeView" />
 
-            <com.google.android.material.slider.Slider
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:stepSize="@{viewmodel.exposureCompensationStep.floatValue()}"
-                android:theme="@style/AppTheme"
-                android:value="@={viewmodel.exposureCompensation}"
-                android:valueFrom="@{viewmodel.exposureCompensationRange.lower}"
-                android:valueTo="@{viewmodel.exposureCompensationRange.upper}"
-                app:goneUnless="@{viewmodel.showExposureSlider}" />
-
-            <com.google.android.material.slider.Slider
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:theme="@style/AppTheme"
-                android:value="@={viewmodel.zoomRatio}"
-                android:valueFrom="@{viewmodel.zoomRatioRange.lower}"
-                android:valueTo="@{viewmodel.zoomRatioRange.upper}"
-                app:goneUnless="@{viewmodel.showZoomSlider}" />
-
-            <com.google.android.material.slider.Slider
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:theme="@style/AppTheme"
-                android:value="@={viewmodel.lensDistance}"
-                android:valueFrom="@{viewmodel.lensDistanceRange.lower}"
-                android:valueTo="@{viewmodel.lensDistanceRange.upper}"
-                app:goneUnless="@{viewmodel.showLensDistanceSlider}" />
-        </LinearLayout>
-
-        <ScrollView
-            android:id="@+id/settingsScrollView"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/cameraControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="0dp"
             android:layout_marginEnd="16dp"
-            android:fillViewport="true"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/audioLevelContainer"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <LinearLayout
-                android:id="@+id/settingsLayout"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="bottom">
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/turn_on_off_torch"
-                    android:onClick="@{() -> viewmodel.toggleFlash()}"
-                    android:src="@drawable/ic_baseline_flash_on_24"
-                    app:goneUnless="@{viewmodel.isFlashAvailable &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_white_balance"
-                    android:onClick="@{() -> viewmodel.toggleAutoWhiteBalanceMode()}"
-                    android:src="@drawable/ic_baseline_wb_auto_24"
-                    app:goneUnless="@{viewmodel.isAutoWhiteBalanceAvailable &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_exposure_compensation"
-                    android:onClick="@{() -> viewmodel.toggleExposureSlider()}"
-                    android:src="@drawable/ic_baseline_exposure_24"
-                    app:goneUnless="@{viewmodel.isExposureCompensationAvailable() &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_zoom_ratio"
-                    android:onClick="@{() -> viewmodel.toggleZoomSlider()}"
-                    android:src="@drawable/ic_baseline_zoom_in_24"
-                    app:goneUnless="@{viewmodel.isZoomAvailable() &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/set_auto_focus_mode"
-                    android:onClick="@{() -> viewmodel.toggleAutoFocusMode()}"
-                    android:src="@drawable/ic_baseline_center_focus_strong_24"
-                    app:goneUnless="@{viewmodel.isAutoFocusModeAvailable() &amp;&amp; viewmodel.showCameraControls}"
-                    app:tint="@android:color/white" />
-
-                <ToggleButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:padding="12dp"
-                    android:contentDescription="@string/mute_unmute_microphone"
-                    android:drawableTop="@drawable/ic_toggle_mic_button"
-                    android:checked="@{viewmodel.isMutedLiveData}"
-                    android:onCheckedChanged="@{(_, checked) -> viewmodel.setMute(checked)}"
-                    android:textOff=""
-                    android:textOn=""
-                    app:tint="@android:color/white" />
-
-            </LinearLayout>
-
-        </ScrollView>
+            app:layout_constraintTop_toBottomOf="@+id/topRightControlsComposeView"
+            app:layout_constraintEnd_toEndOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

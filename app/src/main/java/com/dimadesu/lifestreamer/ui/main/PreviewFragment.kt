@@ -40,10 +40,10 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ToggleButton
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -53,6 +53,13 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainFragmentBinding
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
+import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBottomDrawer
+import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
+import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
+import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
+import android.content.ActivityNotFoundException
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
 import io.github.thibaultbee.streampack.core.interfaces.IStreamer
@@ -113,6 +120,34 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     @SuppressLint("MissingPermission")
     private fun bindProperties() {
+        binding.cameraControlsComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                CameraControlsBar(viewModel = previewViewModel)
+            }
+        }
+
+        binding.cameraDrawerComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                CameraControlsBottomDrawer(viewModel = previewViewModel)
+            }
+        }
+
+        binding.cameraSlidersComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                CameraSliders(viewModel = previewViewModel)
+            }
+        }
+
+        binding.topRightControlsComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                TopRightControlsBar(viewModel = previewViewModel)
+            }
+        }
+
         childFragmentManager.setFragmentResultListener(
             ExplanationDialogFragment.SYS_AUDIO_TAG, viewLifecycleOwner
         ) { _, result ->
@@ -133,24 +168,27 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        binding.liveButton.setOnClickListener {
-            // Use streamStatus as single source of truth for determining action
-            val currentStatus = previewViewModel.streamStatus.value
-            Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
-            
-            when (currentStatus) {
-                StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
-                    // Start streaming
-                    Log.d(TAG, "Starting stream...")
-                    startStreamIfPermissions(previewViewModel.requiredPermissions)
-                }
-                StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
-                    // Stop streaming or cancel connection attempt
-                    Log.d(TAG, "Stopping stream...")
-                    stopStream()
-                }
+        binding.liveButton.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LiveButton(
+                    viewModel = previewViewModel,
+                    onClick = {
+                        val currentStatus = previewViewModel.streamStatus.value
+                        Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
+                        when (currentStatus) {
+                            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                                Log.d(TAG, "Starting stream...")
+                                startStreamIfPermissions(previewViewModel.requiredPermissions)
+                            }
+                            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                                Log.d(TAG, "Stopping stream...")
+                                stopStream()
+                            }
+                        }
+                    }
+                )
             }
-            // Note: Button state will be updated by streamStatus observer
         }
 
         // Commented out along with the switchCameraButton in XML
@@ -160,77 +198,85 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
         */
 
-        binding.monitorAudioButton.setOnClickListener {
-            previewViewModel.toggleMonitorAudio()
-        }
-
-        binding.switchSourceButton.setOnClickListener {
-            toggleVideoSourceWithExplanation(rtmpIndex = 1)
-        }
-
-        binding.rtmpSrvrButton.setOnClickListener {
-            val pkg = "com.dimadesu.mediasrvr"
-            val launchIntent = requireContext().packageManager.getLaunchIntentForPackage(pkg)
-            if (launchIntent != null) {
-                startActivity(launchIntent)
-            } else {
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")))
-                } catch (e: android.content.ActivityNotFoundException) {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")))
-                }
+        binding.sourceControlsComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                SourceControlsBar(
+                    viewModel = previewViewModel,
+                    onSelectCamera = { cameraId ->
+                        lifecycleScope.launch {
+                            try {
+                                (previewViewModel.streamer as? IWithVideoSource)?.setCameraId(cameraId)
+                                Log.i(TAG, "Switched to camera: $cameraId")
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to switch camera: ${e.message}", e)
+                                Toast.makeText(requireContext(), "Failed to switch camera", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    onToggleRtmpSource = { rtmpIndex ->
+                        toggleVideoSourceWithExplanation(rtmpIndex = rtmpIndex)
+                    },
+                    onLaunchRtmpServer = {
+                        val pkg = "com.dimadesu.mediasrvr"
+                        val launchIntent = requireContext().packageManager.getLaunchIntentForPackage(pkg)
+                        if (launchIntent != null) {
+                            startActivity(launchIntent)
+                        } else {
+                            try {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")))
+                            } catch (e: ActivityNotFoundException) {
+                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")))
+                            }
+                        }
+                    },
+                    onToggleUvc = {
+                        previewViewModel.toggleUvcSource()
+                    },
+                    onLaunchUvcTest = {
+                        val intent = Intent(requireContext(), com.dimadesu.lifestreamer.uvc.UvcTestActivity::class.java)
+                        startActivity(intent)
+                    },
+                    onToggleScreen = {
+                        previewViewModel.toggleScreenSource(mediaProjectionLauncher)
+                    },
+                    onToggleMonitorAudio = {
+                        previewViewModel.toggleMonitorAudio()
+                    },
+                    onToggleBluetoothMic = {
+                        previewViewModel.setUseBluetoothMic(!(previewViewModel.useBluetoothMic.value ?: false))
+                    },
+                    onToggleSystemAudio = {
+                        val isTurningOn = previewViewModel.useSystemAudioForCameraLiveData.value != true
+                        if (isTurningOn && !previewViewModel.sysAudioExplanationShown) {
+                            if (childFragmentManager.findFragmentByTag(ExplanationDialogFragment.SYS_AUDIO_TAG) == null) {
+                                ExplanationDialogFragment.newInstance(
+                                    R.string.audio_out_explanation_title,
+                                    R.string.audio_out_explanation_message,
+                                    ExplanationDialogFragment.SYS_AUDIO_TAG
+                                ).show(childFragmentManager, ExplanationDialogFragment.SYS_AUDIO_TAG)
+                            }
+                        } else {
+                            previewViewModel.toggleSystemAudioForCamera(mediaProjectionLauncher)
+                        }
+                    },
+                    onToggleAudioDebug = {
+                        previewViewModel.toggleAudioDebugOverlay()
+                    },
+                    onToggleSrtlaStats = {
+                        previewViewModel.setSrtlaStatsVisible(binding.srtlaStatsScrollView.visibility != View.VISIBLE)
+                    }
+                )
             }
-        }
-
-        binding.toggleUvcButton.setOnClickListener {
-            previewViewModel.toggleUvcSource()
-        }
-
-        binding.toggleScreenButton.setOnClickListener {
-            previewViewModel.toggleScreenSource(mediaProjectionLauncher)
-        }
-
-        binding.uvcTestButton.setOnClickListener {
-            val intent = android.content.Intent(requireContext(), com.dimadesu.lifestreamer.uvc.UvcTestActivity::class.java)
-            startActivity(intent)
-        }
-
-        binding.audioDebugToggleButton.setOnClickListener {
-            previewViewModel.toggleAudioDebugOverlay()
-        }
-
-        binding.systemAudioToggleButton.setOnClickListener {
-            val isTurningOn = previewViewModel.useSystemAudioForCameraLiveData.value != true
-            if (isTurningOn && !previewViewModel.sysAudioExplanationShown) {
-                if (childFragmentManager.findFragmentByTag(ExplanationDialogFragment.SYS_AUDIO_TAG) == null) {
-                    ExplanationDialogFragment.newInstance(
-                        R.string.audio_out_explanation_title,
-                        R.string.audio_out_explanation_message,
-                        ExplanationDialogFragment.SYS_AUDIO_TAG
-                    ).show(childFragmentManager, ExplanationDialogFragment.SYS_AUDIO_TAG)
-                }
-            } else {
-                previewViewModel.toggleSystemAudioForCamera(mediaProjectionLauncher)
-            }
-        }
-
-        previewViewModel.useSystemAudioForCameraLiveData.observe(viewLifecycleOwner) { enabled ->
-            binding.systemAudioToggleButton.backgroundTintList = getButtonColorStateList(requireContext(), enabled)
-        }
-
-        binding.srtlaStatsButton.setOnClickListener {
-            previewViewModel.setSrtlaStatsVisible(binding.srtlaStatsScrollView.visibility != View.VISIBLE)
         }
 
         previewViewModel.isSrtlaStatsVisible.observe(viewLifecycleOwner) { visible ->
             if (visible) {
                 binding.srtlaStatsScrollView.visibility = View.VISIBLE
                 binding.srtlaStatsView.startStatsUpdates()
-                binding.srtlaStatsButton.backgroundTintList = getButtonColorStateList(requireContext(), true)
             } else {
                 binding.srtlaStatsView.stopStatsUpdates()
                 binding.srtlaStatsScrollView.visibility = View.GONE
-                binding.srtlaStatsButton.backgroundTintList = getButtonColorStateList(requireContext(), false)
             }
         }
 
@@ -243,19 +289,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
         // Setup audio source spinner
         setupAudioSourceSpinner()
-
-        // Observe RTMP source count to dynamically add/remove RTMP SRC buttons
-        previewViewModel.rtmpSourceCount.observe(viewLifecycleOwner) { count ->
-            rebuildDynamicRtmpButtons(count)
-        }
-
-        // Observe active RTMP index to colorize all RTMP buttons and rebuild
-        // (rebuild is needed because the button count may change when a deleted source is toggled off)
-        previewViewModel.activeRtmpIndex.observe(viewLifecycleOwner) { activeIndex ->
-            val count = previewViewModel.rtmpSourceCount.value ?: 1
-            rebuildDynamicRtmpButtons(count)
-            updateRtmpButtonColors(activeIndex)
-        }
 
         // Dynamically adjust preview aspect ratio to match the stream resolution.
         // Also called from onConfigurationChanged so rotation re-applies the correct scale.
@@ -373,41 +406,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        // Observe streamStatus as single source of truth for button state
-        lifecycleScope.launch {
-            previewViewModel.streamStatus.collect { status ->
-                Log.d(TAG, "Stream status changed to: $status")
-                // Check if we're reconnecting - if so, keep button as "Stop"
-                val isReconnecting = previewViewModel.isReconnectingLiveData.value ?: false
-                
-                when (status) {
-                    StreamStatus.ERROR, StreamStatus.NOT_STREAMING -> {
-                        // Only reset button to "Start" if NOT reconnecting
-                        if (!isReconnecting && binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream error/stopped - resetting button to Start")
-                            binding.liveButton.isChecked = false
-                        } else if (isReconnecting && !binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream stopped but reconnecting - keeping button as Stop")
-                            binding.liveButton.isChecked = true
-                        }
-                    }
-                    StreamStatus.STARTING, StreamStatus.CONNECTING -> {
-                        // Keep button in "Stop" state during connection attempts
-                        if (!binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream starting/connecting - setting button to Stop")
-                            binding.liveButton.isChecked = true
-                        }
-                    }
-                    StreamStatus.STREAMING -> {
-                        // Ensure button shows "Stop" when streaming
-                        if (!binding.liveButton.isChecked) {
-                            Log.d(TAG, "Stream active - ensuring button shows Stop")
-                            binding.liveButton.isChecked = true
-                        }
-                    }
-                }
-            }
-        }
 
         // Apply orientation setting changes in real-time when not streaming
         lifecycleScope.launch {
@@ -448,80 +446,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        // Observe available cameras and create buttons dynamically
-        previewViewModel.availableCamerasLiveData.observe(viewLifecycleOwner) { cameras ->
-            binding.cameraButtonsContainer.removeAllViews()
-            
-            if (cameras.isNotEmpty()) {
-                // Get current camera ID to highlight active button
-                val currentCameraId = (previewViewModel.streamer?.videoInput?.sourceFlow?.value as? ICameraSource)?.cameraId
-                
-                cameras.forEach { camera ->
-                    val button = android.widget.Button(requireContext()).apply {
-                        text = camera.displayName
-                        tag = camera.id // Store camera ID in tag for later identification
-                        layoutParams = android.widget.LinearLayout.LayoutParams(
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            marginEnd = 8 // 8dp spacing between buttons
-                        }
-                        
-                        // Apply green background if this is the active camera
-                        val isActive = camera.id == currentCameraId
-                        backgroundTintList = getButtonColorStateList(context, isActive)
-                        
-                        setOnClickListener {
-                            lifecycleScope.launch {
-                                try {
-                                    (previewViewModel.streamer as? IWithVideoSource)?.setCameraId(camera.id)
-                                    Log.i(TAG, "Switched to camera: ${camera.displayName}")
-                                    
-                                    // Update button states
-                                    binding.cameraButtonsContainer.children.forEach { view ->
-                                        if (view is android.widget.Button) {
-                                            val isActive = view.tag == camera.id
-                                            view.backgroundTintList = getButtonColorStateList(requireContext(), isActive)
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "Failed to switch camera: ${e.message}", e)
-                                    Toast.makeText(requireContext(), "Failed to switch camera", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    }
-                    binding.cameraButtonsContainer.addView(button)
-                }
-            }
-            
-            // Update visibility after adding/removing buttons
-            updateCameraButtonsVisibility()
-        }
-        
-        // Show/hide camera buttons based on current source (hide when RTMP or UVC toggle is ON)
-        previewViewModel.showCameraControls.observe(viewLifecycleOwner) { 
-            updateCameraButtonsVisibility()
-        }
-        
-        // Update button states when camera changes (including on startup)
-        previewViewModel.streamerLiveData.observe(viewLifecycleOwner) { streamer ->
-            (streamer as? IWithVideoSource)?.videoInput?.sourceFlow?.let { sourceFlow ->
-                lifecycleScope.launch {
-                    sourceFlow.collect { source ->
-                        val currentCameraId = (source as? ICameraSource)?.cameraId
-                        
-                        // Update all camera button states
-                        binding.cameraButtonsContainer.children.forEach { view ->
-                            if (view is android.widget.Button) {
-                                val isActive = view.tag == currentCameraId
-                                view.backgroundTintList = getButtonColorStateList(requireContext(), isActive)
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         // Rebind preview when streaming stops to ensure preview is active
         previewViewModel.isStreamingLiveData.observe(viewLifecycleOwner) { isStreaming ->
@@ -531,30 +455,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     inflateStreamerPreview()
                 } catch (t: Throwable) {
                     Log.w(TAG, "Failed to re-attach preview after stop: ${t.message}")
-                }
-            }
-        }
-
-        // Show current bitrate if available (render nothing when null)
-        previewViewModel.bitrateLiveData.observe(viewLifecycleOwner) { text ->
-            try {
-                binding.bitrateText.text = text ?: ""
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to update bitrate text: ${t.message}")
-            }
-        }
-        
-        // Collect audio level flow and update the VU meter
-        lifecycleScope.launch {
-            previewViewModel.audioLevelFlow.collect { level ->
-                try {
-                    if (level == com.dimadesu.lifestreamer.audio.AudioLevel.SILENT) {
-                        binding.audioLevelMeter.reset()
-                    } else {
-                        binding.audioLevelMeter.setAudioLevel(level)
-                    }
-                } catch (t: Throwable) {
-                    // View might not be attached yet
                 }
             }
         }
@@ -624,23 +524,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
     }
 
-    /**
-     * Sync button state to match the current stream status.
-     * This is needed because StateFlow won't re-emit if the value hasn't changed,
-     * which can happen when returning from background after starting from notification.
-     */
-    private fun syncButtonState(status: StreamStatus?) {
-        val isReconnecting = previewViewModel.isReconnectingLiveData.value ?: false
-        val shouldBeChecked = when (status) {
-            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> true
-            StreamStatus.ERROR, StreamStatus.NOT_STREAMING, null -> isReconnecting
-        }
-        
-        if (binding.liveButton.isChecked != shouldBeChecked) {
-            Log.d(TAG, "syncButtonState: Updating button from ${binding.liveButton.isChecked} to $shouldBeChecked (status: $status, reconnecting: $isReconnecting)")
-            binding.liveButton.isChecked = shouldBeChecked
-        }
-    }
 
     private fun startStream() {
         Log.d(TAG, "startStream() called - checking if MediaProjection is required")
@@ -796,9 +679,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
         Log.d(TAG, "onResume() - app returning to foreground, preview should already be active")
         
-        // Reapply RTMP button visibility (observer won't re-fire if value unchanged)
-        updateRtmpButtonColors(previewViewModel.activeRtmpIndex.value)
-        
         // Request permissions in onResume() instead of onStart() to fix preview freeze
         // when quickly going to settings and back (StreamPack fix 78f1dc28c)
         requestCameraAndMicrophonePermissions()
@@ -811,9 +691,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                                        currentStatus == com.dimadesu.lifestreamer.models.StreamStatus.CONNECTING ||
                                        currentStatus == com.dimadesu.lifestreamer.models.StreamStatus.STREAMING
             
-            // Sync button state immediately - StateFlow won't re-emit if value hasn't changed
-            // This handles returning from background after starting from notification
-            syncButtonState(currentStatus)
             
             if (isInStreamingProcess) {
                 Log.d(TAG, "onResume: Secondary check - restoring orientation from Service (status: $currentStatus)")
@@ -908,7 +785,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         // The listener is dispatched on the main thread (PreviewView wraps it with post{}).
         preview.setZoomListener(object : CameraSettings.Zoom.OnZoomChangedListener {
             override fun onZoomChanged(zoomRatio: Float) {
-                previewViewModel.onZoomRationOnPinchChanged()
+                previewViewModel.onZoomRationOnPinchChanged(zoomRatio)
             }
         })
 
@@ -1032,8 +909,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 lifecycleScope.launch {
                     try {
                         (previewViewModel.streamer as? IWithVideoSource)?.setCameraId(selectedId)
-                        // Update button text to show chosen camera and orientation
-                        binding.switchSourceButton.contentDescription = items[which]
                     } catch (t: Throwable) {
                         Log.e(TAG, "Failed to set camera id $selectedId: ${t.message}")
                     }
@@ -1198,24 +1073,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
     }
 
-    private fun updateCameraButtonsVisibility() {
-        val showControls = previewViewModel.showCameraControls.value ?: true
-        binding.cameraButtonsContainer.visibility = if (showControls && 
-            binding.cameraButtonsContainer.childCount > 0) {
-            android.view.View.VISIBLE
-        } else {
-            android.view.View.GONE
-        }
-    }
 
-    private fun getButtonColorStateList(context: Context, isActive: Boolean): android.content.res.ColorStateList {
-        return android.content.res.ColorStateList.valueOf(
-            if (isActive) 
-                androidx.core.content.ContextCompat.getColor(context, R.color.active_button_green)
-            else 
-                androidx.core.content.ContextCompat.getColor(context, R.color.button_gray)
-        )
-    }
 
     /**
      * Toggle RTMP video source, showing an explanation dialog before requesting
@@ -1235,63 +1093,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         } else {
             previewViewModel.toggleVideoSource(mediaProjectionLauncher, rtmpIndex = rtmpIndex)
-        }
-    }
-
-    /**
-     * Rebuild dynamic RTMP source buttons (RTMP SRC 2, 3, ...) in the container.
-     * The first RTMP SRC button is always in XML; this handles additional sources.
-     */
-    private fun rebuildDynamicRtmpButtons(count: Int) {
-        val container = binding.rtmpSourceButtonsContainer
-        container.removeAllViews()
-
-        // Ensure the active RTMP source always has a button, even if it was removed from settings
-        val activeIndex = previewViewModel.activeRtmpIndex.value
-        val maxIndex = if (activeIndex != null && activeIndex > count) activeIndex else count
-
-        for (i in 2..maxIndex) {
-            val button = android.widget.Button(requireContext()).apply {
-                text = "RTMP SRC $i"
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                val activeIndex = previewViewModel.activeRtmpIndex.value
-                backgroundTintList = getButtonColorStateList(requireContext(), activeIndex == i)
-                visibility = if (activeIndex != null && activeIndex != i) View.GONE else View.VISIBLE
-                setOnClickListener {
-                    toggleVideoSourceWithExplanation(rtmpIndex = i)
-                }
-            }
-            container.addView(button)
-        }
-    }
-
-    /**
-     * Update background tint and visibility on all RTMP source buttons (including the first in XML)
-     * based on which RTMP source index is active.
-     * When an RTMP source is active, only the active button is shown; the rest are hidden.
-     */
-    private fun updateRtmpButtonColors(activeIndex: Int?) {
-        val ctx = context ?: return
-
-        // First button (index 1) from XML
-        binding.switchSourceButton.backgroundTintList = getButtonColorStateList(ctx, activeIndex == 1)
-        binding.switchSourceButton.visibility =
-            if (activeIndex != null && activeIndex != 1) View.GONE
-            else if (previewViewModel.isUvcSource.value == true) View.GONE
-            else if (previewViewModel.isScreenSource.value == true) View.GONE
-            else View.VISIBLE
-
-        // Dynamic buttons (index 2, 3, ...)
-        val container = binding.rtmpSourceButtonsContainer
-        for (i in 0 until container.childCount) {
-            val button = container.getChildAt(i) as? android.widget.Button ?: continue
-            val rtmpIndex = i + 2 // container child 0 = RTMP SRC 2, child 1 = RTMP SRC 3, etc.
-            button.backgroundTintList = getButtonColorStateList(ctx, activeIndex == rtmpIndex)
-            button.visibility =
-                if (activeIndex != null && activeIndex != rtmpIndex) View.GONE else View.VISIBLE
         }
     }
 
