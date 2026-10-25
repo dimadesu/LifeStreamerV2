@@ -4246,24 +4246,48 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }.asLiveData()
 
     val isFlashAvailable = MutableLiveData(false)
-    fun toggleFlash() {
-        cameraSettings?.let {
+    val isTorchOn = MutableLiveData(false)
+
+    fun setTorch(enabled: Boolean) {
+        cameraSettings?.let { settings ->
             viewModelScope.launch {
                 try {
-                    val isCurrentlyEnabled = it.flash.isEnable
-                    it.flash.setIsEnable(!isCurrentlyEnabled)
-                    
-                    // Show toast with flash state
-                    val message = if (!isCurrentlyEnabled) "Torch: On" else "Torch: Off"
+                    settings.flash.setIsEnable(enabled)
+                    isTorchOn.postValue(enabled)
+                    val message = if (enabled) "Torch: On" else "Torch: Off"
                     _toastMessageLiveData.postValue(message)
                 } catch (t: Throwable) {
-                    Log.w(TAG, "toggleFlash failed (camera session may be closed): ${t.message}")
+                    Log.w(TAG, "setTorch failed (camera session may be closed): ${t.message}")
+                    isTorchOn.postValue(settings.flash.isEnable)
                 }
             }
         } ?: Log.e(TAG, "Camera settings is not accessible")
     }
 
+    fun toggleFlash() {
+        setTorch(!(isTorchOn.value ?: false))
+    }
+
     val isAutoWhiteBalanceAvailable = MutableLiveData(false)
+    val availableWhiteBalanceModes = MutableLiveData<List<Int>>(emptyList())
+    val currentWhiteBalanceMode = MutableLiveData<Int>(CaptureResult.CONTROL_AWB_MODE_AUTO)
+
+    fun setWhiteBalanceMode(mode: Int) {
+        cameraSettings?.let { settings ->
+            viewModelScope.launch {
+                try {
+                    settings.whiteBalance.setAutoMode(mode)
+                    currentWhiteBalanceMode.postValue(mode)
+                    
+                    val modeName = getWhiteBalanceModeName(mode)
+                    _toastMessageLiveData.postValue("White Balance: $modeName")
+                } catch (t: Throwable) {
+                    Log.w(TAG, "setWhiteBalanceMode failed (camera session may be closed): ${t.message}")
+                }
+            }
+        } ?: Log.e(TAG, "Camera settings is not accessible")
+    }
+
     fun toggleAutoWhiteBalanceMode() {
         cameraSettings?.let { settings ->
             viewModelScope.launch {
@@ -4272,6 +4296,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     val index = awbModes.indexOf(settings.whiteBalance.autoMode)
                     val newMode = awbModes[(index + 1) % awbModes.size]
                     settings.whiteBalance.setAutoMode(newMode)
+                    currentWhiteBalanceMode.postValue(newMode)
                     
                     // Show toast with white balance mode name
                     val modeName = getWhiteBalanceModeName(newMode)
@@ -4283,20 +4308,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         } ?: Log.e(TAG, "Camera settings is not accessible")
     }
 
-    private fun getWhiteBalanceModeName(mode: Int): String {
-        return when (mode) {
-            CaptureResult.CONTROL_AWB_MODE_OFF -> "Off"
-            CaptureResult.CONTROL_AWB_MODE_AUTO -> "Auto"
-            CaptureResult.CONTROL_AWB_MODE_INCANDESCENT -> "Incandescent"
-            CaptureResult.CONTROL_AWB_MODE_FLUORESCENT -> "Fluorescent"
-            CaptureResult.CONTROL_AWB_MODE_WARM_FLUORESCENT -> "Warm Fluorescent"
-            CaptureResult.CONTROL_AWB_MODE_DAYLIGHT -> "Daylight"
-            CaptureResult.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT -> "Cloudy"
-            CaptureResult.CONTROL_AWB_MODE_TWILIGHT -> "Twilight"
-            CaptureResult.CONTROL_AWB_MODE_SHADE -> "Shade"
-            else -> "Unknown"
-        }
-    }
+    fun getWhiteBalanceModeName(mode: Int): String = Companion.getWhiteBalanceModeName(mode)
 
     val showExposureSlider = MutableLiveData(false)
     fun toggleExposureSlider() {
@@ -4351,6 +4363,30 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     val isAutoFocusModeAvailable = MutableLiveData(false)
+    val availableAutoFocusModes = MutableLiveData<List<Int>>(emptyList())
+    val currentAutoFocusMode = MutableLiveData<Int>(CaptureResult.CONTROL_AF_MODE_AUTO)
+
+    fun setAutoFocusMode(mode: Int) {
+        cameraSettings?.let { settings ->
+            viewModelScope.launch {
+                try {
+                    settings.focus.setAutoMode(mode)
+                    currentAutoFocusMode.postValue(mode)
+                    
+                    // Show toast with auto focus mode name
+                    val modeName = getAutoFocusModeName(mode)
+                    _toastMessageLiveData.postValue("Focus: $modeName")
+                    
+                    if (mode == CaptureResult.CONTROL_AF_MODE_OFF) {
+                        setLensDistance(_lensDistance.value)
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "setAutoFocusMode failed (camera session may be closed): ${t.message}")
+                }
+            }
+        } ?: Log.e(TAG, "Camera settings is not accessible")
+    }
+
     fun toggleAutoFocusMode() {
         cameraSettings?.let {
             viewModelScope.launch {
@@ -4359,18 +4395,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     val index = afModes.indexOf(it.focus.autoMode)
                     val newMode = afModes[(index + 1) % afModes.size]
                     it.focus.setAutoMode(newMode)
+                    currentAutoFocusMode.postValue(newMode)
                     
                     // Show toast with auto focus mode name
                     val modeName = getAutoFocusModeName(newMode)
                     _toastMessageLiveData.postValue("Focus: $modeName")
                     
-                    if (it.focus.autoMode == CaptureResult.CONTROL_AF_MODE_OFF) {
+                    if (newMode == CaptureResult.CONTROL_AF_MODE_OFF) {
                         // Push the slider's value to the camera so both agree. The capture
                         // request's LENS_FOCUS_DISTANCE is meaningless while AF was on.
                         setLensDistance(_lensDistance.value)
-                        showLensDistanceSlider.postValue(true)
-                    } else {
-                        showLensDistanceSlider.postValue(false)
                     }
                 } catch (t: Throwable) {
                     Log.w(TAG, "toggleAutoFocusMode failed (camera session may be closed): ${t.message}")
@@ -4379,17 +4413,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         } ?: Log.e(TAG, "Camera settings is not accessible")
     }
 
-    private fun getAutoFocusModeName(mode: Int): String {
-        return when (mode) {
-            CaptureResult.CONTROL_AF_MODE_OFF -> "Manual"
-            CaptureResult.CONTROL_AF_MODE_AUTO -> "Auto"
-            CaptureResult.CONTROL_AF_MODE_MACRO -> "Macro"
-            CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO -> "Continuous Video"
-            CaptureResult.CONTROL_AF_MODE_CONTINUOUS_PICTURE -> "Continuous Picture"
-            CaptureResult.CONTROL_AF_MODE_EDOF -> "EDOF"
-            else -> "Unknown"
-        }
-    }
+    fun getAutoFocusModeName(mode: Int): String = Companion.getAutoFocusModeName(mode)
 
     val showLensDistanceSlider = MutableLiveData(false)
     val lensDistanceRange = MutableLiveData<Range<Float>>()
@@ -4407,10 +4431,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             notifyCameraChanged(videoSource)
         } else {
             isFlashAvailable.postValue(false)
+            isTorchOn.postValue(false)
             isAutoWhiteBalanceAvailable.postValue(false)
+            availableWhiteBalanceModes.postValue(emptyList())
             isExposureCompensationAvailable.postValue(false)
             isZoomAvailable.postValue(false)
             isAutoFocusModeAvailable.postValue(false)
+            availableAutoFocusModes.postValue(emptyList())
         }
     }
 
@@ -4430,9 +4457,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
         // Flash
         isFlashAvailable.postValue(settings.flash.isAvailable)
+        val torch = try { settings.flash.isEnable } catch (e: Exception) { false }
+        isTorchOn.postValue(torch)
 
         // WB
-        isAutoWhiteBalanceAvailable.postValue(settings.whiteBalance.availableAutoModes.size > 1)
+        val awbModes = settings.whiteBalance.availableAutoModes
+        isAutoWhiteBalanceAvailable.postValue(awbModes.size > 1)
+        availableWhiteBalanceModes.postValue(awbModes)
+        val awbMode = try { settings.whiteBalance.autoMode } catch (e: Exception) { CaptureResult.CONTROL_AWB_MODE_AUTO }
+        currentWhiteBalanceMode.postValue(awbMode)
 
         // Exposure
         isExposureCompensationAvailable.postValue(
@@ -4455,7 +4488,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         setZoomRatio(1.0f)
 
         // Focus
-        isAutoFocusModeAvailable.postValue(settings.focus.availableAutoModes.size > 1)
+        val afModes = settings.focus.availableAutoModes
+        isAutoFocusModeAvailable.postValue(afModes.size > 1)
+        availableAutoFocusModes.postValue(afModes)
+        val afMode = try { settings.focus.autoMode } catch (e: Exception) { CaptureResult.CONTROL_AF_MODE_AUTO }
+        currentAutoFocusMode.postValue(afMode)
 
         // Lens distance
         showLensDistanceSlider.postValue(false)
@@ -4774,7 +4811,34 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     companion object {
         private const val TAG = "PreviewViewModel"
-        
+
+        fun getWhiteBalanceModeName(mode: Int): String {
+            return when (mode) {
+                CaptureResult.CONTROL_AWB_MODE_OFF -> "Off"
+                CaptureResult.CONTROL_AWB_MODE_AUTO -> "Auto"
+                CaptureResult.CONTROL_AWB_MODE_INCANDESCENT -> "Incandescent"
+                CaptureResult.CONTROL_AWB_MODE_FLUORESCENT -> "Fluorescent"
+                CaptureResult.CONTROL_AWB_MODE_WARM_FLUORESCENT -> "Warm Fluorescent"
+                CaptureResult.CONTROL_AWB_MODE_DAYLIGHT -> "Daylight"
+                CaptureResult.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT -> "Cloudy"
+                CaptureResult.CONTROL_AWB_MODE_TWILIGHT -> "Twilight"
+                CaptureResult.CONTROL_AWB_MODE_SHADE -> "Shade"
+                else -> "Unknown"
+            }
+        }
+
+        fun getAutoFocusModeName(mode: Int): String {
+            return when (mode) {
+                CaptureResult.CONTROL_AF_MODE_OFF -> "Manual"
+                CaptureResult.CONTROL_AF_MODE_AUTO -> "Auto"
+                CaptureResult.CONTROL_AF_MODE_MACRO -> "Macro"
+                CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO -> "Continuous Video"
+                CaptureResult.CONTROL_AF_MODE_CONTINUOUS_PICTURE -> "Continuous Picture"
+                CaptureResult.CONTROL_AF_MODE_EDOF -> "EDOF"
+                else -> "Unknown"
+            }
+        }
+
         /**
          * Helper to convert audio source int to readable name
          */
