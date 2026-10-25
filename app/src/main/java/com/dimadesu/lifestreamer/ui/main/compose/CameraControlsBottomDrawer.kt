@@ -18,7 +18,6 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -187,7 +186,7 @@ private fun Modifier.verticalScrollbar(
  * - Slides in as a bottom drawer above the live button in portrait.
  * - Dynamic max height calculation prevents overflow on all screen sizes.
  * - Integrated vertical scrollbar shows scroll progress when content overflows.
- * - Tap-outside on camera preview dismisses the controls cleanly.
+ * - Visible only for camera video sources; closed explicitly via close (X) button, camera cog icon, or switching to non-camera source.
  */
 @Composable
 fun CameraControlsBottomDrawer(
@@ -227,19 +226,6 @@ fun CameraControlsBottomDrawer(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // Dismiss controls when tapping outside the panel
-        if (isOpen && showCameraControls) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClose
-                    )
-            )
-        }
-
         AnimatedVisibility(
             visible = isOpen && showCameraControls,
             enter = if (isLandscape) {
@@ -282,10 +268,6 @@ fun CameraControlsBottomDrawer(
                         }
                     )
                     .wrapContentHeight()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { /* Consume taps on card background so they don't trigger tap-outside */ }
             ) {
                 Column(
                     modifier = Modifier
