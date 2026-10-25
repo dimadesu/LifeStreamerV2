@@ -183,7 +183,7 @@ private fun Modifier.verticalScrollbar(
 
 /**
  * Stateless responsive panel for camera controls:
- * - Slides in as a sleek side inspector from the left edge in landscape.
+ * - Slides in as a sleek side inspector from the right edge in landscape.
  * - Slides in as a bottom drawer above the live button in portrait.
  * - Dynamic max height calculation prevents overflow on all screen sizes.
  * - Integrated vertical scrollbar shows scroll progress when content overflows.
@@ -243,17 +243,17 @@ fun CameraControlsBottomDrawer(
         AnimatedVisibility(
             visible = isOpen && showCameraControls,
             enter = if (isLandscape) {
-                slideInHorizontally(initialOffsetX = { -it }) + fadeIn()
+                slideInHorizontally(initialOffsetX = { it }) + fadeIn()
             } else {
                 slideInVertically(initialOffsetY = { it }) + fadeIn()
             },
             exit = if (isLandscape) {
-                slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
+                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
             } else {
                 slideOutVertically(targetOffsetY = { it }) + fadeOut()
             },
             modifier = Modifier.align(
-                if (isLandscape) Alignment.CenterStart else Alignment.BottomCenter
+                if (isLandscape) Alignment.CenterEnd else Alignment.BottomCenter
             )
         ) {
             val scrollState = rememberScrollState()
@@ -273,7 +273,7 @@ fun CameraControlsBottomDrawer(
                     .then(
                         if (isLandscape) {
                             Modifier
-                                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp)
+                                .padding(end = 12.dp, top = 8.dp, bottom = 8.dp)
                                 .widthIn(min = 300.dp, max = 340.dp)
                         } else {
                             Modifier
