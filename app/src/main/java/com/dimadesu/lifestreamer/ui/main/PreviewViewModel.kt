@@ -4170,18 +4170,48 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         var rtmpOn = _activeRtmpIndex.value != null
         var uvcOn = _userToggledUvc.value ?: false
         var screenOn = _isScreenSource.value ?: false
+
+        val update = {
+            val show = !rtmpOn && !uvcOn && !screenOn
+            value = show
+            if (!show) {
+                _isCameraControlsDrawerOpen.value = false
+            }
+        }
         
         addSource(_activeRtmpIndex) { 
             rtmpOn = it != null
-            value = !rtmpOn && !uvcOn && !screenOn
+            update()
         }
         addSource(_userToggledUvc) { 
             uvcOn = it ?: false
-            value = !rtmpOn && !uvcOn && !screenOn
+            update()
         }
         addSource(_isScreenSource) {
             screenOn = it ?: false
-            value = !rtmpOn && !uvcOn && !screenOn
+            update()
+        }
+    }
+
+    private val _isCameraControlsDrawerOpen = MutableLiveData(false)
+    val isCameraControlsDrawerOpen: LiveData<Boolean> = _isCameraControlsDrawerOpen
+
+    fun toggleCameraControlsDrawer() {
+        val next = !(_isCameraControlsDrawerOpen.value ?: false)
+        _isCameraControlsDrawerOpen.value = next
+        if (!next) {
+            showExposureSlider.value = false
+            showZoomSlider.value = false
+            showLensDistanceSlider.value = false
+        }
+    }
+
+    fun setCameraControlsDrawerOpen(open: Boolean) {
+        _isCameraControlsDrawerOpen.value = open
+        if (!open) {
+            showExposureSlider.value = false
+            showZoomSlider.value = false
+            showLensDistanceSlider.value = false
         }
     }
 

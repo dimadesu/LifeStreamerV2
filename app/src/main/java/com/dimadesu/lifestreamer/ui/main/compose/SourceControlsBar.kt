@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,7 @@ fun SourceControlsBar(
     val isSrtlaEndpoint by viewModel.isSrtlaEndpoint.observeAsState(initial = false)
     val isSrtlaStatsVisible by viewModel.isSrtlaStatsVisible.observeAsState(initial = false)
     val currentCameraIdFromStreamer by viewModel.currentCameraIdLiveData.observeAsState(initial = null)
+    val isCameraControlsDrawerOpen by viewModel.isCameraControlsDrawerOpen.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -82,6 +84,7 @@ fun SourceControlsBar(
         cameras = cameras,
         selectedCameraId = activeCameraId,
         showCameraControls = showCameraControls,
+        isCameraControlsDrawerOpen = isCameraControlsDrawerOpen,
         activeRtmpIndex = activeRtmpIndex,
         rtmpSourceCount = rtmpSourceCount,
         isUvcSource = isUvcSource,
@@ -97,6 +100,7 @@ fun SourceControlsBar(
             localSelectedCameraId = cameraId
             onSelectCamera(cameraId)
         },
+        onToggleCameraControls = { viewModel.toggleCameraControlsDrawer() },
         onToggleRtmpSource = onToggleRtmpSource,
         onLaunchRtmpServer = onLaunchRtmpServer,
         onToggleUvc = onToggleUvc,
@@ -119,6 +123,7 @@ fun SourceControlsBar(
     cameras: List<PreviewViewModel.CameraInfo>,
     selectedCameraId: String?,
     showCameraControls: Boolean,
+    isCameraControlsDrawerOpen: Boolean = false,
     activeRtmpIndex: Int?,
     rtmpSourceCount: Int,
     isUvcSource: Boolean,
@@ -131,6 +136,7 @@ fun SourceControlsBar(
     isSrtlaEndpoint: Boolean,
     isSrtlaStatsVisible: Boolean,
     onSelectCamera: (String) -> Unit,
+    onToggleCameraControls: () -> Unit = {},
     onToggleRtmpSource: (Int) -> Unit,
     onLaunchRtmpServer: () -> Unit,
     onToggleUvc: () -> Unit,
@@ -160,11 +166,23 @@ fun SourceControlsBar(
             // 1. Dynamic Camera Selection buttons
             if (showCameraControls && cameras.isNotEmpty()) {
                 cameras.forEach { camera ->
-                    SourceButton(
-                        text = camera.displayName,
-                        isActive = (camera.id == selectedCameraId),
-                        onClick = { onSelectCamera(camera.id) }
-                    )
+                    val isSelected = (camera.id == selectedCameraId)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SourceButton(
+                            text = camera.displayName,
+                            isActive = isSelected,
+                            onClick = { onSelectCamera(camera.id) }
+                        )
+                        if (isSelected) {
+                            CameraSettingsButton(
+                                isOpen = isCameraControlsDrawerOpen,
+                                onClick = onToggleCameraControls
+                            )
+                        }
+                    }
                 }
             }
 
@@ -316,6 +334,36 @@ fun SourceButton(
     }
 }
 
+/**
+ * Settings button displayed next to the currently selected camera.
+ * Toggles the camera controls bottom drawer/panel.
+ */
+@Composable
+fun CameraSettingsButton(
+    isOpen: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isOpen) Color(0xFF4CAF50) else Color(0xFF616161),
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.size(40.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_baseline_settings_24),
+            contentDescription = stringResource(R.string.camera_controls),
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
 @Preview(name = "Default Camera Mode", showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun PreviewSourceControlsBarCameraMode() {
@@ -326,6 +374,7 @@ private fun PreviewSourceControlsBarCameraMode() {
         ),
         selectedCameraId = "0",
         showCameraControls = true,
+        isCameraControlsDrawerOpen = false,
         activeRtmpIndex = null,
         rtmpSourceCount = 2,
         isUvcSource = false,
@@ -338,6 +387,44 @@ private fun PreviewSourceControlsBarCameraMode() {
         isSrtlaEndpoint = true,
         isSrtlaStatsVisible = false,
         onSelectCamera = {},
+        onToggleCameraControls = {},
+        onToggleRtmpSource = {},
+        onLaunchRtmpServer = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleAudioDebug = {},
+        onToggleSrtlaStats = {}
+    )
+}
+
+@Preview(name = "Camera Mode Drawer Open", showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PreviewSourceControlsBarDrawerOpen() {
+    SourceControlsBar(
+        cameras = listOf(
+            PreviewViewModel.CameraInfo("0", "Back (0)", "BACK"),
+            PreviewViewModel.CameraInfo("1", "Front (1)", "FRONT")
+        ),
+        selectedCameraId = "0",
+        showCameraControls = true,
+        isCameraControlsDrawerOpen = true,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 2,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = true,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleCameraControls = {},
         onToggleRtmpSource = {},
         onLaunchRtmpServer = {},
         onToggleUvc = {},

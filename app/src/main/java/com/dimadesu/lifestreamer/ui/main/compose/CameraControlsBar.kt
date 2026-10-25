@@ -3,13 +3,11 @@ package com.dimadesu.lifestreamer.ui.main.compose
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,34 +26,18 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 
 /**
- * Stateful vertical action bar hosting camera action toggles and mic mute.
+ * Stateful vertical action bar hosting microphone mute toggle on the right edge of the screen.
+ * Camera action controls have moved to [CameraControlsBottomDrawer].
  */
 @Composable
 fun CameraControlsBar(
     viewModel: PreviewViewModel,
     modifier: Modifier = Modifier
 ) {
-    val showCameraControls by viewModel.showCameraControls.observeAsState(initial = false)
-    val isFlashAvailable by viewModel.isFlashAvailable.observeAsState(initial = false)
-    val isAutoWhiteBalanceAvailable by viewModel.isAutoWhiteBalanceAvailable.observeAsState(initial = false)
-    val isExposureCompensationAvailable by viewModel.isExposureCompensationAvailable.observeAsState(initial = false)
-    val isZoomAvailable by viewModel.isZoomAvailable.observeAsState(initial = false)
-    val isAutoFocusModeAvailable by viewModel.isAutoFocusModeAvailable.observeAsState(initial = false)
     val isMuted by viewModel.isMutedLiveData.observeAsState(initial = false)
 
     CameraControlsBar(
-        showCameraControls = showCameraControls,
-        isFlashAvailable = isFlashAvailable,
-        isAutoWhiteBalanceAvailable = isAutoWhiteBalanceAvailable,
-        isExposureCompensationAvailable = isExposureCompensationAvailable,
-        isZoomAvailable = isZoomAvailable,
-        isAutoFocusModeAvailable = isAutoFocusModeAvailable,
         isMuted = isMuted,
-        onToggleFlash = { viewModel.toggleFlash() },
-        onToggleAutoWhiteBalance = { viewModel.toggleAutoWhiteBalanceMode() },
-        onToggleExposureSlider = { viewModel.toggleExposureSlider() },
-        onToggleZoomSlider = { viewModel.toggleZoomSlider() },
-        onToggleAutoFocus = { viewModel.toggleAutoFocusMode() },
         onToggleMute = { viewModel.setMute(!isMuted) },
         modifier = modifier
     )
@@ -66,18 +48,7 @@ fun CameraControlsBar(
  */
 @Composable
 fun CameraControlsBar(
-    showCameraControls: Boolean,
-    isFlashAvailable: Boolean,
-    isAutoWhiteBalanceAvailable: Boolean,
-    isExposureCompensationAvailable: Boolean,
-    isZoomAvailable: Boolean,
-    isAutoFocusModeAvailable: Boolean,
     isMuted: Boolean,
-    onToggleFlash: () -> Unit,
-    onToggleAutoWhiteBalance: () -> Unit,
-    onToggleExposureSlider: () -> Unit,
-    onToggleZoomSlider: () -> Unit,
-    onToggleAutoFocus: () -> Unit,
     onToggleMute: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -88,49 +59,10 @@ fun CameraControlsBar(
         Column(
             modifier = Modifier
                 .wrapContentHeight()
-                .verticalScroll(rememberScrollState())
                 .padding(bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
-            if (showCameraControls) {
-                if (isFlashAvailable) {
-                    CameraControlButton(
-                        iconRes = R.drawable.ic_baseline_flash_on_24,
-                        contentDescription = stringResource(R.string.turn_on_off_torch),
-                        onClick = onToggleFlash
-                    )
-                }
-                if (isAutoWhiteBalanceAvailable) {
-                    CameraControlButton(
-                        iconRes = R.drawable.ic_baseline_wb_auto_24,
-                        contentDescription = stringResource(R.string.set_white_balance),
-                        onClick = onToggleAutoWhiteBalance
-                    )
-                }
-                if (isExposureCompensationAvailable) {
-                    CameraControlButton(
-                        iconRes = R.drawable.ic_baseline_exposure_24,
-                        contentDescription = stringResource(R.string.set_exposure_compensation),
-                        onClick = onToggleExposureSlider
-                    )
-                }
-                if (isZoomAvailable) {
-                    CameraControlButton(
-                        iconRes = R.drawable.ic_baseline_zoom_in_24,
-                        contentDescription = stringResource(R.string.set_zoom_ratio),
-                        onClick = onToggleZoomSlider
-                    )
-                }
-                if (isAutoFocusModeAvailable) {
-                    CameraControlButton(
-                        iconRes = R.drawable.ic_baseline_center_focus_strong_24,
-                        contentDescription = stringResource(R.string.set_auto_focus_mode),
-                        onClick = onToggleAutoFocus
-                    )
-                }
-            }
-
             CameraControlButton(
                 iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
                 contentDescription = stringResource(R.string.mute_unmute_microphone),
@@ -145,14 +77,16 @@ fun CameraControlButton(
     iconRes: Int,
     contentDescription: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isActive: Boolean = false,
+    activeContainerColor: Color = Color(0xFF4CAF50)
 ) {
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
         contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF616161),
+            containerColor = if (isActive) activeContainerColor else Color(0xFF616161),
             contentColor = Color.White
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
@@ -166,42 +100,20 @@ fun CameraControlButton(
     }
 }
 
-@Preview(name = "All Controls Available", showBackground = true, backgroundColor = 0xFF000000)
+@Preview(name = "Unmuted", showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun PreviewCameraControlsBarAll() {
+private fun PreviewCameraControlsBarUnmuted() {
     CameraControlsBar(
-        showCameraControls = true,
-        isFlashAvailable = true,
-        isAutoWhiteBalanceAvailable = true,
-        isExposureCompensationAvailable = true,
-        isZoomAvailable = true,
-        isAutoFocusModeAvailable = true,
         isMuted = false,
-        onToggleFlash = {},
-        onToggleAutoWhiteBalance = {},
-        onToggleExposureSlider = {},
-        onToggleZoomSlider = {},
-        onToggleAutoFocus = {},
         onToggleMute = {}
     )
 }
 
-@Preview(name = "Only Mute (No Camera Controls)", showBackground = true, backgroundColor = 0xFF000000)
+@Preview(name = "Muted", showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun PreviewCameraControlsBarOnlyMute() {
+private fun PreviewCameraControlsBarMuted() {
     CameraControlsBar(
-        showCameraControls = false,
-        isFlashAvailable = false,
-        isAutoWhiteBalanceAvailable = false,
-        isExposureCompensationAvailable = false,
-        isZoomAvailable = false,
-        isAutoFocusModeAvailable = false,
         isMuted = true,
-        onToggleFlash = {},
-        onToggleAutoWhiteBalance = {},
-        onToggleExposureSlider = {},
-        onToggleZoomSlider = {},
-        onToggleAutoFocus = {},
         onToggleMute = {}
     )
 }
