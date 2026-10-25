@@ -76,11 +76,11 @@ import kotlin.math.roundToInt
 
 /**
  * Stateful bottom drawer hosting rich camera controls:
- * - Torch toggle switch
- * - White balance dropdown
- * - Focus mode dropdown with inline manual focus slider
- * - Inline horizontal exposure compensation slider
  * - Inline horizontal zoom slider
+ * - Inline horizontal exposure compensation slider
+ * - Torch toggle switch
+ * - Focus mode dropdown with inline manual focus slider
+ * - White balance dropdown
  */
 @Composable
 fun CameraControlsBottomDrawer(
@@ -317,7 +317,35 @@ fun CameraControlsBottomDrawer(
 
                 HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                // 1. Torch Toggle Switch
+                // 1. Zoom Inline Slider
+                if (isZoomAvailable && zoomRange != null) {
+                    ZoomSliderBlock(
+                        zoom = zoom,
+                        range = zoomRange,
+                        onValueChange = onZoomChange
+                    )
+                }
+
+                // 2. Exposure Compensation Inline Slider
+                if (isExposureCompensationAvailable && exposureRange != null) {
+                    ExposureCompensationSliderBlock(
+                        exposure = exposure,
+                        range = exposureRange,
+                        step = exposureStep,
+                        onValueChange = onExposureChange
+                    )
+                }
+
+                val hasSliders = (isZoomAvailable && zoomRange != null) ||
+                        (isExposureCompensationAvailable && exposureRange != null)
+                val hasSelectors = isFlashAvailable ||
+                        (isAutoFocusModeAvailable && availableAutoFocusModes.isNotEmpty()) ||
+                        (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty())
+                if (hasSliders && hasSelectors) {
+                    HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
+                }
+
+                // 3. Torch Toggle Switch
                 if (isFlashAvailable) {
                     TorchSwitchRow(
                         isTorchOn = isTorchOn,
@@ -325,19 +353,7 @@ fun CameraControlsBottomDrawer(
                     )
                 }
 
-                // 2. White Balance Dropdown
-                if (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty()) {
-                    CameraDropdownRow(
-                        title = "White Balance",
-                        iconRes = R.drawable.ic_baseline_wb_auto_24,
-                        currentValueName = PreviewViewModel.getWhiteBalanceModeName(currentWhiteBalanceMode),
-                        options = availableWhiteBalanceModes.map { it to PreviewViewModel.getWhiteBalanceModeName(it) },
-                        currentValue = currentWhiteBalanceMode,
-                        onSelectOption = onSelectWhiteBalanceMode
-                    )
-                }
-
-                // 3. Focus Mode Dropdown
+                // 4. Focus Mode Dropdown
                 if (isAutoFocusModeAvailable && availableAutoFocusModes.isNotEmpty()) {
                     CameraDropdownRow(
                         title = "Focus",
@@ -349,7 +365,7 @@ fun CameraControlsBottomDrawer(
                     )
                 }
 
-                // 4. Manual Focus Slider (appears when Manual focus mode is chosen)
+                // Manual Focus Slider (appears when Manual focus mode is chosen)
                 val isManualFocus = currentAutoFocusMode == CaptureResult.CONTROL_AF_MODE_OFF
                 AnimatedVisibility(
                     visible = isManualFocus && lensDistanceRange != null,
@@ -365,28 +381,15 @@ fun CameraControlsBottomDrawer(
                     }
                 }
 
-                val hasSliders = (isExposureCompensationAvailable && exposureRange != null) ||
-                        (isZoomAvailable && zoomRange != null)
-                if (hasSliders) {
-                    HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
-                }
-
-                // 5. Exposure Compensation Inline Slider
-                if (isExposureCompensationAvailable && exposureRange != null) {
-                    ExposureCompensationSliderBlock(
-                        exposure = exposure,
-                        range = exposureRange,
-                        step = exposureStep,
-                        onValueChange = onExposureChange
-                    )
-                }
-
-                // 6. Zoom Inline Slider
-                if (isZoomAvailable && zoomRange != null) {
-                    ZoomSliderBlock(
-                        zoom = zoom,
-                        range = zoomRange,
-                        onValueChange = onZoomChange
+                // 5. White Balance Dropdown
+                if (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty()) {
+                    CameraDropdownRow(
+                        title = "White Balance",
+                        iconRes = R.drawable.ic_baseline_wb_auto_24,
+                        currentValueName = PreviewViewModel.getWhiteBalanceModeName(currentWhiteBalanceMode),
+                        options = availableWhiteBalanceModes.map { it to PreviewViewModel.getWhiteBalanceModeName(it) },
+                        currentValue = currentWhiteBalanceMode,
+                        onSelectOption = onSelectWhiteBalanceMode
                     )
                 }
             }
