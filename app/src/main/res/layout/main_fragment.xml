@@ -14,6 +14,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#1E1E1E"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:keepScreenOn="true">
 
         <io.github.thibaultbee.streampack.ui.views.PreviewView
@@ -211,43 +213,16 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
-        <LinearLayout
-            android:layout_width="200dp"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/cameraSlidersComposeView"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:rotation="-90"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:layout_marginEnd="8dp"
             app:layout_constraintBottom_toBottomOf="@+id/cameraControlsComposeView"
-            app:layout_constraintEnd_toEndOf="@+id/cameraControlsComposeView"
-            app:layout_constraintTop_toTopOf="@+id/cameraControlsComposeView">
-
-            <com.google.android.material.slider.Slider
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:stepSize="@{viewmodel.exposureCompensationStep.floatValue()}"
-                android:theme="@style/AppTheme"
-                android:value="@={viewmodel.exposureCompensation}"
-                android:valueFrom="@{viewmodel.exposureCompensationRange.lower}"
-                android:valueTo="@{viewmodel.exposureCompensationRange.upper}"
-                app:goneUnless="@{viewmodel.showExposureSlider}" />
-
-            <com.google.android.material.slider.Slider
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:theme="@style/AppTheme"
-                android:value="@={viewmodel.zoomRatio}"
-                android:valueFrom="@{viewmodel.zoomRatioRange.lower}"
-                android:valueTo="@{viewmodel.zoomRatioRange.upper}"
-                app:goneUnless="@{viewmodel.showZoomSlider}" />
-
-            <com.google.android.material.slider.Slider
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:theme="@style/AppTheme"
-                android:value="@={viewmodel.lensDistance}"
-                android:valueFrom="@{viewmodel.lensDistanceRange.lower}"
-                android:valueTo="@{viewmodel.lensDistanceRange.upper}"
-                app:goneUnless="@{viewmodel.showLensDistanceSlider}" />
-        </LinearLayout>
+            app:layout_constraintEnd_toStartOf="@+id/cameraControlsComposeView"
+            app:layout_constraintTop_toTopOf="@+id/cameraControlsComposeView" />
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/cameraControlsComposeView"

@@ -54,6 +54,7 @@ import com.dimadesu.lifestreamer.databinding.MainFragmentBinding
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
@@ -122,6 +123,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 CameraControlsBar(viewModel = previewViewModel)
+            }
+        }
+
+        binding.cameraSlidersComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                CameraSliders(viewModel = previewViewModel)
             }
         }
 
@@ -769,7 +777,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         // The listener is dispatched on the main thread (PreviewView wraps it with post{}).
         preview.setZoomListener(object : CameraSettings.Zoom.OnZoomChangedListener {
             override fun onZoomChanged(zoomRatio: Float) {
-                previewViewModel.onZoomRationOnPinchChanged()
+                previewViewModel.onZoomRationOnPinchChanged(zoomRatio)
             }
         })
 

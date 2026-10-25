@@ -107,7 +107,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -1701,8 +1700,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
-    fun onZoomRationOnPinchChanged() {
-        notifyPropertyChanged(BR.zoomRatio)
+    fun onZoomRationOnPinchChanged(zoomRatio: Float) {
+        _zoomRatio.value = zoomRatio
     }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
@@ -4277,31 +4276,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     val isExposureCompensationAvailable = MutableLiveData(false)
     val exposureCompensationRange = MutableLiveData<Range<Int>>()
     val exposureCompensationStep = MutableLiveData<Rational>()
-    var exposureCompensation: Float
-        @Bindable get() {
-            val settings = cameraSettings
-            return if (settings != null && settings.isActiveFlow.value) {
-                settings.exposure.compensation * settings.exposure.availableCompensationStep.toFloat()
-            } else {
-                0f
-            }
+    private val _exposureCompensation = MutableStateFlow(0f)
+    val exposureCompensation: StateFlow<Float> = _exposureCompensation.asStateFlow()
+
+    fun setExposureCompensation(value: Float) {
+        _exposureCompensation.value = value
+        applyCameraSetting("exposure compensation") { settings ->
+            val step = settings.exposure.availableCompensationStep.toFloat()
+            settings.exposure.setCompensation(Math.round(value / step))
         }
-        set(value) {
-            cameraSettings?.let { settings ->
-                settings.exposure.let {
-                    viewModelScope.launch {
-                        try {
-                            if (settings.isActiveFlow.value) {
-                                it.setCompensation((value / it.availableCompensationStep.toFloat()).toInt())
-                            }
-                            notifyPropertyChanged(BR.exposureCompensation)
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Setting exposure compensation failed (camera session may be closed): ${t.message}")
-                        }
-                    }
-                }
-            } ?: Log.e(TAG, "Camera settings is not accessible")
-        }
+    }
 
     val showZoomSlider = MutableLiveData(false)
     fun toggleZoomSlider() {
@@ -4310,31 +4294,31 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     val isZoomAvailable = MutableLiveData(false)
     val zoomRatioRange = MutableLiveData<Range<Float>>()
-    var zoomRatio: Float
-        @Bindable get() {
-            val settings = cameraSettings
-            return if (settings != null && settings.isActiveFlow.value) {
-                runBlocking {
-                    settings.zoom.getZoomRatio()
-                }
-            } else {
-                1f
+    private val _zoomRatio = MutableStateFlow(1f)
+    val zoomRatio: StateFlow<Float> = _zoomRatio.asStateFlow()
+
+    fun setZoomRatio(value: Float) {
+        _zoomRatio.value = value
+        applyCameraSetting("zoom") { settings -> settings.zoom.setZoomRatio(value) }
+    }
+
+    /**
+     * Applies a camera setting asynchronously if the camera session is active.
+     */
+    private fun applyCameraSetting(name: String, block: suspend (CameraSettings) -> Unit) {
+        val settings = cameraSettings
+        if (settings == null) {
+            Log.e(TAG, "Camera settings is not accessible")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                if (settings.isActiveFlow.value) block(settings)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Setting $name failed (camera session may be closed): ${t.message}")
             }
         }
-        set(value) {
-            cameraSettings?.let { settings ->
-                viewModelScope.launch {
-                    try {
-                        if (settings.isActiveFlow.value) {
-                            settings.zoom.setZoomRatio(value)
-                        }
-                        notifyPropertyChanged(BR.zoomRatio)
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Setting zoom failed (camera session may be closed): ${t.message}")
-                    }
-                }
-            } ?: Log.e(TAG, "Camera settings is not accessible")
-        }
+    }
 
     val isAutoFocusModeAvailable = MutableLiveData(false)
     fun toggleAutoFocusMode() {
@@ -4351,6 +4335,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     _toastMessageLiveData.postValue("Focus: $modeName")
                     
                     if (it.focus.autoMode == CaptureResult.CONTROL_AF_MODE_OFF) {
+                        // Push the slider's value to the camera so both agree. The capture
+                        // request's LENS_FOCUS_DISTANCE is meaningless while AF was on.
+                        setLensDistance(_lensDistance.value)
                         showLensDistanceSlider.postValue(true)
                     } else {
                         showLensDistanceSlider.postValue(false)
@@ -4376,33 +4363,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     val showLensDistanceSlider = MutableLiveData(false)
     val lensDistanceRange = MutableLiveData<Range<Float>>()
-    var lensDistance: Float
-        @Bindable get() {
-            val settings = cameraSettings
-            return if ((settings != null) &&
-                settings.isActiveFlow.value
-            ) {
-                settings.focus.lensDistance
-            } else {
-                0f
-            }
-        }
-        set(value) {
-            cameraSettings?.let { settings ->
-                settings.focus.let {
-                    viewModelScope.launch {
-                        try {
-                            if (settings.isActiveFlow.value) {
-                                it.setLensDistance(value)
-                            }
-                            notifyPropertyChanged(BR.lensDistance)
-                        } catch (t: Throwable) {
-                            Log.w(TAG, "Setting lens distance failed (camera session may be closed): ${t.message}")
-                        }
-                    }
-                }
-            } ?: Log.e(TAG, "Camera settings is not accessible")
-        }
+    private val _lensDistance = MutableStateFlow(0f)
+    val lensDistance: StateFlow<Float> = _lensDistance.asStateFlow()
+
+    fun setLensDistance(value: Float) {
+        _lensDistance.value = value
+        applyCameraSetting("lens distance") { settings -> settings.focus.setLensDistance(value) }
+    }
 
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
@@ -4448,14 +4415,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             )
         )
         exposureCompensationStep.postValue(settings.exposure.availableCompensationStep)
-        exposureCompensation = 0f
+        setExposureCompensation(0f)
 
         // Zoom
         isZoomAvailable.postValue(
             !settings.zoom.availableRatioRange.isEmpty
         )
         zoomRatioRange.postValue(settings.zoom.availableRatioRange)
-        zoomRatio = 1.0f
+        setZoomRatio(1.0f)
 
         // Focus
         isAutoFocusModeAvailable.postValue(settings.focus.availableAutoModes.size > 1)
@@ -4463,7 +4430,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // Lens distance
         showLensDistanceSlider.postValue(false)
         lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
-        lensDistance = 0f
+        setLensDistance(0f)
     }
 
     /**
