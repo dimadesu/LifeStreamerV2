@@ -168,116 +168,14 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
 
-        <!-- Bitrate and stream status on the same line (top-right) -->
-        <LinearLayout
-            android:id="@+id/bitrateStatusLayout"
+        <!-- Top-right controls (stream stats, audio source indicator, VU meter) -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/topRightControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingBottom="2dp"
-            android:paddingStart="5dp"
-            android:paddingEnd="5dp"
             android:layout_marginEnd="20dp"
-            android:background="#80000000"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <TextView
-                android:id="@+id/fpsText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:layout_marginEnd="16dp"
-                android:text='@{viewmodel.encoderStatsLiveData}'
-                app:goneUnless='@{viewmodel.encoderStatsLiveData != null}' />
-
-            <TextView
-                android:id="@+id/uptimeText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:layout_marginEnd="16dp"
-                android:text='@{viewmodel.uptimeLiveData}'
-                app:goneUnless='@{viewmodel.uptimeLiveData != null}' />
-
-            <TextView
-                android:id="@+id/bitrateText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:layout_marginEnd="16dp"
-                android:text='@{viewmodel.bitrateLiveData}'
-                app:goneUnless='@{viewmodel.bitrateLiveData != null}' />
-
-            <TextView
-                android:id="@+id/streamStatusText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:text='@{viewmodel.streamStatusTextLiveData}' />
-
-        </LinearLayout>
-
-        <!-- Audio source indicator on the top-right -->
-        <LinearLayout
-            android:id="@+id/audioSourceLayout"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="2dp"
-            android:paddingStart="5dp"
-            android:paddingEnd="5dp"
-            android:layout_marginEnd="20dp"
-            android:background="#80000000"
-            app:layout_constraintTop_toBottomOf="@+id/bitrateStatusLayout"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <TextView
-                android:id="@+id/audioSourceText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="16sp"
-                android:text='@{viewmodel.audioSourceIndicatorLiveData}'
-                app:goneUnless='@{viewmodel.audioSourceIndicatorLiveData != null}' />
-
-            <TextView
-                android:id="@+id/audioScoStatusText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:text='@{viewmodel.scoStateLiveData != null ? ("SCO: " + viewmodel.scoStateLiveData) : "SCO: unknown"}'
-                android:paddingStart="6dp"
-                android:visibility="gone" />
-
-        </LinearLayout>
-
-        <!-- Audio Level Meter Container -->
-        <LinearLayout
-            android:id="@+id/audioLevelContainer"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingVertical="3dp"
-            android:paddingHorizontal="5dp"
-            android:background="#80000000"
-            app:layout_constraintTop_toBottomOf="@+id/audioSourceLayout"
-            app:layout_constraintStart_toStartOf="@+id/audioSourceLayout"
-            app:layout_constraintEnd_toEndOf="@+id/audioSourceLayout">
-
-            <com.dimadesu.lifestreamer.ui.components.AudioLevelMeterView
-                android:id="@+id/audioLevelMeter"
-                android:layout_width="match_parent"
-                android:layout_height="14dp" />
-
-        </LinearLayout>
+            app:layout_constraintEnd_toEndOf="parent" />
 
         <ScrollView
             android:id="@+id/srtlaStatsScrollView"
@@ -290,7 +188,7 @@
             android:visibility="gone"
             app:layout_constrainedHeight="true"
             app:layout_constraintVertical_bias="1.0"
-            app:layout_constraintTop_toBottomOf="@+id/audioLevelContainer"
+            app:layout_constraintTop_toBottomOf="@+id/topRightControlsComposeView"
             app:layout_constraintBottom_toTopOf="@+id/liveButton"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
@@ -357,7 +255,7 @@
             android:layout_height="0dp"
             android:layout_marginEnd="16dp"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/audioLevelContainer"
+            app:layout_constraintTop_toBottomOf="@+id/topRightControlsComposeView"
             app:layout_constraintEnd_toEndOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

@@ -56,6 +56,7 @@ import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
 import android.content.ActivityNotFoundException
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
@@ -121,6 +122,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 CameraControlsBar(viewModel = previewViewModel)
+            }
+        }
+
+        binding.topRightControlsComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                TopRightControlsBar(viewModel = previewViewModel)
             }
         }
 
@@ -431,30 +439,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     inflateStreamerPreview()
                 } catch (t: Throwable) {
                     Log.w(TAG, "Failed to re-attach preview after stop: ${t.message}")
-                }
-            }
-        }
-
-        // Show current bitrate if available (render nothing when null)
-        previewViewModel.bitrateLiveData.observe(viewLifecycleOwner) { text ->
-            try {
-                binding.bitrateText.text = text ?: ""
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to update bitrate text: ${t.message}")
-            }
-        }
-        
-        // Collect audio level flow and update the VU meter
-        lifecycleScope.launch {
-            previewViewModel.audioLevelFlow.collect { level ->
-                try {
-                    if (level == com.dimadesu.lifestreamer.audio.AudioLevel.SILENT) {
-                        binding.audioLevelMeter.reset()
-                    } else {
-                        binding.audioLevelMeter.setAudioLevel(level)
-                    }
-                } catch (t: Throwable) {
-                    // View might not be attached yet
                 }
             }
         }
