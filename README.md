@@ -47,6 +47,11 @@ That's why this repository exists. I'll publish V2 .apk files here as GitHub rel
 
 You can have both V1 and V2 apps installed at the same time. They should be independent (for the most part) and not affect each other.
 
+- Open https://github.com/dimadesu/LifeStreamerV2/releases on the device that you want to install it on
+- Download .apk file
+- Install
+- Enjoy!
+
 ## The future
 
 Let's start here and see how it goes.
