@@ -163,7 +163,7 @@ private fun TopRightControlsBarIdlePreview() {
         uptime = null,
         bitrate = null,
         streamStatusText = "Not streaming",
-        audioSourceIndicator = "CAM MIC",
+        audioSourceIndicator = "Microphone",
         audioLevel = AudioLevel.SILENT
     )
 }
@@ -176,7 +176,20 @@ private fun TopRightControlsBarStreamingPreview() {
         uptime = "00:04:12",
         bitrate = "4500 kbps",
         streamStatusText = "Streaming",
-        audioSourceIndicator = "CAM+SYS",
+        audioSourceIndicator = "Media Projection Audio",
+        audioLevel = AudioLevel(rms = 0.5f, peak = 0.7f)
+    )
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF222222)
+@Composable
+private fun TopRightControlsBarBluetoothPreview() {
+    TopRightControlsBar(
+        encoderStats = "30.0 fps",
+        uptime = "00:04:12",
+        bitrate = "4500 kbps",
+        streamStatusText = "Streaming",
+        audioSourceIndicator = "Bluetooth",
         audioLevel = AudioLevel(rms = 0.5f, peak = 0.7f)
     )
 }
