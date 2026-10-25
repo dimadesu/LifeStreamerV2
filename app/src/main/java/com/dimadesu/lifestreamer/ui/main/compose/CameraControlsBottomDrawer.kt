@@ -1,5 +1,6 @@
 package com.dimadesu.lifestreamer.ui.main.compose
 
+import android.content.res.Configuration
 import android.hardware.camera2.CaptureResult
 import android.util.Range
 import android.util.Rational
@@ -8,16 +9,21 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -51,11 +57,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
@@ -143,7 +155,39 @@ fun CameraControlsBottomDrawer(
 }
 
 /**
- * Stateless non-modal bottom panel for camera controls.
+ * Renders a sleek vertical scrollbar on the edge of the container when content overflows.
+ */
+private fun Modifier.verticalScrollbar(
+    scrollState: ScrollState,
+    color: Color = Color(0x66FFFFFF),
+    width: Dp = 3.dp
+): Modifier = this.then(
+    Modifier.drawWithContent {
+        drawContent()
+        val maxVal = scrollState.maxValue
+        if (maxVal > 0) {
+            val totalHeight = size.height
+            val visibleRatio = (totalHeight / (totalHeight + maxVal)).coerceIn(0.15f, 1f)
+            val thumbHeight = totalHeight * visibleRatio
+            val scrollRatio = scrollState.value.toFloat() / maxVal.toFloat()
+            val thumbOffset = (totalHeight - thumbHeight) * scrollRatio
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(size.width - width.toPx(), thumbOffset),
+                size = Size(width.toPx(), thumbHeight),
+                cornerRadius = CornerRadius(width.toPx() / 2, width.toPx() / 2)
+            )
+        }
+    }
+)
+
+/**
+ * Stateless responsive panel for camera controls:
+ * - Slides in as a sleek side inspector from the left edge in landscape.
+ * - Slides in as a bottom drawer above the live button in portrait.
+ * - Dynamic max height calculation prevents overflow on all screen sizes.
+ * - Integrated vertical scrollbar shows scroll progress when content overflows.
+ * - Tap-outside on camera preview dismisses the controls cleanly.
  */
 @Composable
 fun CameraControlsBottomDrawer(
@@ -176,29 +220,81 @@ fun CameraControlsBottomDrawer(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
-        visible = isOpen && showCameraControls,
-        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-        modifier = modifier
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val screenHeight = configuration.screenHeightDp.dp
+
+    Box(
+        modifier = modifier.fillMaxSize()
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xF21C1C1E),
-            tonalElevation = 10.dp,
-            shadowElevation = 12.dp,
-            border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-            modifier = Modifier
-                .widthIn(min = 320.dp, max = 390.dp)
-                .wrapContentHeight()
-        ) {
-            Column(
+        // Dismiss controls when tapping outside the panel
+        if (isOpen && showCameraControls) {
+            Box(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClose
+                    )
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isOpen && showCameraControls,
+            enter = if (isLandscape) {
+                slideInHorizontally(initialOffsetX = { -it }) + fadeIn()
+            } else {
+                slideInVertically(initialOffsetY = { it }) + fadeIn()
+            },
+            exit = if (isLandscape) {
+                slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
+            } else {
+                slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            },
+            modifier = Modifier.align(
+                if (isLandscape) Alignment.CenterStart else Alignment.BottomCenter
+            )
+        ) {
+            val scrollState = rememberScrollState()
+            val maxPanelHeight = if (isLandscape) {
+                (screenHeight - 24.dp).coerceAtLeast(200.dp)
+            } else {
+                (screenHeight * 0.65f).coerceAtMost(440.dp)
+            }
+
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xF21C1C1E),
+                tonalElevation = 10.dp,
+                shadowElevation = 12.dp,
+                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                modifier = Modifier
+                    .then(
+                        if (isLandscape) {
+                            Modifier
+                                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp)
+                                .widthIn(min = 300.dp, max = 340.dp)
+                        } else {
+                            Modifier
+                                .padding(start = 16.dp, end = 16.dp, bottom = 76.dp)
+                                .widthIn(min = 320.dp, max = 390.dp)
+                        }
+                    )
+                    .wrapContentHeight()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { /* Consume taps on card background so they don't trigger tap-outside */ }
             ) {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .heightIn(max = maxPanelHeight)
+                        .verticalScroll(scrollState)
+                        .verticalScrollbar(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 // Header Row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -314,6 +410,7 @@ fun CameraControlsBottomDrawer(
             }
         }
     }
+}
 }
 
 /**
@@ -713,9 +810,9 @@ private fun formatEv(value: Float): String =
     else if (value < 0f) String.format(Locale.US, "%.1f EV", value)
     else "0.0 EV"
 
-@Preview(name = "Drawer Open - All Controls Available", showBackground = true, backgroundColor = 0xFF000000)
+@Preview(name = "Side Inspector - Landscape", widthDp = 840, heightDp = 390, showBackground = true, backgroundColor = 0xFF000000)
 @Composable
-private fun PreviewCameraControlsBottomDrawerOpen() {
+private fun PreviewCameraControlsLandscapeSideInspector() {
     CameraControlsBottomDrawer(
         isOpen = true,
         showCameraControls = true,
@@ -756,7 +853,50 @@ private fun PreviewCameraControlsBottomDrawerOpen() {
     )
 }
 
-@Preview(name = "Drawer Open - Manual Focus Active", showBackground = true, backgroundColor = 0xFF000000)
+@Preview(name = "Bottom Drawer - Portrait", widthDp = 390, heightDp = 840, showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PreviewCameraControlsBottomDrawerPortrait() {
+    CameraControlsBottomDrawer(
+        isOpen = true,
+        showCameraControls = true,
+        cameraDisplayName = "Back (0)",
+        isFlashAvailable = true,
+        isTorchOn = false,
+        onSetTorch = {},
+        isAutoWhiteBalanceAvailable = true,
+        availableWhiteBalanceModes = listOf(
+            CaptureResult.CONTROL_AWB_MODE_AUTO,
+            CaptureResult.CONTROL_AWB_MODE_DAYLIGHT,
+            CaptureResult.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT,
+            CaptureResult.CONTROL_AWB_MODE_INCANDESCENT
+        ),
+        currentWhiteBalanceMode = CaptureResult.CONTROL_AWB_MODE_AUTO,
+        onSelectWhiteBalanceMode = {},
+        isAutoFocusModeAvailable = true,
+        availableAutoFocusModes = listOf(
+            CaptureResult.CONTROL_AF_MODE_AUTO,
+            CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO,
+            CaptureResult.CONTROL_AF_MODE_OFF
+        ),
+        currentAutoFocusMode = CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO,
+        onSelectAutoFocusMode = {},
+        lensDistanceRange = Range(0f, 10f),
+        lensDistance = 0f,
+        onLensDistanceChange = {},
+        isExposureCompensationAvailable = true,
+        exposureRange = Range(-4, 4),
+        exposureStep = Rational(1, 2),
+        exposure = 0.5f,
+        onExposureChange = {},
+        isZoomAvailable = true,
+        zoomRange = Range(1f, 8f),
+        zoom = 1.5f,
+        onZoomChange = {},
+        onClose = {}
+    )
+}
+
+@Preview(name = "Drawer Open - Manual Focus Active", widthDp = 840, heightDp = 390, showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun PreviewCameraControlsBottomDrawerManualFocus() {
     CameraControlsBottomDrawer(
