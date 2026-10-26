@@ -46,6 +46,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import com.dimadesu.lifestreamer.BR
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.camera.CameraStabilizationController
 import com.dimadesu.lifestreamer.data.rotation.RotationRepository
 import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
 import com.dimadesu.lifestreamer.ui.main.usecases.BuildStreamerUseCase
@@ -4428,130 +4429,25 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         applyCameraSetting("lens distance") { settings -> settings.focus.setLensDistance(value) }
     }
 
-    val isStabilizationAvailable = MutableLiveData(false)
-    val availableStabilizationModes = MutableLiveData<List<Int>>(emptyList())
-    val currentStabilizationMode = MutableLiveData<Int>(STABILIZATION_MODE_OFF)
-    private var userPreferredStabilizationMode: Int? = null
+    val stabilizationController = CameraStabilizationController()
+
+    val isStabilizationAvailable: LiveData<Boolean> = stabilizationController.isAvailable
+    val availableStabilizationModes: LiveData<List<Int>> = stabilizationController.availableModes
+    val currentStabilizationMode: LiveData<Int> = stabilizationController.currentMode
 
     fun setStabilizationMode(mode: Int, isUserExplicit: Boolean = true) {
-        if (isUserExplicit) {
-            userPreferredStabilizationMode = mode
-        }
-        val settings = cameraSettings ?: run {
-            Log.e(TAG, "Camera settings is not accessible")
-            return
-        }
-        viewModelScope.launch {
-            try {
-                if (settings.isActiveFlow.value) {
-                    applyStabilizationModeToCamera(settings, mode)
-                    currentStabilizationMode.postValue(mode)
-                    if (isUserExplicit) {
-                        val modeName = getStabilizationModeName(mode)
-                        _toastMessageLiveData.postValue("Stabilization: $modeName")
-                    }
-                } else {
-                    Log.w(TAG, "Cannot set stabilization: camera session is not active")
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "setStabilizationMode failed (camera session may be closed): ${t.message}")
-            }
+        stabilizationController.setMode(cameraSettings, mode, isUserExplicit, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
         }
     }
 
     fun toggleStabilizationMode() {
-        val modes = availableStabilizationModes.value ?: return
-        if (modes.isEmpty()) return
-        val current = currentStabilizationMode.value ?: STABILIZATION_MODE_OFF
-        val currentIndex = modes.indexOf(current)
-        val nextMode = modes[(currentIndex + 1) % modes.size]
-        setStabilizationMode(nextMode, isUserExplicit = true)
+        stabilizationController.toggleMode(cameraSettings, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
+        }
     }
 
-    fun getStabilizationModeName(mode: Int): String = Companion.getStabilizationModeName(mode)
-
-    private fun getAvailableStabilizationModes(characteristics: CameraCharacteristics): List<Int> {
-        val modes = mutableListOf<Int>()
-        modes.add(STABILIZATION_MODE_OFF)
-
-        val oisModes = characteristics[CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION]
-        val hasOis = oisModes?.contains(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE_ON) == true
-        if (hasOis) {
-            modes.add(STABILIZATION_MODE_OPTICAL)
-        }
-
-        val videoModes = characteristics[CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES]
-        val hasVideo = videoModes?.contains(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true
-        if (hasVideo) {
-            modes.add(STABILIZATION_MODE_VIDEO)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPreview = videoModes?.contains(CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION) == true
-            if (hasPreview) {
-                modes.add(STABILIZATION_MODE_PREVIEW)
-            }
-        }
-
-        return modes
-    }
-
-    private suspend fun applyStabilizationModeToCamera(settings: CameraSettings, mode: Int) {
-        val isOisAvailable = settings.stabilization.isOpticalAvailable
-        when (mode) {
-            STABILIZATION_MODE_OFF -> {
-                if (isOisAvailable) {
-                    settings.set(
-                        CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
-                        CaptureResult.LENS_OPTICAL_STABILIZATION_MODE_OFF
-                    )
-                }
-                settings.set(
-                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                    CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE_OFF
-                )
-            }
-            STABILIZATION_MODE_OPTICAL -> {
-                settings.set(
-                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                    CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE_OFF
-                )
-                if (isOisAvailable) {
-                    settings.set(
-                        CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
-                        CaptureResult.LENS_OPTICAL_STABILIZATION_MODE_ON
-                    )
-                }
-            }
-            STABILIZATION_MODE_VIDEO -> {
-                if (isOisAvailable) {
-                    settings.set(
-                        CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
-                        CaptureResult.LENS_OPTICAL_STABILIZATION_MODE_OFF
-                    )
-                }
-                settings.set(
-                    CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                    CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE_ON
-                )
-            }
-            STABILIZATION_MODE_PREVIEW -> {
-                if (isOisAvailable) {
-                    settings.set(
-                        CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
-                        CaptureResult.LENS_OPTICAL_STABILIZATION_MODE_OFF
-                    )
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    settings.set(
-                        CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                        CaptureResult.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION
-                    )
-                }
-            }
-        }
-        settings.applyRepeatingSession()
-    }
+    fun getStabilizationModeName(mode: Int): String = CameraStabilizationController.getStabilizationModeName(mode)
 
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
@@ -4566,8 +4462,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             isZoomAvailable.postValue(false)
             isAutoFocusModeAvailable.postValue(false)
             availableAutoFocusModes.postValue(emptyList())
-            isStabilizationAvailable.postValue(false)
-            availableStabilizationModes.postValue(emptyList())
+            stabilizationController.onSourceReset()
         }
     }
 
@@ -4575,40 +4470,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val settings = videoSource.settings
 
         // Stabilization
-        val availStabModes = getAvailableStabilizationModes(settings.characteristics)
-        isStabilizationAvailable.postValue(availStabModes.size > 1)
-        availableStabilizationModes.postValue(availStabModes)
-
-        val targetStabMode = when {
-            userPreferredStabilizationMode != null && availStabModes.contains(userPreferredStabilizationMode) -> {
-                userPreferredStabilizationMode!!
-            }
-            availStabModes.contains(STABILIZATION_MODE_OPTICAL) -> {
-                STABILIZATION_MODE_OPTICAL
-            }
-            availStabModes.contains(STABILIZATION_MODE_VIDEO) -> {
-                STABILIZATION_MODE_VIDEO
-            }
-            else -> {
-                STABILIZATION_MODE_OFF
-            }
-        }
-        currentStabilizationMode.postValue(targetStabMode)
-
-        viewModelScope.launch {
-            try {
-                if (!settings.isActiveFlow.value) {
-                    withTimeoutOrNull(2000) {
-                        settings.isActiveFlow.first { it }
-                    }
-                }
-                if (settings.isActiveFlow.value) {
-                    applyStabilizationModeToCamera(settings, targetStabMode)
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Failed to apply initial stabilization mode: ${t.message}")
-            }
-        }
+        stabilizationController.onCameraChanged(settings, viewModelScope)
 
         // Flash
         isFlashAvailable.postValue(settings.flash.isAvailable)
@@ -4967,20 +4829,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     companion object {
         private const val TAG = "PreviewViewModel"
 
-        const val STABILIZATION_MODE_OFF = 0
-        const val STABILIZATION_MODE_OPTICAL = 1
-        const val STABILIZATION_MODE_VIDEO = 2
-        const val STABILIZATION_MODE_PREVIEW = 3
+        const val STABILIZATION_MODE_OFF = CameraStabilizationController.STABILIZATION_MODE_OFF
+        const val STABILIZATION_MODE_OPTICAL = CameraStabilizationController.STABILIZATION_MODE_OPTICAL
+        const val STABILIZATION_MODE_VIDEO = CameraStabilizationController.STABILIZATION_MODE_VIDEO
+        const val STABILIZATION_MODE_PREVIEW = CameraStabilizationController.STABILIZATION_MODE_PREVIEW
 
-        fun getStabilizationModeName(mode: Int): String {
-            return when (mode) {
-                STABILIZATION_MODE_OFF -> "Off"
-                STABILIZATION_MODE_OPTICAL -> "Optical (OIS)"
-                STABILIZATION_MODE_VIDEO -> "Video (EIS)"
-                STABILIZATION_MODE_PREVIEW -> "Preview"
-                else -> "Unknown"
-            }
-        }
+        fun getStabilizationModeName(mode: Int): String =
+            CameraStabilizationController.getStabilizationModeName(mode)
 
         fun getWhiteBalanceModeName(mode: Int): String {
             return when (mode) {
