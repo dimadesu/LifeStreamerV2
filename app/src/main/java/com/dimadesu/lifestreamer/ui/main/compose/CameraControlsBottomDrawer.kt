@@ -121,6 +121,11 @@ fun CameraControlsBottomDrawer(
     val zoomRange by viewModel.zoomRatioRange.observeAsState()
     val zoom by viewModel.zoomRatio.collectAsState()
 
+    // Stabilization
+    val isStabilizationAvailable by viewModel.isStabilizationAvailable.observeAsState(initial = false)
+    val availableStabilizationModes by viewModel.availableStabilizationModes.observeAsState(initial = emptyList())
+    val currentStabilizationMode by viewModel.currentStabilizationMode.observeAsState(initial = PreviewViewModel.STABILIZATION_MODE_OFF)
+
     CameraControlsBottomDrawer(
         isOpen = isOpen,
         showCameraControls = showCameraControls,
@@ -148,6 +153,10 @@ fun CameraControlsBottomDrawer(
         zoomRange = zoomRange,
         zoom = zoom,
         onZoomChange = { viewModel.setZoomRatio(it) },
+        isStabilizationAvailable = isStabilizationAvailable,
+        availableStabilizationModes = availableStabilizationModes,
+        currentStabilizationMode = currentStabilizationMode,
+        onSelectStabilizationMode = { viewModel.setStabilizationMode(it) },
         onClose = { viewModel.setCameraControlsDrawerOpen(false) },
         modifier = modifier
     )
@@ -216,6 +225,10 @@ fun CameraControlsBottomDrawer(
     zoomRange: Range<Float>?,
     zoom: Float,
     onZoomChange: (Float) -> Unit,
+    isStabilizationAvailable: Boolean = false,
+    availableStabilizationModes: List<Int> = emptyList(),
+    currentStabilizationMode: Int = PreviewViewModel.STABILIZATION_MODE_OFF,
+    onSelectStabilizationMode: (Int) -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -340,7 +353,8 @@ fun CameraControlsBottomDrawer(
                         (isExposureCompensationAvailable && exposureRange != null)
                 val hasSelectors = isFlashAvailable ||
                         (isAutoFocusModeAvailable && availableAutoFocusModes.isNotEmpty()) ||
-                        (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty())
+                        (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty()) ||
+                        (isStabilizationAvailable && availableStabilizationModes.isNotEmpty())
                 if (hasSliders && hasSelectors) {
                     HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
                 }
@@ -390,6 +404,18 @@ fun CameraControlsBottomDrawer(
                         options = availableWhiteBalanceModes.map { it to PreviewViewModel.getWhiteBalanceModeName(it) },
                         currentValue = currentWhiteBalanceMode,
                         onSelectOption = onSelectWhiteBalanceMode
+                    )
+                }
+
+                // 6. Stabilization Dropdown
+                if (isStabilizationAvailable && availableStabilizationModes.isNotEmpty()) {
+                    CameraDropdownRow(
+                        title = "Stabilization",
+                        iconRes = R.drawable.ic_baseline_video_stable_24,
+                        currentValueName = PreviewViewModel.getStabilizationModeName(currentStabilizationMode),
+                        options = availableStabilizationModes.map { it to PreviewViewModel.getStabilizationModeName(it) },
+                        currentValue = currentStabilizationMode,
+                        onSelectOption = onSelectStabilizationMode
                     )
                 }
             }
@@ -834,6 +860,14 @@ private fun PreviewCameraControlsLandscapeSideInspector() {
         zoomRange = Range(1f, 8f),
         zoom = 1.5f,
         onZoomChange = {},
+        isStabilizationAvailable = true,
+        availableStabilizationModes = listOf(
+            PreviewViewModel.STABILIZATION_MODE_OFF,
+            PreviewViewModel.STABILIZATION_MODE_OPTICAL,
+            PreviewViewModel.STABILIZATION_MODE_VIDEO
+        ),
+        currentStabilizationMode = PreviewViewModel.STABILIZATION_MODE_OPTICAL,
+        onSelectStabilizationMode = {},
         onClose = {}
     )
 }
@@ -877,6 +911,14 @@ private fun PreviewCameraControlsBottomDrawerPortrait() {
         zoomRange = Range(1f, 8f),
         zoom = 1.5f,
         onZoomChange = {},
+        isStabilizationAvailable = true,
+        availableStabilizationModes = listOf(
+            PreviewViewModel.STABILIZATION_MODE_OFF,
+            PreviewViewModel.STABILIZATION_MODE_OPTICAL,
+            PreviewViewModel.STABILIZATION_MODE_VIDEO
+        ),
+        currentStabilizationMode = PreviewViewModel.STABILIZATION_MODE_OPTICAL,
+        onSelectStabilizationMode = {},
         onClose = {}
     )
 }
@@ -917,6 +959,13 @@ private fun PreviewCameraControlsBottomDrawerManualFocus() {
         zoomRange = Range(1f, 5f),
         zoom = 2.0f,
         onZoomChange = {},
+        isStabilizationAvailable = true,
+        availableStabilizationModes = listOf(
+            PreviewViewModel.STABILIZATION_MODE_OFF,
+            PreviewViewModel.STABILIZATION_MODE_VIDEO
+        ),
+        currentStabilizationMode = PreviewViewModel.STABILIZATION_MODE_VIDEO,
+        onSelectStabilizationMode = {},
         onClose = {}
     )
 }

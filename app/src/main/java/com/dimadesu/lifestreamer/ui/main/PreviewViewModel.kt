@@ -25,6 +25,8 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
 import android.media.projection.MediaProjection
 import android.os.Build
@@ -44,6 +46,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import com.dimadesu.lifestreamer.BR
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.camera.CameraStabilizationController
 import com.dimadesu.lifestreamer.data.rotation.RotationRepository
 import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
 import com.dimadesu.lifestreamer.ui.main.usecases.BuildStreamerUseCase
@@ -108,6 +111,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -4425,6 +4429,26 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         applyCameraSetting("lens distance") { settings -> settings.focus.setLensDistance(value) }
     }
 
+    val stabilizationController = CameraStabilizationController()
+
+    val isStabilizationAvailable: LiveData<Boolean> = stabilizationController.isAvailable
+    val availableStabilizationModes: LiveData<List<Int>> = stabilizationController.availableModes
+    val currentStabilizationMode: LiveData<Int> = stabilizationController.currentMode
+
+    fun setStabilizationMode(mode: Int, isUserExplicit: Boolean = true) {
+        stabilizationController.setMode(cameraSettings, mode, isUserExplicit, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
+        }
+    }
+
+    fun toggleStabilizationMode() {
+        stabilizationController.toggleMode(cameraSettings, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
+        }
+    }
+
+    fun getStabilizationModeName(mode: Int): String = CameraStabilizationController.getStabilizationModeName(mode)
+
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
         if (videoSource is ICameraSource) {
@@ -4438,22 +4462,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             isZoomAvailable.postValue(false)
             isAutoFocusModeAvailable.postValue(false)
             availableAutoFocusModes.postValue(emptyList())
+            stabilizationController.onSourceReset()
         }
     }
 
     private fun notifyCameraChanged(videoSource: ICameraSource) {
         val settings = videoSource.settings
-        // Set optical stabilization first
-        // Do not set both video and optical stabilization at the same time
-        viewModelScope.launch {
-            if (settings.isActiveFlow.value) {
-                if (settings.stabilization.isOpticalAvailable) {
-                    settings.stabilization.setIsEnableOptical(true)
-                } else {
-                    settings.stabilization.setIsEnableVideo(true)
-                }
-            }
-        }
+
+        // Stabilization
+        stabilizationController.onCameraChanged(settings, viewModelScope)
 
         // Flash
         isFlashAvailable.postValue(settings.flash.isAvailable)
@@ -4811,6 +4828,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     companion object {
         private const val TAG = "PreviewViewModel"
+
+        const val STABILIZATION_MODE_OFF = CameraStabilizationController.STABILIZATION_MODE_OFF
+        const val STABILIZATION_MODE_OPTICAL = CameraStabilizationController.STABILIZATION_MODE_OPTICAL
+        const val STABILIZATION_MODE_VIDEO = CameraStabilizationController.STABILIZATION_MODE_VIDEO
+        const val STABILIZATION_MODE_PREVIEW = CameraStabilizationController.STABILIZATION_MODE_PREVIEW
+
+        fun getStabilizationModeName(mode: Int): String =
+            CameraStabilizationController.getStabilizationModeName(mode)
 
         fun getWhiteBalanceModeName(mode: Int): String {
             return when (mode) {
