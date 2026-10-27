@@ -16,8 +16,6 @@
 package com.dimadesu.lifestreamer.ui.settings
 
 import android.content.Context
-import android.media.AudioFormat
-import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Bundle
 import android.text.InputFilter
@@ -45,7 +43,6 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.camera.exten
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.defaultCameraId
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.isFpsSupported
 import io.github.thibaultbee.streampack.core.streamers.infos.CameraStreamerConfigurationInfo
-import io.github.thibaultbee.streampack.core.streamers.single.AudioConfig
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
