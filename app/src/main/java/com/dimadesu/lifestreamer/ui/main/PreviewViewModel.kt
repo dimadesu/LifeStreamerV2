@@ -589,10 +589,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val streamerInfo = StreamerInfoFactory(application, endpointType).build()
             val encoder = config?.mimeType ?: ApplicationConstants.Audio.defaultEncoder
             val channelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
-            val bitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
+            val storedBitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
             val defaultSampleRate = if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) 48000 else ApplicationConstants.Audio.defaultSampleRate
             val sampleRate = config?.sampleRate ?: defaultSampleRate
-            val profile = config?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
+            val storedProfile = config?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
+            // True when a supported-values query failed and guessed values are used instead
+            var usedFallback = false
 
             val supportedEncoders = streamerInfo.audio.supportedEncoders
             val encoderNameMap = mapOf(
@@ -604,6 +606,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val inputChannelRange: Range<Int> = try {
                 streamerInfo.audio.getSupportedInputChannelRange(encoder)
             } catch (_: Throwable) {
+                usedFallback = true
                 Range(1, 2)
             }
             val candidateChannels = listOf(
@@ -617,16 +620,23 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val bitrateRange: Range<Int> = try {
                 streamerInfo.audio.getSupportedBitrates(encoder)
             } catch (_: Throwable) {
+                usedFallback = true
                 Range(32000, 320000)
             }
             val candidateBitrates = listOf(64000, 96000, 128000, 160000, 192000, 256000, 320000)
-            val availableBitrates = candidateBitrates.filter { bitrateRange.contains(it) }
+            val supportedBitrates = candidateBitrates.filter { bitrateRange.contains(it) }
                 .ifEmpty { candidateBitrates }
-                .map { it to "${it / 1000} Kbps" }
+            val availableBitrates = supportedBitrates.map { it to "${it / 1000} Kbps" }
+            val bitrate = when {
+                supportedBitrates.contains(storedBitrate) -> storedBitrate
+                supportedBitrates.contains(128000) -> 128000
+                else -> supportedBitrates.first()
+            }
 
             val sampleRates = try {
                 streamerInfo.audio.getSupportedSampleRates(encoder)
             } catch (_: Throwable) {
+                usedFallback = true
                 if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) listOf(48000) else listOf(44100, 48000)
             }
             val availableSampleRates = sampleRates.map {
@@ -634,6 +644,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
             val actualSampleRate = if (sampleRates.contains(sampleRate)) {
                 sampleRate
+            } else if (sampleRates.contains(44100)) {
+                44100
             } else if (sampleRates.contains(48000)) {
                 48000
             } else {
@@ -641,15 +653,36 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
 
             val isProfileVisible = encoder == MediaFormat.MIMETYPE_AUDIO_AAC
-            val availableProfiles = if (isProfileVisible) {
-                val profiles = try {
+            val supportedProfiles = if (isProfileVisible) {
+                try {
                     streamerInfo.audio.getSupportedProfiles(encoder)
                 } catch (_: Throwable) {
+                    usedFallback = true
                     listOf(MediaCodecInfo.CodecProfileLevel.AACObjectLC)
                 }
-                profiles.map { it to profileLevelDisplay.getProfileName(encoder, it) }
             } else {
                 emptyList()
+            }
+            val availableProfiles = supportedProfiles.map { it to profileLevelDisplay.getProfileName(encoder, it) }
+            val profile = when {
+                !isProfileVisible || supportedProfiles.contains(storedProfile) -> storedProfile
+                supportedProfiles.contains(MediaCodecInfo.CodecProfileLevel.AACObjectLC) ->
+                    MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                else -> supportedProfiles.firstOrNull() ?: 0
+            }
+
+            // Persist corrected values so the stored config matches what is shown and used
+            if (config != null && !usedFallback &&
+                (bitrate != storedBitrate || actualSampleRate != config.sampleRate || profile != storedProfile)
+            ) {
+                viewModelScope.launch {
+                    storageRepository.saveAudioEncoderAndConfig(
+                        encoder = encoder,
+                        sampleRate = actualSampleRate,
+                        bitrate = bitrate,
+                        profile = profile
+                    )
+                }
             }
 
             _audioSettingsState.postValue(
