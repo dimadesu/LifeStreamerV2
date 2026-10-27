@@ -46,6 +46,7 @@ import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import com.dimadesu.lifestreamer.BR
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.camera.CameraNoiseReductionController
 import com.dimadesu.lifestreamer.camera.CameraStabilizationController
 import com.dimadesu.lifestreamer.data.rotation.RotationRepository
 import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
@@ -4449,6 +4450,26 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getStabilizationModeName(mode: Int): String = CameraStabilizationController.getStabilizationModeName(mode)
 
+    val noiseReductionController = CameraNoiseReductionController()
+
+    val isNoiseReductionAvailable: LiveData<Boolean> = noiseReductionController.isAvailable
+    val availableNoiseReductionModes: LiveData<List<Int>> = noiseReductionController.availableModes
+    val currentNoiseReductionMode: LiveData<Int> = noiseReductionController.currentMode
+
+    fun setNoiseReductionMode(mode: Int, isUserExplicit: Boolean = true) {
+        noiseReductionController.setMode(cameraSettings, mode, isUserExplicit, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
+        }
+    }
+
+    fun toggleNoiseReductionMode() {
+        noiseReductionController.toggleMode(cameraSettings, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
+        }
+    }
+
+    fun getNoiseReductionModeName(mode: Int): String = CameraNoiseReductionController.getNoiseReductionModeName(mode)
+
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
         if (videoSource is ICameraSource) {
@@ -4463,6 +4484,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             isAutoFocusModeAvailable.postValue(false)
             availableAutoFocusModes.postValue(emptyList())
             stabilizationController.onSourceReset()
+            noiseReductionController.onSourceReset()
         }
     }
 
@@ -4471,6 +4493,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
         // Stabilization
         stabilizationController.onCameraChanged(settings, viewModelScope)
+
+        // Noise Reduction
+        noiseReductionController.onCameraChanged(settings, viewModelScope)
 
         // Flash
         isFlashAvailable.postValue(settings.flash.isAvailable)
@@ -4836,6 +4861,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
         fun getStabilizationModeName(mode: Int): String =
             CameraStabilizationController.getStabilizationModeName(mode)
+
+        const val NOISE_REDUCTION_MODE_OFF = CameraNoiseReductionController.NOISE_REDUCTION_MODE_OFF
+        const val NOISE_REDUCTION_MODE_FAST = CameraNoiseReductionController.NOISE_REDUCTION_MODE_FAST
+        const val NOISE_REDUCTION_MODE_HIGH_QUALITY = CameraNoiseReductionController.NOISE_REDUCTION_MODE_HIGH_QUALITY
+        const val NOISE_REDUCTION_MODE_MINIMAL = CameraNoiseReductionController.NOISE_REDUCTION_MODE_MINIMAL
+        const val NOISE_REDUCTION_MODE_ZERO_SHUTTER_LAG = CameraNoiseReductionController.NOISE_REDUCTION_MODE_ZERO_SHUTTER_LAG
+
+        fun getNoiseReductionModeName(mode: Int): String =
+            CameraNoiseReductionController.getNoiseReductionModeName(mode)
 
         fun getWhiteBalanceModeName(mode: Int): String {
             return when (mode) {

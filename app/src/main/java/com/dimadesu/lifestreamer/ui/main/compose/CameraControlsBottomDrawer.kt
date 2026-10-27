@@ -126,6 +126,11 @@ fun CameraControlsBottomDrawer(
     val availableStabilizationModes by viewModel.availableStabilizationModes.observeAsState(initial = emptyList())
     val currentStabilizationMode by viewModel.currentStabilizationMode.observeAsState(initial = PreviewViewModel.STABILIZATION_MODE_OFF)
 
+    // Noise Reduction
+    val isNoiseReductionAvailable by viewModel.isNoiseReductionAvailable.observeAsState(initial = false)
+    val availableNoiseReductionModes by viewModel.availableNoiseReductionModes.observeAsState(initial = emptyList())
+    val currentNoiseReductionMode by viewModel.currentNoiseReductionMode.observeAsState(initial = PreviewViewModel.NOISE_REDUCTION_MODE_OFF)
+
     CameraControlsBottomDrawer(
         isOpen = isOpen,
         showCameraControls = showCameraControls,
@@ -157,6 +162,10 @@ fun CameraControlsBottomDrawer(
         availableStabilizationModes = availableStabilizationModes,
         currentStabilizationMode = currentStabilizationMode,
         onSelectStabilizationMode = { viewModel.setStabilizationMode(it) },
+        isNoiseReductionAvailable = isNoiseReductionAvailable,
+        availableNoiseReductionModes = availableNoiseReductionModes,
+        currentNoiseReductionMode = currentNoiseReductionMode,
+        onSelectNoiseReductionMode = { viewModel.setNoiseReductionMode(it) },
         onClose = { viewModel.setCameraControlsDrawerOpen(false) },
         modifier = modifier
     )
@@ -229,6 +238,10 @@ fun CameraControlsBottomDrawer(
     availableStabilizationModes: List<Int> = emptyList(),
     currentStabilizationMode: Int = PreviewViewModel.STABILIZATION_MODE_OFF,
     onSelectStabilizationMode: (Int) -> Unit = {},
+    isNoiseReductionAvailable: Boolean = false,
+    availableNoiseReductionModes: List<Int> = emptyList(),
+    currentNoiseReductionMode: Int = PreviewViewModel.NOISE_REDUCTION_MODE_OFF,
+    onSelectNoiseReductionMode: (Int) -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -354,7 +367,8 @@ fun CameraControlsBottomDrawer(
                 val hasSelectors = isFlashAvailable ||
                         (isAutoFocusModeAvailable && availableAutoFocusModes.isNotEmpty()) ||
                         (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty()) ||
-                        (isStabilizationAvailable && availableStabilizationModes.isNotEmpty())
+                        (isStabilizationAvailable && availableStabilizationModes.isNotEmpty()) ||
+                        (isNoiseReductionAvailable && availableNoiseReductionModes.isNotEmpty())
                 if (hasSliders && hasSelectors) {
                     HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
                 }
@@ -416,6 +430,18 @@ fun CameraControlsBottomDrawer(
                         options = availableStabilizationModes.map { it to PreviewViewModel.getStabilizationModeName(it) },
                         currentValue = currentStabilizationMode,
                         onSelectOption = onSelectStabilizationMode
+                    )
+                }
+
+                // 7. Video Noise Reduction Dropdown
+                if (isNoiseReductionAvailable && availableNoiseReductionModes.isNotEmpty()) {
+                    CameraDropdownRow(
+                        title = "Noise Reduction",
+                        iconRes = R.drawable.ic_baseline_noise_reduction_24,
+                        currentValueName = PreviewViewModel.getNoiseReductionModeName(currentNoiseReductionMode),
+                        options = availableNoiseReductionModes.map { it to PreviewViewModel.getNoiseReductionModeName(it) },
+                        currentValue = currentNoiseReductionMode,
+                        onSelectOption = onSelectNoiseReductionMode
                     )
                 }
             }
@@ -868,6 +894,14 @@ private fun PreviewCameraControlsLandscapeSideInspector() {
         ),
         currentStabilizationMode = PreviewViewModel.STABILIZATION_MODE_OPTICAL,
         onSelectStabilizationMode = {},
+        isNoiseReductionAvailable = true,
+        availableNoiseReductionModes = listOf(
+            PreviewViewModel.NOISE_REDUCTION_MODE_OFF,
+            PreviewViewModel.NOISE_REDUCTION_MODE_FAST,
+            PreviewViewModel.NOISE_REDUCTION_MODE_HIGH_QUALITY
+        ),
+        currentNoiseReductionMode = PreviewViewModel.NOISE_REDUCTION_MODE_FAST,
+        onSelectNoiseReductionMode = {},
         onClose = {}
     )
 }
@@ -919,6 +953,14 @@ private fun PreviewCameraControlsBottomDrawerPortrait() {
         ),
         currentStabilizationMode = PreviewViewModel.STABILIZATION_MODE_OPTICAL,
         onSelectStabilizationMode = {},
+        isNoiseReductionAvailable = true,
+        availableNoiseReductionModes = listOf(
+            PreviewViewModel.NOISE_REDUCTION_MODE_OFF,
+            PreviewViewModel.NOISE_REDUCTION_MODE_FAST,
+            PreviewViewModel.NOISE_REDUCTION_MODE_HIGH_QUALITY
+        ),
+        currentNoiseReductionMode = PreviewViewModel.NOISE_REDUCTION_MODE_FAST,
+        onSelectNoiseReductionMode = {},
         onClose = {}
     )
 }
@@ -966,6 +1008,13 @@ private fun PreviewCameraControlsBottomDrawerManualFocus() {
         ),
         currentStabilizationMode = PreviewViewModel.STABILIZATION_MODE_VIDEO,
         onSelectStabilizationMode = {},
+        isNoiseReductionAvailable = true,
+        availableNoiseReductionModes = listOf(
+            PreviewViewModel.NOISE_REDUCTION_MODE_OFF,
+            PreviewViewModel.NOISE_REDUCTION_MODE_FAST
+        ),
+        currentNoiseReductionMode = PreviewViewModel.NOISE_REDUCTION_MODE_FAST,
+        onSelectNoiseReductionMode = {},
         onClose = {}
     )
 }
