@@ -363,10 +363,16 @@ fun AudioSourceBottomDrawer(
 
                         if (isStreaming) {
                             Text(
-                                text = "Settings will apply on next stream session.",
-                                fontSize = 11.sp,
+                                text = "Changes to audio settings will apply after stream ends.",
+                                fontSize = 13.sp,
                                 color = Color(0xFFFFB74D),
-                                lineHeight = 14.sp
+                                lineHeight = 16.sp
+                            )
+                            Text(
+                                text = "Audio source can be changed during the stream.",
+                                fontSize = 13.sp,
+                                color = Color(0xFFFFB74D),
+                                lineHeight = 16.sp
                             )
                         }
                     }
