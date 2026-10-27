@@ -268,6 +268,11 @@ class DataStoreRepository(
         )
     }.distinctUntilChanged()
 
+    data class RtmpSourceUrlEntry(
+        val index: Int,
+        val url: String
+    )
+
     // Flow for RTMP video source URL (primary, index 1)
     val rtmpVideoSourceUrlFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[stringPreferencesKey(context.getString(R.string.rtmp_source_url_key))]
@@ -278,6 +283,18 @@ class DataStoreRepository(
     val rtmpSourceCountFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[intPreferencesKey(context.getString(R.string.rtmp_source_count_key))]
             ?: 1
+    }.distinctUntilChanged()
+
+    /**
+     * Flow emitting all configured RTMP source URLs as a list of entries.
+     */
+    val rtmpSourceUrlsListFlow: Flow<List<RtmpSourceUrlEntry>> = dataStore.data.map { preferences ->
+        val count = preferences[intPreferencesKey(context.getString(R.string.rtmp_source_count_key))] ?: 1
+        (1..count.coerceAtLeast(1)).map { index ->
+            val key = rtmpSourceUrlKey(index)
+            val url = preferences[stringPreferencesKey(key)] ?: defaultRtmpSourceUrl(index)
+            RtmpSourceUrlEntry(index, url)
+        }
     }.distinctUntilChanged()
 
     /**
@@ -310,12 +327,60 @@ class DataStoreRepository(
     }
 
     /**
+     * Set the RTMP source URL for a specific index.
+     */
+    suspend fun setRtmpSourceUrl(index: Int, url: String) {
+        val key = rtmpSourceUrlKey(index)
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(key)] = url
+        }
+    }
+
+    /**
      * Set the RTMP source count.
      */
     suspend fun setRtmpSourceCount(count: Int) {
         dataStore.edit { preferences ->
             preferences[intPreferencesKey(context.getString(R.string.rtmp_source_count_key))] = count
         }
+    }
+
+    /**
+     * Add a new RTMP source URL with default value and increment count.
+     */
+    suspend fun addRtmpSourceUrl(): Int {
+        var newCount = 1
+        dataStore.edit { preferences ->
+            val countKey = intPreferencesKey(context.getString(R.string.rtmp_source_count_key))
+            val currentCount = preferences[countKey] ?: 1
+            newCount = currentCount + 1
+            preferences[countKey] = newCount
+            val newUrlKey = stringPreferencesKey(rtmpSourceUrlKey(newCount))
+            if (preferences[newUrlKey] == null) {
+                preferences[newUrlKey] = defaultRtmpSourceUrl(newCount)
+            }
+        }
+        return newCount
+    }
+
+    /**
+     * Remove the last RTMP source URL and decrement count.
+     */
+    suspend fun removeLastRtmpSourceUrl(): Int {
+        var newCount = 1
+        dataStore.edit { preferences ->
+            val countKey = intPreferencesKey(context.getString(R.string.rtmp_source_count_key))
+            val currentCount = preferences[countKey] ?: 1
+            if (currentCount > 1) {
+                val lastKey = stringPreferencesKey(rtmpSourceUrlKey(currentCount))
+                preferences.remove(lastKey)
+                newCount = currentCount - 1
+                preferences[countKey] = newCount
+            } else {
+                newCount = 1
+            }
+        }
+        return newCount
     }
 
     /**
@@ -334,17 +399,35 @@ class DataStoreRepository(
             ?: true // Default to true (recommended)
     }.distinctUntilChanged()
 
+    suspend fun setRtmpSourceRestartOnDisconnect(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[booleanPreferencesKey(context.getString(R.string.rtmp_source_restart_on_disconnect_key))] = enabled
+        }
+    }
+
     // Flow for requiring audio track in RTMP source playback
     val rtmpSourceRequireAudioTrackFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[booleanPreferencesKey(context.getString(R.string.rtmp_source_require_audio_track_key))]
             ?: true // Default to true
     }.distinctUntilChanged()
 
+    suspend fun setRtmpSourceRequireAudioTrack(required: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[booleanPreferencesKey(context.getString(R.string.rtmp_source_require_audio_track_key))] = required
+        }
+    }
+
     // Flow for RTMP source playback buffer duration in milliseconds
     val rtmpSourceBufferForPlaybackMsFlow: Flow<Int> = dataStore.data.map { preferences ->
         preferences[intPreferencesKey(context.getString(R.string.rtmp_source_buffer_for_playback_ms_key))]
             ?: context.getString(R.string.default_rtmp_buffer_for_playback_ms).toInt()
     }.distinctUntilChanged()
+
+    suspend fun setRtmpSourceBufferForPlaybackMs(bufferMs: Int) {
+        dataStore.edit { preferences ->
+            preferences[intPreferencesKey(context.getString(R.string.rtmp_source_buffer_for_playback_ms_key))] = bufferMs
+        }
+    }
 
     val bitrateRegulatorConfigFlow: Flow<BitrateRegulatorConfig?> =
         dataStore.data.map { preferences ->

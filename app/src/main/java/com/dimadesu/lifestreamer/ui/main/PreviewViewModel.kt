@@ -4166,6 +4166,83 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     val rtmpSourceCount: LiveData<Int> = storageRepository.rtmpSourceCountFlow.asLiveData()
 
+    val rtmpSourceUrlsList: LiveData<List<DataStoreRepository.RtmpSourceUrlEntry>> =
+        storageRepository.rtmpSourceUrlsListFlow.asLiveData()
+
+    val rtmpSourceRestartOnDisconnect: LiveData<Boolean> =
+        storageRepository.rtmpSourceRestartOnDisconnectFlow.asLiveData()
+
+    val rtmpSourceRequireAudioTrack: LiveData<Boolean> =
+        storageRepository.rtmpSourceRequireAudioTrackFlow.asLiveData()
+
+    val rtmpSourceBufferForPlaybackMs: LiveData<Int> =
+        storageRepository.rtmpSourceBufferForPlaybackMsFlow.asLiveData()
+
+    private val _isRtmpSettingsDrawerOpen = MutableLiveData(false)
+    val isRtmpSettingsDrawerOpen: LiveData<Boolean> = _isRtmpSettingsDrawerOpen
+
+    private val rtmpUrlDebounceJobs = mutableMapOf<Int, Job>()
+
+    fun toggleRtmpSettingsDrawer() {
+        val next = !(_isRtmpSettingsDrawerOpen.value ?: false)
+        _isRtmpSettingsDrawerOpen.value = next
+        if (next) {
+            _isCameraControlsDrawerOpen.value = false
+            showExposureSlider.value = false
+            showZoomSlider.value = false
+            showLensDistanceSlider.value = false
+        }
+    }
+
+    fun setRtmpSettingsDrawerOpen(open: Boolean) {
+        _isRtmpSettingsDrawerOpen.value = open
+        if (open) {
+            _isCameraControlsDrawerOpen.value = false
+            showExposureSlider.value = false
+            showZoomSlider.value = false
+            showLensDistanceSlider.value = false
+        }
+    }
+
+    fun setRtmpSourceUrl(index: Int, url: String) {
+        rtmpUrlDebounceJobs[index]?.cancel()
+        rtmpUrlDebounceJobs[index] = viewModelScope.launch {
+            delay(300)
+            storageRepository.setRtmpSourceUrl(index, url)
+        }
+    }
+
+    fun addRtmpSource() {
+        viewModelScope.launch {
+            storageRepository.addRtmpSourceUrl()
+        }
+    }
+
+    fun removeLastRtmpSource() {
+        viewModelScope.launch {
+            storageRepository.removeLastRtmpSourceUrl()
+        }
+    }
+
+    fun setRtmpSourceRestartOnDisconnect(enabled: Boolean) {
+        viewModelScope.launch {
+            storageRepository.setRtmpSourceRestartOnDisconnect(enabled)
+        }
+    }
+
+    fun setRtmpSourceRequireAudioTrack(required: Boolean) {
+        viewModelScope.launch {
+            storageRepository.setRtmpSourceRequireAudioTrack(required)
+        }
+    }
+
+    fun setRtmpSourceBufferForPlaybackMs(bufferMs: Int) {
+        viewModelScope.launch {
+            val rounded = ((bufferMs / 500) * 500).coerceIn(500, 6000)
+            storageRepository.setRtmpSourceBufferForPlaybackMs(rounded)
+        }
+    }
+
     /**
      * Show camera controls only when on camera source (neither RTMP nor UVC toggle is ON)
      */
@@ -4181,6 +4258,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             value = show
             if (!show) {
                 _isCameraControlsDrawerOpen.value = false
+            }
+            if (uvcOn || screenOn) {
+                _isRtmpSettingsDrawerOpen.value = false
             }
         }
         
@@ -4204,6 +4284,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     fun toggleCameraControlsDrawer() {
         val next = !(_isCameraControlsDrawerOpen.value ?: false)
         _isCameraControlsDrawerOpen.value = next
+        if (next) {
+            _isRtmpSettingsDrawerOpen.value = false
+        }
         if (!next) {
             showExposureSlider.value = false
             showZoomSlider.value = false
@@ -4213,6 +4296,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun setCameraControlsDrawerOpen(open: Boolean) {
         _isCameraControlsDrawerOpen.value = open
+        if (open) {
+            _isRtmpSettingsDrawerOpen.value = false
+        }
         if (!open) {
             showExposureSlider.value = false
             showZoomSlider.value = false

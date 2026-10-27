@@ -45,7 +45,7 @@ fun SourceControlsBar(
     viewModel: PreviewViewModel,
     onSelectCamera: (String) -> Unit,
     onToggleRtmpSource: (Int) -> Unit,
-    onLaunchRtmpServer: () -> Unit,
+    onLaunchRtmpServer: () -> Unit = {},
     onToggleUvc: () -> Unit,
     onLaunchUvcTest: () -> Unit,
     onToggleScreen: () -> Unit,
@@ -71,6 +71,7 @@ fun SourceControlsBar(
     val isSrtlaStatsVisible by viewModel.isSrtlaStatsVisible.observeAsState(initial = false)
     val currentCameraIdFromStreamer by viewModel.currentCameraIdLiveData.observeAsState(initial = null)
     val isCameraControlsDrawerOpen by viewModel.isCameraControlsDrawerOpen.observeAsState(initial = false)
+    val isRtmpSettingsDrawerOpen by viewModel.isRtmpSettingsDrawerOpen.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -85,6 +86,7 @@ fun SourceControlsBar(
         selectedCameraId = activeCameraId,
         showCameraControls = showCameraControls,
         isCameraControlsDrawerOpen = isCameraControlsDrawerOpen,
+        isRtmpSettingsDrawerOpen = isRtmpSettingsDrawerOpen,
         activeRtmpIndex = activeRtmpIndex,
         rtmpSourceCount = rtmpSourceCount,
         isUvcSource = isUvcSource,
@@ -101,6 +103,7 @@ fun SourceControlsBar(
             onSelectCamera(cameraId)
         },
         onToggleCameraControls = { viewModel.toggleCameraControlsDrawer() },
+        onToggleRtmpSettings = { viewModel.toggleRtmpSettingsDrawer() },
         onToggleRtmpSource = onToggleRtmpSource,
         onLaunchRtmpServer = onLaunchRtmpServer,
         onToggleUvc = onToggleUvc,
@@ -124,6 +127,7 @@ fun SourceControlsBar(
     selectedCameraId: String?,
     showCameraControls: Boolean,
     isCameraControlsDrawerOpen: Boolean = false,
+    isRtmpSettingsDrawerOpen: Boolean = false,
     activeRtmpIndex: Int?,
     rtmpSourceCount: Int,
     isUvcSource: Boolean,
@@ -137,8 +141,9 @@ fun SourceControlsBar(
     isSrtlaStatsVisible: Boolean,
     onSelectCamera: (String) -> Unit,
     onToggleCameraControls: () -> Unit = {},
+    onToggleRtmpSettings: () -> Unit = {},
     onToggleRtmpSource: (Int) -> Unit,
-    onLaunchRtmpServer: () -> Unit,
+    onLaunchRtmpServer: () -> Unit = {},
     onToggleUvc: () -> Unit,
     onLaunchUvcTest: () -> Unit,
     onToggleScreen: () -> Unit,
@@ -186,31 +191,44 @@ fun SourceControlsBar(
                 }
             }
 
-            // 2. RTMP Source button(s)
+            // 2. RTMP Source button(s) with settings cog
             if (!isUvcSource && !isScreenSource) {
                 if (activeRtmpIndex != null) {
-                    SourceButton(
-                        text = if (activeRtmpIndex == 1) "RTMP SRC" else "RTMP SRC $activeRtmpIndex",
-                        isActive = true,
-                        onClick = { onToggleRtmpSource(activeRtmpIndex) }
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        SourceButton(
+                            text = if (activeRtmpIndex == 1) "RTMP SRC" else "RTMP SRC $activeRtmpIndex",
+                            isActive = true,
+                            onClick = { onToggleRtmpSource(activeRtmpIndex) }
+                        )
+                        RtmpSettingsButton(
+                            isOpen = isRtmpSettingsDrawerOpen,
+                            onClick = onToggleRtmpSettings
+                        )
+                    }
                 } else {
                     val maxIndex = rtmpSourceCount.coerceAtLeast(1)
                     for (i in 1..maxIndex) {
-                        SourceButton(
-                            text = if (i == 1) "RTMP SRC" else "RTMP SRC $i",
-                            isActive = false,
-                            onClick = { onToggleRtmpSource(i) }
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            SourceButton(
+                                text = if (i == 1) "RTMP SRC" else "RTMP SRC $i",
+                                isActive = false,
+                                onClick = { onToggleRtmpSource(i) }
+                            )
+                            if (i == 1) {
+                                RtmpSettingsButton(
+                                    isOpen = isRtmpSettingsDrawerOpen,
+                                    onClick = onToggleRtmpSettings
+                                )
+                            }
+                        }
                     }
                 }
-
-                // 3. RTMP Server Button
-                SourceButton(
-                    text = "RTMP SRVR",
-                    isActive = false,
-                    onClick = onLaunchRtmpServer
-                )
             }
 
             // 4. USB Source Button
@@ -366,6 +384,36 @@ fun CameraSettingsButton(
 }
 
 /**
+ * Settings button displayed next to the RTMP source button.
+ * Toggles the RTMP settings bottom drawer/panel.
+ */
+@Composable
+fun RtmpSettingsButton(
+    isOpen: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isOpen) Color(0xFF4CAF50) else Color(0xFF616161),
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.size(40.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_baseline_settings_24),
+            contentDescription = stringResource(R.string.rtmp_settings),
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
  * Settings button displayed next to the USB source button.
  * Launches the UVC test/configuration activity.
  */
@@ -405,6 +453,7 @@ private fun PreviewSourceControlsBarCameraMode() {
         selectedCameraId = "0",
         showCameraControls = true,
         isCameraControlsDrawerOpen = false,
+        isRtmpSettingsDrawerOpen = false,
         activeRtmpIndex = null,
         rtmpSourceCount = 2,
         isUvcSource = false,
@@ -418,6 +467,7 @@ private fun PreviewSourceControlsBarCameraMode() {
         isSrtlaStatsVisible = false,
         onSelectCamera = {},
         onToggleCameraControls = {},
+        onToggleRtmpSettings = {},
         onToggleRtmpSource = {},
         onLaunchRtmpServer = {},
         onToggleUvc = {},
@@ -442,6 +492,7 @@ private fun PreviewSourceControlsBarDrawerOpen() {
         selectedCameraId = "0",
         showCameraControls = true,
         isCameraControlsDrawerOpen = true,
+        isRtmpSettingsDrawerOpen = false,
         activeRtmpIndex = null,
         rtmpSourceCount = 2,
         isUvcSource = false,
@@ -455,6 +506,7 @@ private fun PreviewSourceControlsBarDrawerOpen() {
         isSrtlaStatsVisible = false,
         onSelectCamera = {},
         onToggleCameraControls = {},
+        onToggleRtmpSettings = {},
         onToggleRtmpSource = {},
         onLaunchRtmpServer = {},
         onToggleUvc = {},
@@ -475,6 +527,8 @@ private fun PreviewSourceControlsBarRtmpMode() {
         cameras = emptyList(),
         selectedCameraId = null,
         showCameraControls = false,
+        isCameraControlsDrawerOpen = false,
+        isRtmpSettingsDrawerOpen = false,
         activeRtmpIndex = 1,
         rtmpSourceCount = 2,
         isUvcSource = false,
@@ -487,6 +541,44 @@ private fun PreviewSourceControlsBarRtmpMode() {
         isSrtlaEndpoint = false,
         isSrtlaStatsVisible = false,
         onSelectCamera = {},
+        onToggleCameraControls = {},
+        onToggleRtmpSettings = {},
+        onToggleRtmpSource = {},
+        onLaunchRtmpServer = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleAudioDebug = {},
+        onToggleSrtlaStats = {}
+    )
+}
+
+@Preview(name = "RTMP Mode Drawer Open", showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PreviewSourceControlsBarRtmpDrawerOpen() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        isCameraControlsDrawerOpen = false,
+        isRtmpSettingsDrawerOpen = true,
+        activeRtmpIndex = 1,
+        rtmpSourceCount = 2,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = true,
+        showBluetoothToggle = false,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = false,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleCameraControls = {},
+        onToggleRtmpSettings = {},
         onToggleRtmpSource = {},
         onLaunchRtmpServer = {},
         onToggleUvc = {},
@@ -507,6 +599,8 @@ private fun PreviewSourceControlsBarUsbMode() {
         cameras = emptyList(),
         selectedCameraId = null,
         showCameraControls = false,
+        isCameraControlsDrawerOpen = false,
+        isRtmpSettingsDrawerOpen = false,
         activeRtmpIndex = null,
         rtmpSourceCount = 1,
         isUvcSource = true,
@@ -519,6 +613,8 @@ private fun PreviewSourceControlsBarUsbMode() {
         isSrtlaEndpoint = false,
         isSrtlaStatsVisible = false,
         onSelectCamera = {},
+        onToggleCameraControls = {},
+        onToggleRtmpSettings = {},
         onToggleRtmpSource = {},
         onLaunchRtmpServer = {},
         onToggleUvc = {},
