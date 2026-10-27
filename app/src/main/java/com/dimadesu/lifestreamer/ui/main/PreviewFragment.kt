@@ -55,6 +55,7 @@ import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBottomDrawer
+import com.dimadesu.lifestreamer.ui.main.compose.RtmpSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
@@ -131,6 +132,16 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 CameraControlsBottomDrawer(viewModel = previewViewModel)
+            }
+        }
+
+        binding.rtmpDrawerComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                RtmpSettingsBottomDrawer(
+                    viewModel = previewViewModel,
+                    onLaunchRtmpServer = { launchRtmpServer() }
+                )
             }
         }
 
@@ -218,17 +229,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                         toggleVideoSourceWithExplanation(rtmpIndex = rtmpIndex)
                     },
                     onLaunchRtmpServer = {
-                        val pkg = "com.dimadesu.mediasrvr"
-                        val launchIntent = requireContext().packageManager.getLaunchIntentForPackage(pkg)
-                        if (launchIntent != null) {
-                            startActivity(launchIntent)
-                        } else {
-                            try {
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")))
-                            } catch (e: ActivityNotFoundException) {
-                                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")))
-                            }
-                        }
+                        launchRtmpServer()
                     },
                     onToggleUvc = {
                         previewViewModel.toggleUvcSource()
@@ -1093,6 +1094,20 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         } else {
             previewViewModel.toggleVideoSource(mediaProjectionLauncher, rtmpIndex = rtmpIndex)
+        }
+    }
+
+    private fun launchRtmpServer() {
+        val pkg = "com.dimadesu.mediasrvr"
+        val launchIntent = requireContext().packageManager.getLaunchIntentForPackage(pkg)
+        if (launchIntent != null) {
+            startActivity(launchIntent)
+        } else {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")))
+            } catch (e: ActivityNotFoundException) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")))
+            }
         }
     }
 
