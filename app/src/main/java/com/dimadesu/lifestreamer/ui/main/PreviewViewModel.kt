@@ -1858,7 +1858,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 .collect { config ->
                     // Don't change audio config while streaming to avoid configuration conflicts
                     if (serviceStreamer?.isStreamingFlow?.value == true) {
-                        Log.i(TAG, "Skipping audio config change - streamer is currently streaming")
+                        Log.i(TAG, "Deferring audio config change - streamer is currently streaming")
+                        pendingAudioConfig = config
+                        viewModelScope.launch {
+                            serviceStreamer?.isStreamingFlow?.first { it != true }
+                            if (isUiInForeground) {
+                                applyPendingAudioConfig()
+                            }
+                        }
                         return@collect
                     }
                     
