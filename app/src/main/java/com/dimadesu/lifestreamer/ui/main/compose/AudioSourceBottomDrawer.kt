@@ -10,6 +10,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +24,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,7 +43,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -58,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
+import java.util.Locale
 
 /**
  * Representation of an audio source option from arrays.xml.
@@ -68,10 +77,11 @@ data class AudioSourceOption(
 )
 
 /**
- * Stateful Composable for the Audio Source & Real-time Debug drawer/panel:
+ * Stateful Composable for the Audio Settings & Source drawer/panel:
  * - Slides in as a bottom drawer (portrait) or side inspector (landscape).
- * - Allows switching between audio input sources (e.g. CAMCORDER vs VOICE_COMMUNICATION).
- * - Real-time system audio debugging metrics (hardware route, effects, sample rate, bit format, channels).
+ * - Displays Audio Settings at the top (Encoder, Channels, Bitrate, Sample Rate, Profile).
+ * - Displays Audio Source Selection (CAMCORDER, VOICE_COMMUNICATION) in the middle.
+ * - Displays Actual System State diagnostic metrics at the bottom.
  */
 @Composable
 fun AudioSourceBottomDrawer(
@@ -80,7 +90,13 @@ fun AudioSourceBottomDrawer(
 ) {
     val isOpen by viewModel.isAudioSourceDrawerOpen.observeAsState(initial = false)
     val isRtmpSource by viewModel.isRtmpSource.observeAsState(initial = false)
-    val selectedSourceType by viewModel.selectedAudioSourceType.observeAsState(initial = android.media.MediaRecorder.AudioSource.CAMCORDER)
+    val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
+    val audioSettingsState by viewModel.audioSettingsState.observeAsState(
+        initial = PreviewViewModel.AudioSettingsState()
+    )
+    val selectedSourceType by viewModel.selectedAudioSourceType.observeAsState(
+        initial = android.media.MediaRecorder.AudioSource.CAMCORDER
+    )
     val audioDebugInfo by viewModel.audioDebugInfoLiveData.observeAsState(initial = null)
 
     val context = LocalContext.current
@@ -95,6 +111,13 @@ fun AudioSourceBottomDrawer(
     AudioSourceBottomDrawer(
         isOpen = isOpen,
         isVisibleForSource = !isRtmpSource,
+        audioSettingsState = audioSettingsState,
+        isStreaming = isStreaming,
+        onSelectEncoder = { viewModel.setAudioEncoder(it) },
+        onSelectChannelConfig = { viewModel.setAudioChannelConfig(it) },
+        onSelectBitrate = { viewModel.setAudioBitrate(it) },
+        onSelectSampleRate = { viewModel.setAudioSampleRate(it) },
+        onSelectProfile = { viewModel.setAudioProfile(it) },
         availableOptions = options,
         selectedSourceType = selectedSourceType,
         debugInfo = audioDebugInfo,
@@ -137,7 +160,9 @@ private fun Modifier.verticalScrollbar(
 )
 
 /**
- * Stateless responsive drawer for Audio Source settings and live system stats:
+ * Stateless responsive drawer for Audio Settings, Source selection, and live system stats:
+ * - Audio Settings on top (Encoder, Channels, Bitrate, Sample Rate, Profile).
+ * - Existing UI of Audio Source drawer at the bottom (Audio Source options + hint + Actual System State).
  * - Slides in as a side inspector from the right edge in landscape.
  * - Slides in as a bottom drawer above the live button in portrait.
  * - Dynamic max height calculation prevents overflow on all screen sizes.
@@ -146,6 +171,13 @@ private fun Modifier.verticalScrollbar(
 fun AudioSourceBottomDrawer(
     isOpen: Boolean,
     isVisibleForSource: Boolean,
+    audioSettingsState: PreviewViewModel.AudioSettingsState,
+    isStreaming: Boolean = false,
+    onSelectEncoder: (String) -> Unit,
+    onSelectChannelConfig: (Int) -> Unit,
+    onSelectBitrate: (Int) -> Unit,
+    onSelectSampleRate: (Int) -> Unit,
+    onSelectProfile: (Int) -> Unit,
     availableOptions: List<AudioSourceOption>,
     selectedSourceType: Int,
     debugInfo: AudioDebugInfo?,
@@ -180,7 +212,7 @@ fun AudioSourceBottomDrawer(
             val maxPanelHeight = if (isLandscape) {
                 (screenHeight - 24.dp).coerceAtLeast(200.dp)
             } else {
-                (screenHeight * 0.75f).coerceAtMost(520.dp)
+                (screenHeight * 0.85f).coerceAtMost(640.dp)
             }
 
             Surface(
@@ -222,13 +254,13 @@ fun AudioSourceBottomDrawer(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                painter = painterResource(id = R.drawable.ic_baseline_mic_24),
+                                painter = painterResource(id = R.drawable.ic_baseline_settings_24),
                                 contentDescription = null,
                                 tint = Color(0xFF4CAF50),
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "AUDIO SOURCE",
+                                text = "AUDIO SETTINGS",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -251,7 +283,94 @@ fun AudioSourceBottomDrawer(
 
                     HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                    // 1. Audio Source Selection Section
+                    // 1. Audio Settings Section (TOP)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "AUDIO SETTINGS",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0x99FFFFFF),
+                            letterSpacing = 0.5.sp
+                        )
+
+                        // Encoder Dropdown
+                        val currentEncoderName = audioSettingsState.availableEncoders
+                            .firstOrNull { it.first == audioSettingsState.encoder }?.second
+                            ?: audioSettingsState.encoder
+                        AudioDropdownRow(
+                            title = "Encoder",
+                            currentValue = audioSettingsState.encoder,
+                            currentValueName = currentEncoderName,
+                            options = audioSettingsState.availableEncoders,
+                            onSelectOption = onSelectEncoder
+                        )
+
+                        // Channels Dropdown
+                        val currentChannelName = audioSettingsState.availableChannelConfigs
+                            .firstOrNull { it.first == audioSettingsState.channelConfig }?.second
+                            ?: if (audioSettingsState.channelConfig == 12) "Stereo" else "Mono"
+                        AudioDropdownRow(
+                            title = "Channels",
+                            currentValue = audioSettingsState.channelConfig,
+                            currentValueName = currentChannelName,
+                            options = audioSettingsState.availableChannelConfigs,
+                            onSelectOption = onSelectChannelConfig
+                        )
+
+                        // Bitrate Dropdown
+                        val currentBitrateName = audioSettingsState.availableBitrates
+                            .firstOrNull { it.first == audioSettingsState.bitrate }?.second
+                            ?: "${audioSettingsState.bitrate / 1000} Kbps"
+                        AudioDropdownRow(
+                            title = "Bitrate",
+                            currentValue = audioSettingsState.bitrate,
+                            currentValueName = currentBitrateName,
+                            options = audioSettingsState.availableBitrates,
+                            onSelectOption = onSelectBitrate
+                        )
+
+                        // Sample Rate Dropdown
+                        val currentSampleRateName = audioSettingsState.availableSampleRates
+                            .firstOrNull { it.first == audioSettingsState.sampleRate }?.second
+                            ?: "${"%.1f".format(Locale.US, audioSettingsState.sampleRate.toFloat() / 1000)} kHz"
+                        AudioDropdownRow(
+                            title = "Sample Rate",
+                            currentValue = audioSettingsState.sampleRate,
+                            currentValueName = currentSampleRateName,
+                            options = audioSettingsState.availableSampleRates,
+                            onSelectOption = onSelectSampleRate
+                        )
+
+                        // Profile Dropdown (visible if AAC)
+                        if (audioSettingsState.isProfileVisible && audioSettingsState.availableProfiles.isNotEmpty()) {
+                            val currentProfileName = audioSettingsState.availableProfiles
+                                .firstOrNull { it.first == audioSettingsState.profile }?.second
+                                ?: "${audioSettingsState.profile}"
+                            AudioDropdownRow(
+                                title = "Profile",
+                                currentValue = audioSettingsState.profile,
+                                currentValueName = currentProfileName,
+                                options = audioSettingsState.availableProfiles,
+                                onSelectOption = onSelectProfile
+                            )
+                        }
+
+                        if (isStreaming) {
+                            Text(
+                                text = "Settings will apply on next stream session.",
+                                fontSize = 11.sp,
+                                color = Color(0xFFFFB74D),
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
+
+                    // 2. Audio Source Selection Section (BOTTOM existing UI)
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -308,7 +427,7 @@ fun AudioSourceBottomDrawer(
 
                     HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                    // 2. Actual System State Section
+                    // 3. Actual System State Section (BOTTOM existing UI)
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -369,6 +488,101 @@ fun AudioSourceBottomDrawer(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Clean dropdown row with title and compact interactive selection pill.
+ */
+@Composable
+private fun <T> AudioDropdownRow(
+    title: String,
+    currentValue: T,
+    currentValueName: String,
+    options: List<Pair<T, String>>,
+    onSelectOption: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        Box {
+            Surface(
+                onClick = { expanded = true },
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0x2BFFFFFF),
+                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                modifier = Modifier.wrapContentSize()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = currentValueName,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Color(0xCCFFFFFF),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .background(Color(0xFF242426))
+                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+            ) {
+                options.forEach { (optionVal, optionName) ->
+                    val isSelected = optionVal == currentValue
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = optionName,
+                                color = if (isSelected) Color(0xFF4CAF50) else Color.White,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 13.sp
+                            )
+                        },
+                        leadingIcon = if (isSelected) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF4CAF50),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        } else null,
+                        onClick = {
+                            expanded = false
+                            onSelectOption(optionVal)
+                        }
+                    )
                 }
             }
         }
@@ -457,12 +671,33 @@ private fun AudioStatRow(
 // Previews
 // ---------------------------------------------------------------------------
 
+private val sampleAudioSettingsState = PreviewViewModel.AudioSettingsState(
+    encoder = "audio/mp4a-latm",
+    channelConfig = 12,
+    bitrate = 128000,
+    sampleRate = 48000,
+    profile = 2,
+    availableEncoders = listOf("audio/mp4a-latm" to "AAC", "audio/opus" to "OPUS"),
+    availableChannelConfigs = listOf(12 to "Stereo", 16 to "Mono"),
+    availableBitrates = listOf(64000 to "64 Kbps", 128000 to "128 Kbps", 192000 to "192 Kbps"),
+    availableSampleRates = listOf(44100 to "44.1 kHz", 48000 to "48.0 kHz"),
+    availableProfiles = listOf(2 to "LC", 1 to "Main"),
+    isProfileVisible = true
+)
+
 @Preview(name = "Audio Drawer - Portrait Active", widthDp = 390, heightDp = 840, showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun PreviewAudioSourceBottomDrawerPortraitActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
         isVisibleForSource = true,
+        audioSettingsState = sampleAudioSettingsState,
+        isStreaming = false,
+        onSelectEncoder = {},
+        onSelectChannelConfig = {},
+        onSelectBitrate = {},
+        onSelectSampleRate = {},
+        onSelectProfile = {},
         availableOptions = listOf(
             AudioSourceOption("CAMCORDER", 5),
             AudioSourceOption("VOICE_COMMUNICATION", 7)
@@ -490,6 +725,13 @@ private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
         isVisibleForSource = true,
+        audioSettingsState = sampleAudioSettingsState,
+        isStreaming = false,
+        onSelectEncoder = {},
+        onSelectChannelConfig = {},
+        onSelectBitrate = {},
+        onSelectSampleRate = {},
+        onSelectProfile = {},
         availableOptions = listOf(
             AudioSourceOption("CAMCORDER", 5),
             AudioSourceOption("VOICE_COMMUNICATION", 7)
@@ -517,6 +759,13 @@ private fun PreviewAudioSourceBottomDrawerIdle() {
     AudioSourceBottomDrawer(
         isOpen = true,
         isVisibleForSource = true,
+        audioSettingsState = sampleAudioSettingsState,
+        isStreaming = false,
+        onSelectEncoder = {},
+        onSelectChannelConfig = {},
+        onSelectBitrate = {},
+        onSelectSampleRate = {},
+        onSelectProfile = {},
         availableOptions = listOf(
             AudioSourceOption("CAMCORDER", 5),
             AudioSourceOption("VOICE_COMMUNICATION", 7)

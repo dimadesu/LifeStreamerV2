@@ -499,10 +499,47 @@ class DataStoreRepository(
         com.dimadesu.lifestreamer.models.StreamOrientation.fromId(stored)
     }.distinctUntilChanged()
 
+    val endpointTypeFlow: Flow<com.dimadesu.lifestreamer.models.EndpointType> = dataStore.data.map { preferences ->
+        val endpointTypeId =
+            preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
+                ?: com.dimadesu.lifestreamer.models.EndpointType.SRT.id
+        com.dimadesu.lifestreamer.models.EndpointType.fromId(endpointTypeId)
+    }.distinctUntilChanged()
+
     // Save methods for audio settings
     suspend fun saveAudioSourceType(sourceType: Int) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(context.getString(R.string.audio_source_type_key))] = sourceType.toString()
+        }
+    }
+
+    suspend fun saveAudioEncoder(encoder: String) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))] = encoder
+        }
+    }
+
+    suspend fun saveAudioChannelConfig(channelConfig: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))] = channelConfig.toString()
+        }
+    }
+
+    suspend fun saveAudioBitrate(bitrate: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))] = bitrate.toString()
+        }
+    }
+
+    suspend fun saveAudioSampleRate(sampleRate: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))] = sampleRate.toString()
+        }
+    }
+
+    suspend fun saveAudioProfile(profile: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = profile.toString()
         }
     }
 }

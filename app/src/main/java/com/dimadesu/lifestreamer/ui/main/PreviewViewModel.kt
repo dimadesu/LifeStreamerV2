@@ -26,14 +26,20 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
+import android.media.AudioFormat
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.util.Range
 import android.util.Rational
+import java.util.Locale
+import com.dimadesu.lifestreamer.ApplicationConstants
+import com.dimadesu.lifestreamer.utils.ProfileLevelDisplay
+import com.dimadesu.lifestreamer.utils.StreamerInfoFactory
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -558,6 +564,176 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     fun setSelectedAudioSourceType(sourceType: Int) {
         _selectedAudioSourceType.value = sourceType
     }
+
+    data class AudioSettingsState(
+        val encoder: String = ApplicationConstants.Audio.defaultEncoder,
+        val channelConfig: Int = ApplicationConstants.Audio.defaultChannelConfig,
+        val bitrate: Int = ApplicationConstants.Audio.defaultBitrateInBps,
+        val sampleRate: Int = ApplicationConstants.Audio.defaultSampleRate,
+        val profile: Int = MediaCodecInfo.CodecProfileLevel.AACObjectLC,
+        val availableEncoders: List<Pair<String, String>> = emptyList(),
+        val availableChannelConfigs: List<Pair<Int, String>> = emptyList(),
+        val availableBitrates: List<Pair<Int, String>> = emptyList(),
+        val availableSampleRates: List<Pair<Int, String>> = emptyList(),
+        val availableProfiles: List<Pair<Int, String>> = emptyList(),
+        val isProfileVisible: Boolean = true
+    )
+
+    private val profileLevelDisplay by lazy { ProfileLevelDisplay(application) }
+
+    private val _audioSettingsState = MutableLiveData<AudioSettingsState>()
+    val audioSettingsState: LiveData<AudioSettingsState> = _audioSettingsState
+
+    fun updateAudioSettingsState(config: AudioConfig?, endpointType: com.dimadesu.lifestreamer.models.EndpointType) {
+        try {
+            val streamerInfo = StreamerInfoFactory(application, endpointType).build()
+            val encoder = config?.mimeType ?: ApplicationConstants.Audio.defaultEncoder
+            val channelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
+            val bitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
+            val sampleRate = config?.sampleRate ?: ApplicationConstants.Audio.defaultSampleRate
+            val profile = config?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
+
+            val supportedEncoders = streamerInfo.audio.supportedEncoders
+            val encoderNameMap = mapOf(
+                MediaFormat.MIMETYPE_AUDIO_AAC to application.getString(R.string.audio_encoder_aac),
+                MediaFormat.MIMETYPE_AUDIO_OPUS to application.getString(R.string.audio_encoder_opus)
+            )
+            val availableEncoders = supportedEncoders.map { it to (encoderNameMap[it] ?: it) }
+
+            val inputChannelRange: Range<Int> = try {
+                streamerInfo.audio.getSupportedInputChannelRange(encoder)
+            } catch (_: Throwable) {
+                Range(1, 2)
+            }
+            val candidateChannels = listOf(
+                AudioFormat.CHANNEL_IN_STEREO to "Stereo",
+                AudioFormat.CHANNEL_IN_MONO to "Mono"
+            )
+            val availableChannelConfigs = candidateChannels.filter { (cfg, _) ->
+                inputChannelRange.contains(AudioConfig.getNumberOfChannels(cfg))
+            }.ifEmpty { candidateChannels }
+
+            val bitrateRange: Range<Int> = try {
+                streamerInfo.audio.getSupportedBitrates(encoder)
+            } catch (_: Throwable) {
+                Range(32000, 320000)
+            }
+            val candidateBitrates = listOf(64000, 96000, 128000, 160000, 192000, 256000, 320000)
+            val availableBitrates = candidateBitrates.filter { bitrateRange.contains(it) }
+                .ifEmpty { candidateBitrates }
+                .map { it to "${it / 1000} Kbps" }
+
+            val sampleRates = try {
+                streamerInfo.audio.getSupportedSampleRates(encoder)
+            } catch (_: Throwable) {
+                listOf(44100, 48000)
+            }
+            val availableSampleRates = sampleRates.map {
+                it to "${"%.1f".format(Locale.US, it.toFloat() / 1000)} kHz"
+            }
+
+            val isProfileVisible = encoder == MediaFormat.MIMETYPE_AUDIO_AAC
+            val availableProfiles = if (isProfileVisible) {
+                val profiles = try {
+                    streamerInfo.audio.getSupportedProfiles(encoder)
+                } catch (_: Throwable) {
+                    listOf(MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                }
+                profiles.map { it to profileLevelDisplay.getProfileName(encoder, it) }
+            } else {
+                emptyList()
+            }
+
+            _audioSettingsState.postValue(
+                AudioSettingsState(
+                    encoder = encoder,
+                    channelConfig = channelConfig,
+                    bitrate = bitrate,
+                    sampleRate = sampleRate,
+                    profile = profile,
+                    availableEncoders = availableEncoders,
+                    availableChannelConfigs = availableChannelConfigs,
+                    availableBitrates = availableBitrates,
+                    availableSampleRates = availableSampleRates,
+                    availableProfiles = availableProfiles,
+                    isProfileVisible = isProfileVisible
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to compute audio settings state", e)
+        }
+    }
+
+    fun setAudioEncoder(encoder: String) {
+        viewModelScope.launch {
+            storageRepository.saveAudioEncoder(encoder)
+            try {
+                val endpointType = storageRepository.endpointTypeFlow.first()
+                val streamerInfo = StreamerInfoFactory(application, endpointType).build()
+                val bitrateRange = streamerInfo.audio.getSupportedBitrates(encoder)
+                val currentBitrate = _audioSettingsState.value?.bitrate ?: 128000
+                if (!bitrateRange.contains(currentBitrate)) {
+                    val candidateBitrates = listOf(128000, 96000, 64000, 160000, 192000)
+                    val fallbackBitrate = candidateBitrates.firstOrNull { bitrateRange.contains(it) }
+                        ?: bitrateRange.lower
+                    storageRepository.saveAudioBitrate(fallbackBitrate)
+                }
+
+                val sampleRates = streamerInfo.audio.getSupportedSampleRates(encoder)
+                val currentSampleRate = _audioSettingsState.value?.sampleRate ?: 44100
+                if (!sampleRates.contains(currentSampleRate)) {
+                    val fallbackSampleRate = when {
+                        sampleRates.contains(48000) -> 48000
+                        sampleRates.contains(44100) -> 44100
+                        sampleRates.isNotEmpty() -> sampleRates.first()
+                        else -> 48000
+                    }
+                    storageRepository.saveAudioSampleRate(fallbackSampleRate)
+                }
+
+                if (encoder == MediaFormat.MIMETYPE_AUDIO_AAC) {
+                    val profiles = streamerInfo.audio.getSupportedProfiles(encoder)
+                    val currentProfile = _audioSettingsState.value?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                    if (!profiles.contains(currentProfile)) {
+                        val fallbackProfile = if (profiles.contains(MediaCodecInfo.CodecProfileLevel.AACObjectLC)) {
+                            MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                        } else if (profiles.isNotEmpty()) {
+                            profiles.first()
+                        } else {
+                            0
+                        }
+                        storageRepository.saveAudioProfile(fallbackProfile)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error validating audio settings for new encoder: ${e.message}")
+            }
+        }
+    }
+
+    fun setAudioChannelConfig(channelConfig: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioChannelConfig(channelConfig)
+        }
+    }
+
+    fun setAudioBitrate(bitrate: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioBitrate(bitrate)
+        }
+    }
+
+    fun setAudioSampleRate(sampleRate: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioSampleRate(sampleRate)
+        }
+    }
+
+    fun setAudioProfile(profile: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioProfile(profile)
+        }
+    }
     
     // MediaProjection session for streaming
     private var streamingMediaProjection: MediaProjection? = null
@@ -718,6 +894,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         }
                     }
                 }
+        }
+
+        // Observe audio config and endpoint type to update AudioSettingsState
+        viewModelScope.launch {
+            combine(
+                storageRepository.audioConfigFlow,
+                storageRepository.endpointTypeFlow
+            ) { config, endpointType ->
+                config to endpointType
+            }.collect { (config, endpointType) ->
+                updateAudioSettingsState(config, endpointType)
+            }
         }
 
         // Status-to-notification messaging removed; UI no longer shows sliding panel
@@ -4947,6 +5135,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch {
                 _selectedAudioSourceType.value = storageRepository.audioSourceTypeFlow.first()
                 Log.d(TAG, "Loaded audio source from DataStore: source=${_selectedAudioSourceType.value}")
+            }
+
+            // Refresh audio settings state when opening drawer
+            viewModelScope.launch {
+                val config = storageRepository.audioConfigFlow.first()
+                val endpointType = storageRepository.endpointTypeFlow.first()
+                updateAudioSettingsState(config, endpointType)
             }
 
             // Refresh immediately when showing the drawer
