@@ -264,6 +264,7 @@
     <string name="rtmp_settings">RTMP settings</string>
     <string name="rtmp_server_button">RTMP SERVER</string>
     <string name="close_rtmp_controls">Close RTMP controls</string>
+    <string name="close_audio_source_controls">Close audio source controls</string>
 
     <string name="file_endpoint_key">file_endpoint_key</string>
     <string name="file">File</string>

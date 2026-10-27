@@ -72,6 +72,7 @@ fun SourceControlsBar(
     val currentCameraIdFromStreamer by viewModel.currentCameraIdLiveData.observeAsState(initial = null)
     val isCameraControlsDrawerOpen by viewModel.isCameraControlsDrawerOpen.observeAsState(initial = false)
     val isRtmpSettingsDrawerOpen by viewModel.isRtmpSettingsDrawerOpen.observeAsState(initial = false)
+    val isAudioSourceDrawerOpen by viewModel.isAudioSourceDrawerOpen.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -87,6 +88,7 @@ fun SourceControlsBar(
         showCameraControls = showCameraControls,
         isCameraControlsDrawerOpen = isCameraControlsDrawerOpen,
         isRtmpSettingsDrawerOpen = isRtmpSettingsDrawerOpen,
+        isAudioSourceDrawerOpen = isAudioSourceDrawerOpen,
         activeRtmpIndex = activeRtmpIndex,
         rtmpSourceCount = rtmpSourceCount,
         isUvcSource = isUvcSource,
@@ -113,6 +115,7 @@ fun SourceControlsBar(
         onToggleBluetoothMic = onToggleBluetoothMic,
         onToggleSystemAudio = onToggleSystemAudio,
         onToggleAudioDebug = onToggleAudioDebug,
+        onToggleAudioSourceDrawer = { viewModel.toggleAudioSourceDrawer() },
         onToggleSrtlaStats = onToggleSrtlaStats,
         modifier = modifier
     )
@@ -128,6 +131,7 @@ fun SourceControlsBar(
     showCameraControls: Boolean,
     isCameraControlsDrawerOpen: Boolean = false,
     isRtmpSettingsDrawerOpen: Boolean = false,
+    isAudioSourceDrawerOpen: Boolean = false,
     activeRtmpIndex: Int?,
     rtmpSourceCount: Int,
     isUvcSource: Boolean,
@@ -150,7 +154,8 @@ fun SourceControlsBar(
     onToggleMonitorAudio: () -> Unit,
     onToggleBluetoothMic: () -> Unit,
     onToggleSystemAudio: () -> Unit,
-    onToggleAudioDebug: () -> Unit,
+    onToggleAudioDebug: () -> Unit = {},
+    onToggleAudioSourceDrawer: () -> Unit = onToggleAudioDebug,
     onToggleSrtlaStats: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -288,12 +293,12 @@ fun SourceControlsBar(
                 )
             }
 
-            // 10. Audio Debug Toggle Button
+            // 10. Audio Source Drawer Toggle Button
             if (!isRtmpSource) {
                 SourceButton(
                     text = "AUDIO SRC",
-                    isActive = isAudioDebugOverlayVisible,
-                    onClick = onToggleAudioDebug
+                    isActive = isAudioSourceDrawerOpen || isAudioDebugOverlayVisible,
+                    onClick = onToggleAudioSourceDrawer
                 )
             }
 
@@ -601,6 +606,7 @@ private fun PreviewSourceControlsBarUsbMode() {
         showCameraControls = false,
         isCameraControlsDrawerOpen = false,
         isRtmpSettingsDrawerOpen = false,
+        isAudioSourceDrawerOpen = false,
         activeRtmpIndex = null,
         rtmpSourceCount = 1,
         isUvcSource = true,
@@ -624,6 +630,49 @@ private fun PreviewSourceControlsBarUsbMode() {
         onToggleBluetoothMic = {},
         onToggleSystemAudio = {},
         onToggleAudioDebug = {},
+        onToggleAudioSourceDrawer = {},
         onToggleSrtlaStats = {}
     )
 }
+
+@Preview(name = "Audio Source Drawer Open", showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PreviewSourceControlsBarAudioDrawerOpen() {
+    SourceControlsBar(
+        cameras = listOf(
+            PreviewViewModel.CameraInfo("0", "Back (0)", "BACK"),
+            PreviewViewModel.CameraInfo("1", "Front (1)", "FRONT")
+        ),
+        selectedCameraId = "0",
+        showCameraControls = true,
+        isCameraControlsDrawerOpen = false,
+        isRtmpSettingsDrawerOpen = false,
+        isAudioSourceDrawerOpen = true,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 2,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = true,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleCameraControls = {},
+        onToggleRtmpSettings = {},
+        onToggleRtmpSource = {},
+        onLaunchRtmpServer = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleAudioDebug = {},
+        onToggleAudioSourceDrawer = {},
+        onToggleSrtlaStats = {}
+    )
+}
+
