@@ -590,7 +590,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val encoder = config?.mimeType ?: ApplicationConstants.Audio.defaultEncoder
             val storedChannelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
             val storedBitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
-            val defaultSampleRate = if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) 48000 else ApplicationConstants.Audio.defaultSampleRate
+            val defaultSampleRate = ApplicationConstants.Audio.defaultSampleRateFor(encoder)
             val sampleRate = config?.sampleRate ?: defaultSampleRate
             val storedProfile = config?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
             // True when a supported-values query failed and guessed values are used instead
@@ -609,10 +609,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 usedFallback = true
                 Range(1, 2)
             }
-            val candidateChannels = listOf(
-                AudioFormat.CHANNEL_IN_STEREO to "Stereo",
-                AudioFormat.CHANNEL_IN_MONO to "Mono"
-            )
+            val candidateChannels = ApplicationConstants.Audio.channelConfigOptions
             val availableChannelConfigs = candidateChannels.filter { (cfg, _) ->
                 inputChannelRange.contains(AudioConfig.getNumberOfChannels(cfg))
             }.ifEmpty { candidateChannels }
@@ -627,15 +624,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 streamerInfo.audio.getSupportedBitrates(encoder)
             } catch (_: Throwable) {
                 usedFallback = true
-                Range(32000, 320000)
+                ApplicationConstants.Audio.assumedBitrateRange
             }
-            val candidateBitrates = listOf(64000, 96000, 128000, 160000, 192000, 256000, 320000)
+            val candidateBitrates = ApplicationConstants.Audio.bitrateOptions
             val supportedBitrates = candidateBitrates.filter { bitrateRange.contains(it) }
                 .ifEmpty { candidateBitrates }
             val availableBitrates = supportedBitrates.map { it to "${it / 1000} Kbps" }
             val bitrate = when {
                 supportedBitrates.contains(storedBitrate) -> storedBitrate
-                supportedBitrates.contains(128000) -> 128000
+                supportedBitrates.contains(ApplicationConstants.Audio.defaultBitrateInBps) ->
+                    ApplicationConstants.Audio.defaultBitrateInBps
                 else -> supportedBitrates.first()
             }
 
@@ -643,19 +641,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 streamerInfo.audio.getSupportedSampleRates(encoder)
             } catch (_: Throwable) {
                 usedFallback = true
-                if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) listOf(48000) else listOf(44100, 48000)
+                if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) listOf(ApplicationConstants.Audio.opusSampleRate)
+                else ApplicationConstants.Audio.sampleRateFallbackOrder
             }
             val availableSampleRates = sampleRates.map {
                 it to "${"%.1f".format(Locale.US, it.toFloat() / 1000)} kHz"
             }
             val actualSampleRate = if (sampleRates.contains(sampleRate)) {
                 sampleRate
-            } else if (sampleRates.contains(44100)) {
-                44100
-            } else if (sampleRates.contains(48000)) {
-                48000
             } else {
-                sampleRates.firstOrNull() ?: defaultSampleRate
+                ApplicationConstants.Audio.sampleRateFallbackOrder.firstOrNull { sampleRates.contains(it) }
+                    ?: sampleRates.firstOrNull()
+                    ?: defaultSampleRate
             }
 
             val isProfileVisible = encoder == MediaFormat.MIMETYPE_AUDIO_AAC
@@ -718,24 +715,25 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 val endpointType = storageRepository.endpointTypeFlow.first()
                 val streamerInfo = StreamerInfoFactory(application, endpointType).build()
                 val bitrateRange = streamerInfo.audio.getSupportedBitrates(encoder)
-                val currentBitrate = _audioSettingsState.value?.bitrate ?: 128000
+                val currentBitrate = _audioSettingsState.value?.bitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
                 val targetBitrate = if (!bitrateRange.contains(currentBitrate)) {
-                    val candidateBitrates = listOf(128000, 96000, 64000, 160000, 192000)
-                    candidateBitrates.firstOrNull { bitrateRange.contains(it) }
+                    ApplicationConstants.Audio.bitrateFallbackOrder.firstOrNull { bitrateRange.contains(it) }
                         ?: bitrateRange.lower
                 } else {
                     currentBitrate
                 }
 
                 val sampleRates = streamerInfo.audio.getSupportedSampleRates(encoder)
-                val currentSampleRate = _audioSettingsState.value?.sampleRate ?: 44100
+                val currentSampleRate = _audioSettingsState.value?.sampleRate
+                    ?: ApplicationConstants.Audio.defaultSampleRate
                 val targetSampleRate = if (!sampleRates.contains(currentSampleRate)) {
                     when {
-                        encoder == MediaFormat.MIMETYPE_AUDIO_OPUS && sampleRates.contains(48000) -> 48000
-                        sampleRates.contains(44100) -> 44100
-                        sampleRates.contains(48000) -> 48000
-                        sampleRates.isNotEmpty() -> sampleRates.first()
-                        else -> if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) 48000 else 44100
+                        encoder == MediaFormat.MIMETYPE_AUDIO_OPUS &&
+                            sampleRates.contains(ApplicationConstants.Audio.opusSampleRate) ->
+                            ApplicationConstants.Audio.opusSampleRate
+                        else -> ApplicationConstants.Audio.sampleRateFallbackOrder.firstOrNull { sampleRates.contains(it) }
+                            ?: sampleRates.firstOrNull()
+                            ?: ApplicationConstants.Audio.defaultSampleRateFor(encoder)
                     }
                 } else {
                     currentSampleRate

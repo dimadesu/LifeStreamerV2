@@ -1,6 +1,9 @@
 package com.dimadesu.lifestreamer
 
 import android.content.pm.ActivityInfo
+import android.media.AudioFormat
+import android.media.MediaFormat
+import android.util.Range
 import io.github.thibaultbee.streampack.core.streamers.single.AudioConfig
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
 
@@ -79,6 +82,50 @@ object ApplicationConstants {
          * Default byte format.
          */
         val defaultByteFormat = defaultAudioConfig.byteFormat
+
+        /**
+         * Default sample rate for [mimeType]. Opus is always 48 kHz.
+         */
+        fun defaultSampleRateFor(mimeType: String) =
+            if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS) opusSampleRate else defaultSampleRate
+
+        /**
+         * Default and fallback Opus sample rate.
+         */
+        const val opusSampleRate = 48_000
+
+        /**
+         * Sample rates supported by Opus.
+         */
+        val opusSupportedSampleRates = listOf(8_000, 12_000, 16_000, 24_000, 48_000)
+
+        /**
+         * Sample rates to fall back to, in order, when the stored one is not supported.
+         */
+        val sampleRateFallbackOrder = listOf(44_100, 48_000)
+
+        /**
+         * Bitrates offered in the audio settings.
+         */
+        val bitrateOptions = listOf(64_000, 96_000, 128_000, 160_000, 192_000, 256_000, 320_000)
+
+        /**
+         * Bitrates to fall back to, in order, when the stored one is not supported.
+         */
+        val bitrateFallbackOrder = listOf(defaultBitrateInBps, 96_000, 64_000, 160_000, 192_000)
+
+        /**
+         * Bitrate range assumed when the supported range cannot be queried.
+         */
+        val assumedBitrateRange = Range(32_000, 320_000)
+
+        /**
+         * Channel configs offered in the audio settings, with their labels.
+         */
+        val channelConfigOptions = listOf(
+            AudioFormat.CHANNEL_IN_STEREO to "Stereo",
+            AudioFormat.CHANNEL_IN_MONO to "Mono"
+        )
     }
 
     object Connection {

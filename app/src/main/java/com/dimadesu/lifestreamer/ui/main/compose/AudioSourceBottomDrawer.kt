@@ -63,6 +63,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
@@ -311,7 +312,9 @@ fun AudioSourceBottomDrawer(
                         // Channels Dropdown
                         val currentChannelName = audioSettingsState.availableChannelConfigs
                             .firstOrNull { it.first == audioSettingsState.channelConfig }?.second
-                            ?: if (audioSettingsState.channelConfig == 12) "Stereo" else "Mono"
+                            ?: ApplicationConstants.Audio.channelConfigOptions
+                                .firstOrNull { it.first == audioSettingsState.channelConfig }?.second
+                            ?: "${audioSettingsState.channelConfig}"
                         AudioDropdownRow(
                             title = "Channels",
                             currentValue = audioSettingsState.channelConfig,

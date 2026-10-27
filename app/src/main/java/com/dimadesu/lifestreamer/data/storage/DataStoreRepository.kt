@@ -55,21 +55,14 @@ class DataStoreRepository(
         val mimeType =
             preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))]
                 ?: ApplicationConstants.Audio.defaultEncoder
-        val defaultSampleRate = if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS) {
-            48000
-        } else {
-            ApplicationConstants.Audio.defaultSampleRate
-        }
         var sampleRate =
             preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))]?.toIntOrNull()
-                ?: defaultSampleRate
+                ?: ApplicationConstants.Audio.defaultSampleRateFor(mimeType)
 
-        // Opus only supports 8000, 12000, 16000, 24000, 48000
-        if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS) {
-            val opusSupportedRates = listOf(8000, 12000, 16000, 24000, 48000)
-            if (!opusSupportedRates.contains(sampleRate)) {
-                sampleRate = 48000
-            }
+        if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS &&
+            !ApplicationConstants.Audio.opusSupportedSampleRates.contains(sampleRate)
+        ) {
+            sampleRate = ApplicationConstants.Audio.opusSampleRate
         }
 
         val startBitrate =
