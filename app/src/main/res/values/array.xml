@@ -22,28 +22,6 @@
         <item>@string/srt_server_moblin_regulator_mode_value_slow</item>
     </string-array>
 
-    <string-array name="AudioChannelConfigEntries">
-        <item>Mono</item>
-        <item>Stereo</item>
-    </string-array>
-
-    <string-array name="AudioChannelConfigEntryValues">
-        <!-- CHANNEL_IN_MONO = 16 -->
-        <item>16</item>
-        <!-- CHANNEL_IN_STEREO = 12 -->
-        <item>12</item>
-    </string-array>
-
-    <string-array name="AudioBitrateEntryValues">
-        <item>64000</item>
-        <item>96000</item>
-        <item>128000</item>
-        <item>160000</item>
-        <item>192000</item>
-        <item>256000</item>
-        <item>320000</item>
-    </string-array>
-
     <!-- Audio Source Types (MediaRecorder.AudioSource constants) -->
     <string-array name="AudioSourceTypeEntries">
         <!-- <item>DEFAULT</item> -->

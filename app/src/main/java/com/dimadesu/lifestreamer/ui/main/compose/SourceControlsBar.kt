@@ -293,10 +293,11 @@ fun SourceControlsBar(
                 )
             }
 
-            // 10. Audio Source Drawer Toggle Button
+            // 10. Audio Settings & Source Drawer Toggle Button
             if (!isRtmpSource) {
                 SourceButton(
-                    text = "AUDIO SRC",
+                    text = "AUDIO",
+                    trailingIcon = R.drawable.ic_baseline_settings_24,
                     isActive = isAudioSourceDrawerOpen || isAudioDebugOverlayVisible,
                     onClick = onToggleAudioSourceDrawer
                 )
@@ -325,6 +326,7 @@ fun SourceButton(
     modifier: Modifier = Modifier,
     minWidth: Dp = Dp.Unspecified,
     leadingIcon: Int? = null,
+    trailingIcon: Int? = null,
 ) {
     Button(
         onClick = onClick,
@@ -354,6 +356,14 @@ fun SourceButton(
                 color = Color.White,
                 fontSize = 14.sp
             )
+            if (trailingIcon != null) {
+                Icon(
+                    painter = painterResource(id = trailingIcon),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

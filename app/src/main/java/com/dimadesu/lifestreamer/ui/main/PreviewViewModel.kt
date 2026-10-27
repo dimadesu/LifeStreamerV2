@@ -26,14 +26,20 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.CaptureResult
+import android.media.AudioFormat
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.util.Range
 import android.util.Rational
+import java.util.Locale
+import com.dimadesu.lifestreamer.ApplicationConstants
+import com.dimadesu.lifestreamer.utils.ProfileLevelDisplay
+import com.dimadesu.lifestreamer.utils.StreamerInfoFactory
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -558,6 +564,235 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     fun setSelectedAudioSourceType(sourceType: Int) {
         _selectedAudioSourceType.value = sourceType
     }
+
+    data class AudioSettingsState(
+        val encoder: String = ApplicationConstants.Audio.defaultEncoder,
+        val channelConfig: Int = ApplicationConstants.Audio.defaultChannelConfig,
+        val bitrate: Int = ApplicationConstants.Audio.defaultBitrateInBps,
+        val sampleRate: Int = ApplicationConstants.Audio.defaultSampleRate,
+        val profile: Int = MediaCodecInfo.CodecProfileLevel.AACObjectLC,
+        val availableEncoders: List<Pair<String, String>> = emptyList(),
+        val availableChannelConfigs: List<Pair<Int, String>> = emptyList(),
+        val availableBitrates: List<Pair<Int, String>> = emptyList(),
+        val availableSampleRates: List<Pair<Int, String>> = emptyList(),
+        val availableProfiles: List<Pair<Int, String>> = emptyList(),
+        val isProfileVisible: Boolean = true
+    )
+
+    private val profileLevelDisplay by lazy { ProfileLevelDisplay(application) }
+
+    private val _audioSettingsState = MutableLiveData<AudioSettingsState>()
+    val audioSettingsState: LiveData<AudioSettingsState> = _audioSettingsState
+
+    fun updateAudioSettingsState(config: AudioConfig?, endpointType: com.dimadesu.lifestreamer.models.EndpointType) {
+        try {
+            val streamerInfo = StreamerInfoFactory(application, endpointType).build()
+            val encoder = config?.mimeType ?: ApplicationConstants.Audio.defaultEncoder
+            val storedChannelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
+            val storedBitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
+            val defaultSampleRate = ApplicationConstants.Audio.defaultSampleRateFor(encoder)
+            val sampleRate = config?.sampleRate ?: defaultSampleRate
+            val storedProfile = config?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
+            // True when a supported-values query failed and guessed values are used instead
+            var usedFallback = false
+
+            val supportedEncoders = streamerInfo.audio.supportedEncoders
+            val encoderNameMap = mapOf(
+                MediaFormat.MIMETYPE_AUDIO_AAC to application.getString(R.string.audio_encoder_aac),
+                MediaFormat.MIMETYPE_AUDIO_OPUS to application.getString(R.string.audio_encoder_opus)
+            )
+            val availableEncoders = supportedEncoders.map { it to (encoderNameMap[it] ?: it) }
+
+            val inputChannelRange: Range<Int> = try {
+                streamerInfo.audio.getSupportedInputChannelRange(encoder)
+            } catch (_: Throwable) {
+                usedFallback = true
+                Range(1, 2)
+            }
+            val candidateChannels = ApplicationConstants.Audio.channelConfigOptions
+            val availableChannelConfigs = candidateChannels.filter { (cfg, _) ->
+                inputChannelRange.contains(AudioConfig.getNumberOfChannels(cfg))
+            }.ifEmpty { candidateChannels }
+            val supportedChannelConfigs = availableChannelConfigs.map { it.first }
+            val channelConfig = if (supportedChannelConfigs.contains(storedChannelConfig)) {
+                storedChannelConfig
+            } else {
+                supportedChannelConfigs.first()
+            }
+
+            val bitrateRange: Range<Int> = try {
+                streamerInfo.audio.getSupportedBitrates(encoder)
+            } catch (_: Throwable) {
+                usedFallback = true
+                ApplicationConstants.Audio.assumedBitrateRange
+            }
+            val candidateBitrates = ApplicationConstants.Audio.bitrateOptions
+            val supportedBitrates = candidateBitrates.filter { bitrateRange.contains(it) }
+                .ifEmpty { candidateBitrates }
+            val availableBitrates = supportedBitrates.map { it to "${it / 1000} Kbps" }
+            val bitrate = when {
+                supportedBitrates.contains(storedBitrate) -> storedBitrate
+                supportedBitrates.contains(ApplicationConstants.Audio.defaultBitrateInBps) ->
+                    ApplicationConstants.Audio.defaultBitrateInBps
+                else -> supportedBitrates.first()
+            }
+
+            val sampleRates = try {
+                streamerInfo.audio.getSupportedSampleRates(encoder)
+            } catch (_: Throwable) {
+                usedFallback = true
+                if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) listOf(ApplicationConstants.Audio.opusSampleRate)
+                else ApplicationConstants.Audio.sampleRateFallbackOrder
+            }
+            val availableSampleRates = sampleRates.map {
+                it to "${"%.1f".format(Locale.US, it.toFloat() / 1000)} kHz"
+            }
+            val actualSampleRate = if (sampleRates.contains(sampleRate)) {
+                sampleRate
+            } else {
+                ApplicationConstants.Audio.sampleRateFallbackOrder.firstOrNull { sampleRates.contains(it) }
+                    ?: sampleRates.firstOrNull()
+                    ?: defaultSampleRate
+            }
+
+            val isProfileVisible = encoder == MediaFormat.MIMETYPE_AUDIO_AAC
+            val supportedProfiles = if (isProfileVisible) {
+                try {
+                    streamerInfo.audio.getSupportedProfiles(encoder)
+                } catch (_: Throwable) {
+                    usedFallback = true
+                    listOf(MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                }
+            } else {
+                emptyList()
+            }
+            val availableProfiles = supportedProfiles.map { it to profileLevelDisplay.getProfileName(encoder, it) }
+            val profile = when {
+                !isProfileVisible || supportedProfiles.contains(storedProfile) -> storedProfile
+                supportedProfiles.contains(MediaCodecInfo.CodecProfileLevel.AACObjectLC) ->
+                    MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                else -> supportedProfiles.firstOrNull() ?: 0
+            }
+
+            // Persist corrected values so the stored config matches what is shown and used
+            if (config != null && !usedFallback &&
+                (bitrate != storedBitrate || actualSampleRate != config.sampleRate || profile != storedProfile || channelConfig != storedChannelConfig)
+            ) {
+                viewModelScope.launch {
+                    storageRepository.saveAudioEncoderAndConfig(
+                        encoder = encoder,
+                        sampleRate = actualSampleRate,
+                        bitrate = bitrate,
+                        profile = profile,
+                        channelConfig = channelConfig
+                    )
+                }
+            }
+
+            _audioSettingsState.postValue(
+                AudioSettingsState(
+                    encoder = encoder,
+                    channelConfig = channelConfig,
+                    bitrate = bitrate,
+                    sampleRate = actualSampleRate,
+                    profile = profile,
+                    availableEncoders = availableEncoders,
+                    availableChannelConfigs = availableChannelConfigs,
+                    availableBitrates = availableBitrates,
+                    availableSampleRates = availableSampleRates,
+                    availableProfiles = availableProfiles,
+                    isProfileVisible = isProfileVisible
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to compute audio settings state", e)
+        }
+    }
+
+    fun setAudioEncoder(encoder: String) {
+        viewModelScope.launch {
+            try {
+                val endpointType = storageRepository.endpointTypeFlow.first()
+                val streamerInfo = StreamerInfoFactory(application, endpointType).build()
+                val bitrateRange = streamerInfo.audio.getSupportedBitrates(encoder)
+                val currentBitrate = _audioSettingsState.value?.bitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
+                val targetBitrate = if (!bitrateRange.contains(currentBitrate)) {
+                    ApplicationConstants.Audio.bitrateFallbackOrder.firstOrNull { bitrateRange.contains(it) }
+                        ?: bitrateRange.lower
+                } else {
+                    currentBitrate
+                }
+
+                val sampleRates = streamerInfo.audio.getSupportedSampleRates(encoder)
+                val currentSampleRate = _audioSettingsState.value?.sampleRate
+                    ?: ApplicationConstants.Audio.defaultSampleRate
+                val targetSampleRate = if (!sampleRates.contains(currentSampleRate)) {
+                    when {
+                        encoder == MediaFormat.MIMETYPE_AUDIO_OPUS &&
+                            sampleRates.contains(ApplicationConstants.Audio.opusSampleRate) ->
+                            ApplicationConstants.Audio.opusSampleRate
+                        else -> ApplicationConstants.Audio.sampleRateFallbackOrder.firstOrNull { sampleRates.contains(it) }
+                            ?: sampleRates.firstOrNull()
+                            ?: ApplicationConstants.Audio.defaultSampleRateFor(encoder)
+                    }
+                } else {
+                    currentSampleRate
+                }
+
+                val targetProfile = if (encoder == MediaFormat.MIMETYPE_AUDIO_AAC) {
+                    val profiles = streamerInfo.audio.getSupportedProfiles(encoder)
+                    val currentProfile = _audioSettingsState.value?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                    if (!profiles.contains(currentProfile)) {
+                        if (profiles.contains(MediaCodecInfo.CodecProfileLevel.AACObjectLC)) {
+                            MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                        } else if (profiles.isNotEmpty()) {
+                            profiles.first()
+                        } else {
+                            0
+                        }
+                    } else {
+                        currentProfile
+                    }
+                } else {
+                    0
+                }
+
+                storageRepository.saveAudioEncoderAndConfig(
+                    encoder = encoder,
+                    sampleRate = targetSampleRate,
+                    bitrate = targetBitrate,
+                    profile = targetProfile
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Error validating audio settings for new encoder: ${e.message}")
+                storageRepository.saveAudioEncoder(encoder)
+            }
+        }
+    }
+
+    fun setAudioChannelConfig(channelConfig: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioChannelConfig(channelConfig)
+        }
+    }
+
+    fun setAudioBitrate(bitrate: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioBitrate(bitrate)
+        }
+    }
+
+    fun setAudioSampleRate(sampleRate: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioSampleRate(sampleRate)
+        }
+    }
+
+    fun setAudioProfile(profile: Int) {
+        viewModelScope.launch {
+            storageRepository.saveAudioProfile(profile)
+        }
+    }
     
     // MediaProjection session for streaming
     private var streamingMediaProjection: MediaProjection? = null
@@ -718,6 +953,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         }
                     }
                 }
+        }
+
+        // Observe audio config and endpoint type to update AudioSettingsState
+        viewModelScope.launch {
+            combine(
+                storageRepository.audioConfigFlow,
+                storageRepository.endpointTypeFlow
+            ) { config, endpointType ->
+                config to endpointType
+            }.collect { (config, endpointType) ->
+                updateAudioSettingsState(config, endpointType)
+            }
         }
 
         // Status-to-notification messaging removed; UI no longer shows sliding panel
@@ -1562,13 +1809,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }
 
-        // When streaming stops, apply any pending rotation change.
-        // BUT: Don't apply during reconnection - we want to keep the locked orientation
+        // When streaming stops, apply any pending rotation change and audio config.
+        // BUT: Don't apply during reconnection - we want to keep the locked orientation and avoid interrupting reconnect
         viewModelScope.launch {
             serviceReadyFlow.collect { isReady ->
                 if (isReady) {
-                    serviceStreamer?.isStreamingFlow?.collect { isStreaming ->
-                        if (!isStreaming && service?.isReconnecting?.value != true) {
+                    val isStreamingFlow = serviceStreamer?.isStreamingFlow ?: return@collect
+                    val isReconnectingFlow = service?.isReconnecting ?: return@collect
+                    combine(isStreamingFlow, isReconnectingFlow) { isStreaming, isReconnecting ->
+                        isStreaming to isReconnecting
+                    }.collect { (isStreaming, isReconnecting) ->
+                        if (!isStreaming && !isReconnecting) {
                             pendingTargetRotation?.let { pending ->
                                 Log.i(TAG, "Applying pending rotation $pending after stream stopped")
                                 try {
@@ -1578,8 +1829,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                 }
                                 pendingTargetRotation = null
                             }
-                        } else if (!isStreaming && service?.isReconnecting?.value == true) {
-                            Log.i(TAG, "Skipping pending rotation application during reconnection (pending: $pendingTargetRotation)")
+                            if (isUiInForeground) {
+                                applyPendingAudioConfig()
+                            }
+                        } else if (!isStreaming && isReconnecting) {
+                            Log.i(TAG, "Skipping pending rotation/audio application during reconnection (pending rotation: $pendingTargetRotation, audio: $pendingAudioConfig)")
                         }
                     }
                 }
@@ -1647,9 +1901,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             storageRepository.audioConfigFlow
                 .collect { config ->
-                    // Don't change audio config while streaming to avoid configuration conflicts
-                    if (serviceStreamer?.isStreamingFlow?.value == true) {
-                        Log.i(TAG, "Skipping audio config change - streamer is currently streaming")
+                    // Don't change audio config while streaming or reconnecting to avoid configuration conflicts
+                    if (serviceStreamer?.isStreamingFlow?.value == true || service?.isReconnecting?.value == true) {
+                        Log.i(TAG, "Deferring audio config change - streamer is currently streaming or reconnecting")
+                        pendingAudioConfig = config
                         return@collect
                     }
                     
@@ -4947,6 +5202,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch {
                 _selectedAudioSourceType.value = storageRepository.audioSourceTypeFlow.first()
                 Log.d(TAG, "Loaded audio source from DataStore: source=${_selectedAudioSourceType.value}")
+            }
+
+            // Refresh audio settings state when opening drawer
+            viewModelScope.launch {
+                val config = storageRepository.audioConfigFlow.first()
+                val endpointType = storageRepository.endpointTypeFlow.first()
+                updateAudioSettingsState(config, endpointType)
             }
 
             // Refresh immediately when showing the drawer

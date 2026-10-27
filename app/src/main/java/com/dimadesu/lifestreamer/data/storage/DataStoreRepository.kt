@@ -55,34 +55,52 @@ class DataStoreRepository(
         val mimeType =
             preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))]
                 ?: ApplicationConstants.Audio.defaultEncoder
+        var sampleRate =
+            preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))]?.toIntOrNull()
+                ?: ApplicationConstants.Audio.defaultSampleRateFor(mimeType)
+
+        if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS &&
+            !ApplicationConstants.Audio.opusSupportedSampleRates.contains(sampleRate)
+        ) {
+            sampleRate = ApplicationConstants.Audio.opusSampleRate
+        }
+
         val startBitrate =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))]?.toIntOrNull()
                 ?: ApplicationConstants.Audio.defaultBitrateInBps
 
         val channelConfig =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))]?.toIntOrNull()
                 ?: ApplicationConstants.Audio.defaultChannelConfig
-        val sampleRate =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))]?.toInt()
-                ?: ApplicationConstants.Audio.defaultSampleRate
+
         val byteFormat =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_byte_format_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_byte_format_key))]?.toIntOrNull()
                 ?: ApplicationConstants.Audio.defaultByteFormat
         val profile =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))]?.toIntOrNull()
                 ?: if (mimeType == MediaFormat.MIMETYPE_AUDIO_AAC) {
                     MediaCodecInfo.CodecProfileLevel.AACObjectLC
                 } else {
                     0
                 }
-        AudioConfig(
-            mimeType = mimeType,
-            channelConfig = channelConfig,
-            startBitrate = startBitrate,
-            sampleRate = sampleRate,
-            byteFormat = byteFormat,
-            profile = profile
-        )
+
+        try {
+            AudioConfig(
+                mimeType = mimeType,
+                channelConfig = channelConfig,
+                startBitrate = startBitrate,
+                sampleRate = sampleRate,
+                byteFormat = byteFormat,
+                profile = profile
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("DataStoreRepository", "Failed to build AudioConfig (mimeType=$mimeType, sampleRate=$sampleRate): ${e.message}", e)
+            try {
+                AudioConfig()
+            } catch (_: Exception) {
+                null
+            }
+        }
     }.distinctUntilChanged()
 
     val isVideoEnableFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -499,10 +517,71 @@ class DataStoreRepository(
         com.dimadesu.lifestreamer.models.StreamOrientation.fromId(stored)
     }.distinctUntilChanged()
 
+    val endpointTypeFlow: Flow<com.dimadesu.lifestreamer.models.EndpointType> = dataStore.data.map { preferences ->
+        val endpointTypeId =
+            preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
+                ?: com.dimadesu.lifestreamer.models.EndpointType.SRT.id
+        com.dimadesu.lifestreamer.models.EndpointType.fromId(endpointTypeId)
+    }.distinctUntilChanged()
+
     // Save methods for audio settings
     suspend fun saveAudioSourceType(sourceType: Int) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(context.getString(R.string.audio_source_type_key))] = sourceType.toString()
+        }
+    }
+
+    suspend fun saveAudioEncoder(encoder: String) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))] = encoder
+        }
+    }
+
+    suspend fun saveAudioEncoderAndConfig(
+        encoder: String,
+        sampleRate: Int? = null,
+        bitrate: Int? = null,
+        profile: Int? = null,
+        channelConfig: Int? = null
+    ) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))] = encoder
+            sampleRate?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))] = it.toString()
+            }
+            bitrate?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))] = it.toString()
+            }
+            profile?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = it.toString()
+            }
+            channelConfig?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))] = it.toString()
+            }
+        }
+    }
+
+    suspend fun saveAudioChannelConfig(channelConfig: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))] = channelConfig.toString()
+        }
+    }
+
+    suspend fun saveAudioBitrate(bitrate: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))] = bitrate.toString()
+        }
+    }
+
+    suspend fun saveAudioSampleRate(sampleRate: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))] = sampleRate.toString()
+        }
+    }
+
+    suspend fun saveAudioProfile(profile: Int) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = profile.toString()
         }
     }
 }
