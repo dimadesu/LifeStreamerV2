@@ -215,21 +215,22 @@ fun SourceControlsBar(
 
             // 4. USB Source Button
             if (!isRtmpSource && !isScreenSource) {
-                SourceButton(
-                    text = "USB SRC",
-                    isActive = isUvcSource,
-                    minWidth = 50.dp,
-                    onClick = onToggleUvc
-                )
-            }
-
-            // 5. USB Test / Settings Button
-            if (!isRtmpSource && !isUvcSource && !isScreenSource) {
-                SourceButton(
-                    text = "USB SRC ⚙️",
-                    isActive = false,
-                    onClick = onLaunchUvcTest
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    SourceButton(
+                        text = "USB SRC",
+                        isActive = isUvcSource,
+                        minWidth = 50.dp,
+                        onClick = onToggleUvc
+                    )
+                    if (!isUvcSource) {
+                        UsbSettingsButton(
+                            onClick = onLaunchUvcTest
+                        )
+                    }
+                }
             }
 
             // 6. Screen Capture Button
@@ -364,6 +365,35 @@ fun CameraSettingsButton(
     }
 }
 
+/**
+ * Settings button displayed next to the USB source button.
+ * Launches the UVC test/configuration activity.
+ */
+@Composable
+fun UsbSettingsButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF616161),
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.size(40.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_baseline_settings_24),
+            contentDescription = stringResource(R.string.usb_settings),
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
 @Preview(name = "Default Camera Mode", showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun PreviewSourceControlsBarCameraMode() {
@@ -450,6 +480,38 @@ private fun PreviewSourceControlsBarRtmpMode() {
         isUvcSource = false,
         isScreenSource = false,
         isMonitorAudioOn = true,
+        showBluetoothToggle = false,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = false,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onLaunchRtmpServer = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleAudioDebug = {},
+        onToggleSrtlaStats = {}
+    )
+}
+
+@Preview(name = "USB Mode Active", showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+private fun PreviewSourceControlsBarUsbMode() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = true,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
         showBluetoothToggle = false,
         useBluetoothMic = false,
         useSystemAudioForCamera = false,
