@@ -4661,6 +4661,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         // Clean up audio level monitoring
         disableAudioLevelMonitoring()
+
+        // Clean up audio debug refresh loop
+        audioDebugRefreshJob?.cancel()
+        audioDebugRefreshJob = null
+        _audioDebugInfoLiveData.postValue(null)
         
         // Cancel any pending reconnection attempts
         reconnectTimer.stop()
