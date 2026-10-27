@@ -543,7 +543,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val _audioDebugInfoLiveData = MutableLiveData<com.dimadesu.lifestreamer.models.AudioDebugInfo?>()
     val audioDebugInfoLiveData: LiveData<com.dimadesu.lifestreamer.models.AudioDebugInfo?> = _audioDebugInfoLiveData
 
-    // Audio debug overlay visibility state
+    // Audio source drawer visibility state
+    private val _isAudioSourceDrawerOpen = MutableLiveData(false)
+    val isAudioSourceDrawerOpen: LiveData<Boolean> = _isAudioSourceDrawerOpen
+
+    // Audio debug overlay visibility state (kept in sync with drawer)
     private val _isAudioDebugOverlayVisible = MutableLiveData(false)
     val isAudioDebugOverlayVisible: LiveData<Boolean> = _isAudioDebugOverlayVisible
     
@@ -4188,6 +4192,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         _isRtmpSettingsDrawerOpen.value = next
         if (next) {
             _isCameraControlsDrawerOpen.value = false
+            setAudioSourceDrawerOpen(false)
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4198,6 +4203,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         _isRtmpSettingsDrawerOpen.value = open
         if (open) {
             _isCameraControlsDrawerOpen.value = false
+            setAudioSourceDrawerOpen(false)
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4262,6 +4268,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             if (uvcOn || screenOn) {
                 _isRtmpSettingsDrawerOpen.value = false
             }
+            if (rtmpOn) {
+                setAudioSourceDrawerOpen(false)
+            }
         }
         
         addSource(_activeRtmpIndex) { 
@@ -4286,6 +4295,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         _isCameraControlsDrawerOpen.value = next
         if (next) {
             _isRtmpSettingsDrawerOpen.value = false
+            setAudioSourceDrawerOpen(false)
         }
         if (!next) {
             showExposureSlider.value = false
@@ -4298,6 +4308,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         _isCameraControlsDrawerOpen.value = open
         if (open) {
             _isRtmpSettingsDrawerOpen.value = false
+            setAudioSourceDrawerOpen(false)
         }
         if (!open) {
             showExposureSlider.value = false
@@ -4650,6 +4661,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         // Clean up audio level monitoring
         disableAudioLevelMonitoring()
+
+        // Clean up audio debug refresh loop
+        audioDebugRefreshJob?.cancel()
+        audioDebugRefreshJob = null
+        _audioDebugInfoLiveData.postValue(null)
         
         // Cancel any pending reconnection attempts
         reconnectTimer.stop()
@@ -4906,19 +4922,34 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private var audioDebugRefreshJob: kotlinx.coroutines.Job? = null
     
     /**
-     * Toggle audio debug overlay visibility
+     * Toggles the audio source drawer visibility.
      */
-    fun toggleAudioDebugOverlay() {
-        val newValue = !(_isAudioDebugOverlayVisible.value ?: false)
-        _isAudioDebugOverlayVisible.value = newValue
-        if (newValue) {
-            // Load current audio source type from DataStore when opening overlay
+    fun toggleAudioSourceDrawer() {
+        val next = !(_isAudioSourceDrawerOpen.value ?: false)
+        setAudioSourceDrawerOpen(next)
+    }
+
+    /**
+     * Sets the audio source drawer visibility.
+     * When opened, closes any conflicting drawers and starts periodic audio debug stats refresh.
+     */
+    fun setAudioSourceDrawerOpen(open: Boolean) {
+        _isAudioSourceDrawerOpen.value = open
+        _isAudioDebugOverlayVisible.value = open
+        if (open) {
+            _isCameraControlsDrawerOpen.value = false
+            _isRtmpSettingsDrawerOpen.value = false
+            showExposureSlider.value = false
+            showZoomSlider.value = false
+            showLensDistanceSlider.value = false
+
+            // Load current audio source type from DataStore when opening drawer
             viewModelScope.launch {
                 _selectedAudioSourceType.value = storageRepository.audioSourceTypeFlow.first()
                 Log.d(TAG, "Loaded audio source from DataStore: source=${_selectedAudioSourceType.value}")
             }
-            
-            // Refresh immediately when showing the overlay
+
+            // Refresh immediately when showing the drawer
             refreshAudioDebugInfo()
             // Start periodic refresh every 2 seconds
             audioDebugRefreshJob?.cancel()
@@ -4932,9 +4963,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             // Stop periodic refresh
             audioDebugRefreshJob?.cancel()
             audioDebugRefreshJob = null
-            // Hide the overlay by setting info to null
+            // Clear debug info
             _audioDebugInfoLiveData.postValue(null)
         }
+    }
+
+    /**
+     * Legacy toggle for audio debug overlay — delegates to [toggleAudioSourceDrawer].
+     */
+    fun toggleAudioDebugOverlay() {
+        toggleAudioSourceDrawer()
     }
 
     companion object {

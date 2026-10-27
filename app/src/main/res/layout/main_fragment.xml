@@ -65,101 +65,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintVertical_bias="0.25" />
 
-        <!-- Audio Debug Info Overlay -->
-        <ScrollView
-            android:id="@+id/audioDebugOverlay"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:padding="12dp"
-            android:background="#CC000000"
-            android:elevation="100dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:goneUnless='@{viewmodel.audioDebugInfoLiveData != null &amp;&amp; !viewmodel.isRtmpSource}'>
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textStyle="bold"
-                    android:text="AUDIO SOURCE"
-                    android:paddingBottom="4dp" />
-
-                <Spinner
-                    android:id="@+id/audioSourceSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="#80FFFFFF"
-                    android:paddingVertical="4dp"
-                    android:paddingHorizontal="8dp"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="13sp"
-                    android:text="Try VOICE_COMMUNICATION\nif USB audio is too loud"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textStyle="bold"
-                    android:text="ACTUAL SYSTEM STATE" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp"
-                    android:text='@{"Input: " + viewmodel.audioDebugInfoLiveData.audioSource}' />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp"
-                    android:text='@{"Audio Source: " + viewmodel.audioDebugInfoLiveData.actualSystemSourceDisplay}' />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp"
-                    android:text='@{"Effects: " + viewmodel.audioDebugInfoLiveData.audioEffectsString}' />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp"
-                    android:text='@{"Sample Rate: " + viewmodel.audioDebugInfoLiveData.sampleRateKHz}' />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp"
-                    android:text='@{"Bit Format: " + viewmodel.audioDebugInfoLiveData.bitFormatString}' />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp"
-                    android:text='@{"Channels: " + viewmodel.audioDebugInfoLiveData.channelConfigString}' />
-
-            </LinearLayout>
-
-        </ScrollView>
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/sourceControlsComposeView"
@@ -218,6 +124,18 @@
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/rtmpDrawerComposeView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:elevation="30dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/audioSourceDrawerComposeView"
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:clipChildren="false"
