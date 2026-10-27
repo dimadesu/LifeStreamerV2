@@ -20,12 +20,14 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuInflater
+import android.view.MenuItem
 import android.widget.PopupMenu
 import androidx.appcompat.app.AppCompatActivity
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainActivityBinding
 import com.dimadesu.lifestreamer.rtmp.audio.MediaProjectionService
 import com.dimadesu.lifestreamer.services.CameraStreamerService
+import com.dimadesu.lifestreamer.ui.datastore.DataStoreActivity
 import com.dimadesu.lifestreamer.ui.settings.SettingsActivity
 import com.dimadesu.lifestreamer.ui.help.FaqHelpActivity
 import com.dimadesu.lifestreamer.ui.help.KnownIssuesActivity
@@ -120,6 +122,10 @@ class MainActivity : AppCompatActivity() {
                     goToSettingsActivity()
                     true
                 }
+                R.id.action_datastore -> {
+                    goToDataStoreActivity()
+                    true
+                }
                 R.id.action_rtmp_help -> {
                     goToRtmpHelpActivity()
                     true
@@ -157,6 +163,11 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    private fun goToDataStoreActivity() {
+        val intent = Intent(this, DataStoreActivity::class.java)
+        startActivity(intent)
+    }
+
     private fun goToRtmpHelpActivity() {
         val intent = Intent(this, RtmpHelpActivity::class.java)
         startActivity(intent)
@@ -185,6 +196,44 @@ class MainActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.actions, menu)
         return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                goToSettingsActivity()
+                true
+            }
+            R.id.action_datastore -> {
+                goToDataStoreActivity()
+                true
+            }
+            R.id.action_rtmp_help -> {
+                goToRtmpHelpActivity()
+                true
+            }
+            R.id.action_srt_help -> {
+                goToSrtHelpActivity()
+                true
+            }
+            R.id.action_uvc_help -> {
+                goToUvcHelpActivity()
+                true
+            }
+            R.id.action_faq -> {
+                goToFaqHelpActivity()
+                true
+            }
+            R.id.action_known_issues -> {
+                goToKnownIssuesActivity()
+                true
+            }
+            R.id.action_quit -> {
+                exitApp()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     companion object {
