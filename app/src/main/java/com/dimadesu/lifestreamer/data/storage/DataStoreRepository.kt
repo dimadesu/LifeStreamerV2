@@ -55,34 +55,59 @@ class DataStoreRepository(
         val mimeType =
             preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))]
                 ?: ApplicationConstants.Audio.defaultEncoder
+        val defaultSampleRate = if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS) {
+            48000
+        } else {
+            ApplicationConstants.Audio.defaultSampleRate
+        }
+        var sampleRate =
+            preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))]?.toIntOrNull()
+                ?: defaultSampleRate
+
+        // Opus only supports 8000, 12000, 16000, 24000, 48000
+        if (mimeType == MediaFormat.MIMETYPE_AUDIO_OPUS) {
+            val opusSupportedRates = listOf(8000, 12000, 16000, 24000, 48000)
+            if (!opusSupportedRates.contains(sampleRate)) {
+                sampleRate = 48000
+            }
+        }
+
         val startBitrate =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))]?.toIntOrNull()
                 ?: ApplicationConstants.Audio.defaultBitrateInBps
 
         val channelConfig =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))]?.toIntOrNull()
                 ?: ApplicationConstants.Audio.defaultChannelConfig
-        val sampleRate =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))]?.toInt()
-                ?: ApplicationConstants.Audio.defaultSampleRate
+
         val byteFormat =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_byte_format_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_byte_format_key))]?.toIntOrNull()
                 ?: ApplicationConstants.Audio.defaultByteFormat
         val profile =
-            preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))]?.toInt()
+            preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))]?.toIntOrNull()
                 ?: if (mimeType == MediaFormat.MIMETYPE_AUDIO_AAC) {
                     MediaCodecInfo.CodecProfileLevel.AACObjectLC
                 } else {
                     0
                 }
-        AudioConfig(
-            mimeType = mimeType,
-            channelConfig = channelConfig,
-            startBitrate = startBitrate,
-            sampleRate = sampleRate,
-            byteFormat = byteFormat,
-            profile = profile
-        )
+
+        try {
+            AudioConfig(
+                mimeType = mimeType,
+                channelConfig = channelConfig,
+                startBitrate = startBitrate,
+                sampleRate = sampleRate,
+                byteFormat = byteFormat,
+                profile = profile
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("DataStoreRepository", "Failed to build AudioConfig (mimeType=$mimeType, sampleRate=$sampleRate): ${e.message}", e)
+            try {
+                AudioConfig()
+            } catch (_: Exception) {
+                null
+            }
+        }
     }.distinctUntilChanged()
 
     val isVideoEnableFlow: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -516,6 +541,26 @@ class DataStoreRepository(
     suspend fun saveAudioEncoder(encoder: String) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))] = encoder
+        }
+    }
+
+    suspend fun saveAudioEncoderAndConfig(
+        encoder: String,
+        sampleRate: Int? = null,
+        bitrate: Int? = null,
+        profile: Int? = null
+    ) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))] = encoder
+            sampleRate?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_sample_rate_key))] = it.toString()
+            }
+            bitrate?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_bitrate_key))] = it.toString()
+            }
+            profile?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = it.toString()
+            }
         }
     }
 

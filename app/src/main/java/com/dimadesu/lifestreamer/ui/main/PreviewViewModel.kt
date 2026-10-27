@@ -590,7 +590,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val encoder = config?.mimeType ?: ApplicationConstants.Audio.defaultEncoder
             val channelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
             val bitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
-            val sampleRate = config?.sampleRate ?: ApplicationConstants.Audio.defaultSampleRate
+            val defaultSampleRate = if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) 48000 else ApplicationConstants.Audio.defaultSampleRate
+            val sampleRate = config?.sampleRate ?: defaultSampleRate
             val profile = config?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
 
             val supportedEncoders = streamerInfo.audio.supportedEncoders
@@ -626,10 +627,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val sampleRates = try {
                 streamerInfo.audio.getSupportedSampleRates(encoder)
             } catch (_: Throwable) {
-                listOf(44100, 48000)
+                if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) listOf(48000) else listOf(44100, 48000)
             }
             val availableSampleRates = sampleRates.map {
                 it to "${"%.1f".format(Locale.US, it.toFloat() / 1000)} kHz"
+            }
+            val actualSampleRate = if (sampleRates.contains(sampleRate)) {
+                sampleRate
+            } else if (sampleRates.contains(48000)) {
+                48000
+            } else {
+                sampleRates.firstOrNull() ?: defaultSampleRate
             }
 
             val isProfileVisible = encoder == MediaFormat.MIMETYPE_AUDIO_AAC
@@ -649,7 +657,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     encoder = encoder,
                     channelConfig = channelConfig,
                     bitrate = bitrate,
-                    sampleRate = sampleRate,
+                    sampleRate = actualSampleRate,
                     profile = profile,
                     availableEncoders = availableEncoders,
                     availableChannelConfigs = availableChannelConfigs,
@@ -666,47 +674,60 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun setAudioEncoder(encoder: String) {
         viewModelScope.launch {
-            storageRepository.saveAudioEncoder(encoder)
             try {
                 val endpointType = storageRepository.endpointTypeFlow.first()
                 val streamerInfo = StreamerInfoFactory(application, endpointType).build()
                 val bitrateRange = streamerInfo.audio.getSupportedBitrates(encoder)
                 val currentBitrate = _audioSettingsState.value?.bitrate ?: 128000
-                if (!bitrateRange.contains(currentBitrate)) {
+                val targetBitrate = if (!bitrateRange.contains(currentBitrate)) {
                     val candidateBitrates = listOf(128000, 96000, 64000, 160000, 192000)
-                    val fallbackBitrate = candidateBitrates.firstOrNull { bitrateRange.contains(it) }
+                    candidateBitrates.firstOrNull { bitrateRange.contains(it) }
                         ?: bitrateRange.lower
-                    storageRepository.saveAudioBitrate(fallbackBitrate)
+                } else {
+                    currentBitrate
                 }
 
                 val sampleRates = streamerInfo.audio.getSupportedSampleRates(encoder)
                 val currentSampleRate = _audioSettingsState.value?.sampleRate ?: 44100
-                if (!sampleRates.contains(currentSampleRate)) {
-                    val fallbackSampleRate = when {
-                        sampleRates.contains(48000) -> 48000
+                val targetSampleRate = if (!sampleRates.contains(currentSampleRate)) {
+                    when {
+                        encoder == MediaFormat.MIMETYPE_AUDIO_OPUS && sampleRates.contains(48000) -> 48000
                         sampleRates.contains(44100) -> 44100
+                        sampleRates.contains(48000) -> 48000
                         sampleRates.isNotEmpty() -> sampleRates.first()
-                        else -> 48000
+                        else -> if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) 48000 else 44100
                     }
-                    storageRepository.saveAudioSampleRate(fallbackSampleRate)
+                } else {
+                    currentSampleRate
                 }
 
-                if (encoder == MediaFormat.MIMETYPE_AUDIO_AAC) {
+                val targetProfile = if (encoder == MediaFormat.MIMETYPE_AUDIO_AAC) {
                     val profiles = streamerInfo.audio.getSupportedProfiles(encoder)
                     val currentProfile = _audioSettingsState.value?.profile ?: MediaCodecInfo.CodecProfileLevel.AACObjectLC
                     if (!profiles.contains(currentProfile)) {
-                        val fallbackProfile = if (profiles.contains(MediaCodecInfo.CodecProfileLevel.AACObjectLC)) {
+                        if (profiles.contains(MediaCodecInfo.CodecProfileLevel.AACObjectLC)) {
                             MediaCodecInfo.CodecProfileLevel.AACObjectLC
                         } else if (profiles.isNotEmpty()) {
                             profiles.first()
                         } else {
                             0
                         }
-                        storageRepository.saveAudioProfile(fallbackProfile)
+                    } else {
+                        currentProfile
                     }
+                } else {
+                    0
                 }
+
+                storageRepository.saveAudioEncoderAndConfig(
+                    encoder = encoder,
+                    sampleRate = targetSampleRate,
+                    bitrate = targetBitrate,
+                    profile = targetProfile
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "Error validating audio settings for new encoder: ${e.message}")
+                storageRepository.saveAudioEncoder(encoder)
             }
         }
     }
