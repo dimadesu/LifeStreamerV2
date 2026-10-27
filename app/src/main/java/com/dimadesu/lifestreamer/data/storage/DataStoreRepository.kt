@@ -548,7 +548,8 @@ class DataStoreRepository(
         encoder: String,
         sampleRate: Int? = null,
         bitrate: Int? = null,
-        profile: Int? = null
+        profile: Int? = null,
+        channelConfig: Int? = null
     ) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(context.getString(R.string.audio_encoder_key))] = encoder
@@ -560,6 +561,9 @@ class DataStoreRepository(
             }
             profile?.let {
                 preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = it.toString()
+            }
+            channelConfig?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.audio_channel_config_key))] = it.toString()
             }
         }
     }

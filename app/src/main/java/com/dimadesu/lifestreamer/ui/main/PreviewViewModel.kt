@@ -588,7 +588,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         try {
             val streamerInfo = StreamerInfoFactory(application, endpointType).build()
             val encoder = config?.mimeType ?: ApplicationConstants.Audio.defaultEncoder
-            val channelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
+            val storedChannelConfig = config?.channelConfig ?: ApplicationConstants.Audio.defaultChannelConfig
             val storedBitrate = config?.startBitrate ?: ApplicationConstants.Audio.defaultBitrateInBps
             val defaultSampleRate = if (encoder == MediaFormat.MIMETYPE_AUDIO_OPUS) 48000 else ApplicationConstants.Audio.defaultSampleRate
             val sampleRate = config?.sampleRate ?: defaultSampleRate
@@ -616,6 +616,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             val availableChannelConfigs = candidateChannels.filter { (cfg, _) ->
                 inputChannelRange.contains(AudioConfig.getNumberOfChannels(cfg))
             }.ifEmpty { candidateChannels }
+            val supportedChannelConfigs = availableChannelConfigs.map { it.first }
+            val channelConfig = if (supportedChannelConfigs.contains(storedChannelConfig)) {
+                storedChannelConfig
+            } else {
+                supportedChannelConfigs.first()
+            }
 
             val bitrateRange: Range<Int> = try {
                 streamerInfo.audio.getSupportedBitrates(encoder)
@@ -673,14 +679,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
             // Persist corrected values so the stored config matches what is shown and used
             if (config != null && !usedFallback &&
-                (bitrate != storedBitrate || actualSampleRate != config.sampleRate || profile != storedProfile)
+                (bitrate != storedBitrate || actualSampleRate != config.sampleRate || profile != storedProfile || channelConfig != storedChannelConfig)
             ) {
                 viewModelScope.launch {
                     storageRepository.saveAudioEncoderAndConfig(
                         encoder = encoder,
                         sampleRate = actualSampleRate,
                         bitrate = bitrate,
-                        profile = profile
+                        profile = profile,
+                        channelConfig = channelConfig
                     )
                 }
             }
@@ -1804,13 +1811,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }
 
-        // When streaming stops, apply any pending rotation change.
-        // BUT: Don't apply during reconnection - we want to keep the locked orientation
+        // When streaming stops, apply any pending rotation change and audio config.
+        // BUT: Don't apply during reconnection - we want to keep the locked orientation and avoid interrupting reconnect
         viewModelScope.launch {
             serviceReadyFlow.collect { isReady ->
                 if (isReady) {
-                    serviceStreamer?.isStreamingFlow?.collect { isStreaming ->
-                        if (!isStreaming && service?.isReconnecting?.value != true) {
+                    val isStreamingFlow = serviceStreamer?.isStreamingFlow ?: return@collect
+                    val isReconnectingFlow = service?.isReconnecting ?: return@collect
+                    combine(isStreamingFlow, isReconnectingFlow) { isStreaming, isReconnecting ->
+                        isStreaming to isReconnecting
+                    }.collect { (isStreaming, isReconnecting) ->
+                        if (!isStreaming && !isReconnecting) {
                             pendingTargetRotation?.let { pending ->
                                 Log.i(TAG, "Applying pending rotation $pending after stream stopped")
                                 try {
@@ -1820,8 +1831,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                 }
                                 pendingTargetRotation = null
                             }
-                        } else if (!isStreaming && service?.isReconnecting?.value == true) {
-                            Log.i(TAG, "Skipping pending rotation application during reconnection (pending: $pendingTargetRotation)")
+                            if (isUiInForeground) {
+                                applyPendingAudioConfig()
+                            }
+                        } else if (!isStreaming && isReconnecting) {
+                            Log.i(TAG, "Skipping pending rotation/audio application during reconnection (pending rotation: $pendingTargetRotation, audio: $pendingAudioConfig)")
                         }
                     }
                 }
@@ -1889,16 +1903,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             storageRepository.audioConfigFlow
                 .collect { config ->
-                    // Don't change audio config while streaming to avoid configuration conflicts
-                    if (serviceStreamer?.isStreamingFlow?.value == true) {
-                        Log.i(TAG, "Deferring audio config change - streamer is currently streaming")
+                    // Don't change audio config while streaming or reconnecting to avoid configuration conflicts
+                    if (serviceStreamer?.isStreamingFlow?.value == true || service?.isReconnecting?.value == true) {
+                        Log.i(TAG, "Deferring audio config change - streamer is currently streaming or reconnecting")
                         pendingAudioConfig = config
-                        viewModelScope.launch {
-                            serviceStreamer?.isStreamingFlow?.first { it != true }
-                            if (isUiInForeground) {
-                                applyPendingAudioConfig()
-                            }
-                        }
                         return@collect
                     }
                     
