@@ -63,6 +63,7 @@ import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.SrtlaStatsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
 import android.content.ActivityNotFoundException
 import com.dimadesu.lifestreamer.utils.DialogUtils
@@ -163,6 +164,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
+        binding.srtlaStatsDrawerComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                SrtlaStatsBottomDrawer(viewModel = previewViewModel)
+            }
+        }
+
         binding.cameraSlidersComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -260,7 +268,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                         previewViewModel.audioDrawer.toggleDrawer()
                     },
                     onToggleSrtlaStats = {
-                        previewViewModel.setSrtlaStatsVisible(binding.srtlaStatsScrollView.visibility != View.VISIBLE)
+                        previewViewModel.toggleSrtlaStats()
                     },
                     liveButton = {
                         LiveButton(
@@ -283,23 +291,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                         )
                     }
                 )
-            }
-        }
-
-        previewViewModel.isSrtlaStatsVisible.observe(viewLifecycleOwner) { visible ->
-            if (visible) {
-                binding.srtlaStatsScrollView.visibility = View.VISIBLE
-                binding.srtlaStatsView.startStatsUpdates()
-            } else {
-                binding.srtlaStatsView.stopStatsUpdates()
-                binding.srtlaStatsScrollView.visibility = View.GONE
-            }
-        }
-
-        // Observe Moblink relay status and push to SrtlaStatsView
-        viewLifecycleOwner.lifecycleScope.launch {
-            com.dimadesu.lifestreamer.srtla.SrtlaManager.relays.collect { relays ->
-                binding.srtlaStatsView.setRelays(relays)
             }
         }
 
@@ -672,7 +663,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     override fun onPause() {
         super.onPause()
         previewViewModel.onUiPaused()
-        binding.srtlaStatsView.stopStatsUpdates()
         // DO NOT stop streaming when going to background - the service should continue streaming
         // DO NOT stop preview either when the camera is being used for streaming -
         // the camera source is shared between preview and streaming, so stopping preview
@@ -688,9 +678,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     override fun onResume() {
         super.onResume()
         previewViewModel.onUiResumed()
-        if (binding.srtlaStatsView.visibility == View.VISIBLE) {
-            binding.srtlaStatsView.startStatsUpdates()
-        }
         Log.d(TAG, "onResume() - app returning to foreground, preview should already be active")
         
         // Request permissions in onResume() instead of onStart() to fix preview freeze
