@@ -69,12 +69,12 @@
     </plurals>
 
     <!-- Video -->
-    <string name="video">Video</string>
-
     <string name="video_enable">Enable</string>
     <string name="video_enable_key">video_enabled_key</string>
 
-    <string name="video_settings_key">video_settings_key</string>
+    <string name="video_settings_title">VIDEO SETTINGS</string>
+    <string name="close_video_settings">Close video settings</string>
+    <string name="video_settings_apply_after_stream">Changes to video settings will apply after stream ends.</string>
 
     <string name="video_encoder">Encoder</string>
     <string name="video_encoder_key">video_encoder_key</string>
@@ -93,14 +93,12 @@
     <string name="match_fps_title">Set video encoder FPS to FPS of Android cameras</string>
     <string name="match_fps_key">match_fps_key</string>
     <string name="video_fps_note_summary">For best results, set video encoder FPS to FPS of main video source you plan to use.\n\nFor example, RTMP and USB sources can have different FPS from FPS of Android cameras.</string>
-    <string name="video_fps_note_key">video_fps_note_key</string>
     <string name="video_fps">Video encoder FPS</string>
     <string name="video_fps_key">video_fps_key</string>
     <string name="default_fps">30</string>
 
-    <string name="video_bitrate">Bitrate in kbps</string>
+    <string name="video_bitrate">Bitrate</string>
     <string name="video_bitrate_key">live_video_bitrate_key</string>
-    <string name="default_video_bitrate">1000</string>
 
     <string name="video_profile">Profile</string>
     <string name="video_profile_key">video_profile_key</string>

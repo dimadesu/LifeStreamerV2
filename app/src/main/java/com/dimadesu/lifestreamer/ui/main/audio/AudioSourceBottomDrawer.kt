@@ -9,8 +9,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,17 +22,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,15 +37,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -60,12 +48,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
+import com.dimadesu.lifestreamer.ui.main.compose.SettingsDropdownRow
+import com.dimadesu.lifestreamer.ui.main.compose.verticalScrollbar
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 import java.util.Locale
 
@@ -133,33 +122,6 @@ fun AudioSourceBottomDrawer(
         modifier = modifier
     )
 }
-
-/**
- * Renders a vertical scrollbar on the edge of the container when content overflows.
- */
-private fun Modifier.verticalScrollbar(
-    scrollState: ScrollState,
-    color: Color = Color(0x66FFFFFF),
-    width: Dp = 3.dp
-): Modifier = this.then(
-    Modifier.drawWithContent {
-        drawContent()
-        val maxVal = scrollState.maxValue
-        if (maxVal > 0) {
-            val totalHeight = size.height
-            val visibleRatio = (totalHeight / (totalHeight + maxVal)).coerceIn(0.15f, 1f)
-            val thumbHeight = totalHeight * visibleRatio
-            val scrollRatio = scrollState.value.toFloat() / maxVal.toFloat()
-            val thumbOffset = (totalHeight - thumbHeight) * scrollRatio
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(size.width - width.toPx(), thumbOffset),
-                size = Size(width.toPx(), thumbHeight),
-                cornerRadius = CornerRadius(width.toPx() / 2, width.toPx() / 2)
-            )
-        }
-    }
-)
 
 /**
  * Stateless responsive drawer for Audio Settings, Source selection, and live system stats:
@@ -302,7 +264,7 @@ fun AudioSourceBottomDrawer(
                         val currentEncoderName = audioSettingsState.availableEncoders
                             .firstOrNull { it.first == audioSettingsState.encoder }?.second
                             ?: audioSettingsState.encoder
-                        AudioDropdownRow(
+                        SettingsDropdownRow(
                             title = "Encoder",
                             currentValue = audioSettingsState.encoder,
                             currentValueName = currentEncoderName,
@@ -316,7 +278,7 @@ fun AudioSourceBottomDrawer(
                             ?: ApplicationConstants.Audio.channelConfigOptions
                                 .firstOrNull { it.first == audioSettingsState.channelConfig }?.second
                             ?: "${audioSettingsState.channelConfig}"
-                        AudioDropdownRow(
+                        SettingsDropdownRow(
                             title = "Channels",
                             currentValue = audioSettingsState.channelConfig,
                             currentValueName = currentChannelName,
@@ -328,7 +290,7 @@ fun AudioSourceBottomDrawer(
                         val currentBitrateName = audioSettingsState.availableBitrates
                             .firstOrNull { it.first == audioSettingsState.bitrate }?.second
                             ?: "${audioSettingsState.bitrate / 1000} Kbps"
-                        AudioDropdownRow(
+                        SettingsDropdownRow(
                             title = "Bitrate",
                             currentValue = audioSettingsState.bitrate,
                             currentValueName = currentBitrateName,
@@ -340,7 +302,7 @@ fun AudioSourceBottomDrawer(
                         val currentSampleRateName = audioSettingsState.availableSampleRates
                             .firstOrNull { it.first == audioSettingsState.sampleRate }?.second
                             ?: "${"%.1f".format(Locale.US, audioSettingsState.sampleRate.toFloat() / 1000)} kHz"
-                        AudioDropdownRow(
+                        SettingsDropdownRow(
                             title = "Sample Rate",
                             currentValue = audioSettingsState.sampleRate,
                             currentValueName = currentSampleRateName,
@@ -353,7 +315,7 @@ fun AudioSourceBottomDrawer(
                             val currentProfileName = audioSettingsState.availableProfiles
                                 .firstOrNull { it.first == audioSettingsState.profile }?.second
                                 ?: "${audioSettingsState.profile}"
-                            AudioDropdownRow(
+                            SettingsDropdownRow(
                                 title = "Profile",
                                 currentValue = audioSettingsState.profile,
                                 currentValueName = currentProfileName,
@@ -498,101 +460,6 @@ fun AudioSourceBottomDrawer(
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Clean dropdown row with title and compact interactive selection pill.
- */
-@Composable
-private fun <T> AudioDropdownRow(
-    title: String,
-    currentValue: T,
-    currentValueName: String,
-    options: List<Pair<T, String>>,
-    onSelectOption: (T) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-    ) {
-        Text(
-            text = title,
-            color = Color.White,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium
-        )
-
-        Box {
-            Surface(
-                onClick = { expanded = true },
-                shape = RoundedCornerShape(8.dp),
-                color = Color(0x2BFFFFFF),
-                border = BorderStroke(1.dp, Color(0x33FFFFFF)),
-                modifier = Modifier.wrapContentSize()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = currentValueName,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        tint = Color(0xCCFFFFFF),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .background(Color(0xFF242426))
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
-            ) {
-                options.forEach { (optionVal, optionName) ->
-                    val isSelected = optionVal == currentValue
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = optionName,
-                                color = if (isSelected) Color(0xFF4CAF50) else Color.White,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 13.sp
-                            )
-                        },
-                        leadingIcon = if (isSelected) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        } else null,
-                        onClick = {
-                            expanded = false
-                            onSelectOption(optionVal)
-                        }
-                    )
                 }
             }
         }

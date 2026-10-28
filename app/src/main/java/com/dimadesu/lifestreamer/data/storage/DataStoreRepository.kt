@@ -517,6 +517,26 @@ class DataStoreRepository(
         com.dimadesu.lifestreamer.models.StreamOrientation.fromId(stored)
     }.distinctUntilChanged()
 
+    val storedVideoSettingsFlow: Flow<StoredVideoSettings> = dataStore.data.map { preferences ->
+        StoredVideoSettings(
+            orientation = com.dimadesu.lifestreamer.models.StreamOrientation.fromId(
+                preferences[stringPreferencesKey(context.getString(R.string.stream_orientation_key))]
+                    ?: context.getString(R.string.stream_orientation_value_auto)
+            ),
+            encoder = preferences[stringPreferencesKey(context.getString(R.string.video_encoder_key))],
+            showHardwareResolutionsOnly =
+                preferences[booleanPreferencesKey(context.getString(R.string.video_resolution_hardware_filter_key))]
+                    ?: true,
+            resolution = preferences[stringPreferencesKey(context.getString(R.string.video_resolution_key))],
+            cameraFps = preferences[stringPreferencesKey(context.getString(R.string.camera_fps_key))]?.toIntOrNull(),
+            matchFps = preferences[booleanPreferencesKey(context.getString(R.string.match_fps_key))] ?: true,
+            fps = preferences[stringPreferencesKey(context.getString(R.string.video_fps_key))]?.toIntOrNull(),
+            bitrateKbps = preferences[intPreferencesKey(context.getString(R.string.video_bitrate_key))],
+            profile = preferences[stringPreferencesKey(context.getString(R.string.video_profile_key))]?.toIntOrNull(),
+            level = preferences[stringPreferencesKey(context.getString(R.string.video_level_key))]?.toIntOrNull()
+        )
+    }.distinctUntilChanged()
+
     val endpointTypeFlow: Flow<com.dimadesu.lifestreamer.models.EndpointType> = dataStore.data.map { preferences ->
         val endpointTypeId =
             preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
@@ -582,6 +602,41 @@ class DataStoreRepository(
     suspend fun saveAudioProfile(profile: Int) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = profile.toString()
+        }
+    }
+
+    /**
+     * Saves all video settings in a single write so the stream configuration never observes a
+     * half-updated combination. Null values are left untouched.
+     */
+    suspend fun saveVideoSettings(settings: StoredVideoSettings) {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.stream_orientation_key))] =
+                settings.orientation.id
+            preferences[booleanPreferencesKey(context.getString(R.string.video_resolution_hardware_filter_key))] =
+                settings.showHardwareResolutionsOnly
+            preferences[booleanPreferencesKey(context.getString(R.string.match_fps_key))] = settings.matchFps
+            settings.encoder?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.video_encoder_key))] = it
+            }
+            settings.resolution?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.video_resolution_key))] = it
+            }
+            settings.cameraFps?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.camera_fps_key))] = it.toString()
+            }
+            settings.fps?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.video_fps_key))] = it.toString()
+            }
+            settings.bitrateKbps?.let {
+                preferences[intPreferencesKey(context.getString(R.string.video_bitrate_key))] = it
+            }
+            settings.profile?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.video_profile_key))] = it.toString()
+            }
+            settings.level?.let {
+                preferences[stringPreferencesKey(context.getString(R.string.video_level_key))] = it.toString()
+            }
         }
     }
 }

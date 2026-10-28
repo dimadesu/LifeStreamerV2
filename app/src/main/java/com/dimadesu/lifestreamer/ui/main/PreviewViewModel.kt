@@ -36,6 +36,7 @@ import android.util.Range
 import android.util.Rational
 import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.ui.main.audio.AudioDrawerController
+import com.dimadesu.lifestreamer.ui.main.video.VideoDrawerController
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
@@ -301,6 +302,22 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
+    /**
+     * Apply a video config that was changed while streaming. Called once streaming stops.
+     */
+    private suspend fun applyPendingVideoConfig() {
+        val config = pendingVideoConfig ?: return
+        val streamer = serviceStreamer ?: return
+        pendingVideoConfig = null
+        try {
+            Log.i(TAG, "Applying pending video config after stream stopped")
+            streamer.setVideoConfig(config)
+        } catch (t: Throwable) {
+            Log.e(TAG, "setVideoConfig failed (after stream stopped)", t)
+            _streamerErrorLiveData.postValue("setVideoConfig: ${t.message ?: t::class.java.simpleName}")
+        }
+    }
+
     fun clearBluetoothConnectRequest() {
         _bluetoothConnectRequestLiveData.postValue(null)
     }
@@ -539,7 +556,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     val audioSourceIndicatorLiveData: LiveData<String> = _audioSourceIndicatorLiveData
 
     // State and actions of the audio settings / source drawer
-    val audioDrawer = AudioDrawerController(
+    val audioDrawer: AudioDrawerController = AudioDrawerController(
         application = application,
         storageRepository = storageRepository,
         scope = viewModelScope,
@@ -552,11 +569,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             override val isMonitorAudioOn get() = _isMonitorAudioOn.value == true
 
             override fun onAudioDrawerOpened() {
-                _isCameraControlsDrawerOpen.value = false
-                _isRtmpSettingsDrawerOpen.value = false
-                showExposureSlider.value = false
-                showZoomSlider.value = false
-                showLensDistanceSlider.value = false
+                videoDrawer.setDrawerOpen(false)
+                closeCameraAndRtmpDrawers()
             }
 
             override fun onError(message: String) {
@@ -564,6 +578,27 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }
     )
+
+    // State and actions of the video settings drawer
+    val videoDrawer: VideoDrawerController = VideoDrawerController(
+        application = application,
+        storageRepository = storageRepository,
+        scope = viewModelScope,
+        host = object : VideoDrawerController.Host {
+            override fun onVideoDrawerOpened() {
+                audioDrawer.setDrawerOpen(false)
+                closeCameraAndRtmpDrawers()
+            }
+        }
+    )
+
+    private fun closeCameraAndRtmpDrawers() {
+        _isCameraControlsDrawerOpen.value = false
+        _isRtmpSettingsDrawerOpen.value = false
+        showExposureSlider.value = false
+        showZoomSlider.value = false
+        showLensDistanceSlider.value = false
+    }
 
     // MediaProjection session for streaming
     private var streamingMediaProjection: MediaProjection? = null
@@ -703,6 +738,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
         
         audioDrawer.start()
+        videoDrawer.start()
 
         // Status-to-notification messaging removed; UI no longer shows sliding panel
     }
@@ -1567,6 +1603,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                 pendingTargetRotation = null
                             }
                             if (isUiInForeground) {
+                                applyPendingVideoConfig()
                                 applyPendingAudioConfig()
                             }
                         } else if (!isStreaming && isReconnecting) {
@@ -1675,9 +1712,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch {
             storageRepository.videoConfigFlow
                 .collect { config ->
-                    // Don't change video config while streaming to avoid configuration conflicts
+                    // Don't change video config while streaming to avoid configuration conflicts.
+                    // It is applied once the stream stops.
                     if (serviceStreamer?.isStreamingFlow?.value == true) {
-                        Log.i(TAG, "Skipping video config change - streamer is currently streaming")
+                        Log.i(TAG, "Deferring video config change - streamer is currently streaming")
+                        pendingVideoConfig = config
                         return@collect
                     }
                     
@@ -1689,6 +1728,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         return@collect
                     }
 
+                    pendingVideoConfig = null
                     config?.let {
                         try {
                             serviceStreamer?.setVideoConfig(it)
@@ -4185,6 +4225,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (next) {
             _isCameraControlsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
+            videoDrawer.setDrawerOpen(false)
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4196,6 +4237,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (open) {
             _isCameraControlsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
+            videoDrawer.setDrawerOpen(false)
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4288,6 +4330,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (next) {
             _isRtmpSettingsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
+            videoDrawer.setDrawerOpen(false)
         }
         if (!next) {
             showExposureSlider.value = false
@@ -4301,6 +4344,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (open) {
             _isRtmpSettingsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
+            videoDrawer.setDrawerOpen(false)
         }
         if (!open) {
             showExposureSlider.value = false

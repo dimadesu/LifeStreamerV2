@@ -72,6 +72,7 @@ fun SourceControlsBar(
     val isCameraControlsDrawerOpen by viewModel.isCameraControlsDrawerOpen.observeAsState(initial = false)
     val isRtmpSettingsDrawerOpen by viewModel.isRtmpSettingsDrawerOpen.observeAsState(initial = false)
     val isAudioSourceDrawerOpen by viewModel.audioDrawer.isOpen.observeAsState(initial = false)
+    val isVideoSettingsDrawerOpen by viewModel.videoDrawer.isOpen.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -88,6 +89,7 @@ fun SourceControlsBar(
         isCameraControlsDrawerOpen = isCameraControlsDrawerOpen,
         isRtmpSettingsDrawerOpen = isRtmpSettingsDrawerOpen,
         isAudioSourceDrawerOpen = isAudioSourceDrawerOpen,
+        isVideoSettingsDrawerOpen = isVideoSettingsDrawerOpen,
         activeRtmpIndex = activeRtmpIndex,
         rtmpSourceCount = rtmpSourceCount,
         isUvcSource = isUvcSource,
@@ -115,6 +117,7 @@ fun SourceControlsBar(
         onToggleSystemAudio = onToggleSystemAudio,
         onToggleAudioDebug = onToggleAudioDebug,
         onToggleAudioSourceDrawer = { viewModel.audioDrawer.toggleDrawer() },
+        onToggleVideoSettingsDrawer = { viewModel.videoDrawer.toggleDrawer() },
         onToggleSrtlaStats = onToggleSrtlaStats,
         modifier = modifier
     )
@@ -131,6 +134,7 @@ fun SourceControlsBar(
     isCameraControlsDrawerOpen: Boolean = false,
     isRtmpSettingsDrawerOpen: Boolean = false,
     isAudioSourceDrawerOpen: Boolean = false,
+    isVideoSettingsDrawerOpen: Boolean = false,
     activeRtmpIndex: Int?,
     rtmpSourceCount: Int,
     isUvcSource: Boolean,
@@ -155,6 +159,7 @@ fun SourceControlsBar(
     onToggleSystemAudio: () -> Unit,
     onToggleAudioDebug: () -> Unit = {},
     onToggleAudioSourceDrawer: () -> Unit = onToggleAudioDebug,
+    onToggleVideoSettingsDrawer: () -> Unit = {},
     onToggleSrtlaStats: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -292,7 +297,15 @@ fun SourceControlsBar(
                 )
             }
 
-            // 10. Audio Settings & Source Drawer Toggle Button
+            // 10. Video Settings Drawer Toggle Button
+            SourceButton(
+                text = "VIDEO",
+                trailingIcon = R.drawable.ic_baseline_settings_24,
+                isActive = isVideoSettingsDrawerOpen,
+                onClick = onToggleVideoSettingsDrawer
+            )
+
+            // 11. Audio Settings & Source Drawer Toggle Button
             if (!isRtmpSource) {
                 SourceButton(
                     text = "AUDIO",
@@ -302,7 +315,7 @@ fun SourceControlsBar(
                 )
             }
 
-            // 11. SRTLA Stats Button
+            // 12. SRTLA Stats Button
             if (isSrtlaEndpoint) {
                 SourceButton(
                     text = "SRTLA STATS",
