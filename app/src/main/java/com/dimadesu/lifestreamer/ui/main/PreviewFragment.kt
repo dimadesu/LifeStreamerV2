@@ -43,6 +43,8 @@ import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -263,6 +265,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     liveButton = {
                         LiveButton(
                             viewModel = previewViewModel,
+                            modifier = Modifier.fillMaxWidth(),
                             onClick = {
                                 val currentStatus = previewViewModel.streamStatus.value
                                 Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
