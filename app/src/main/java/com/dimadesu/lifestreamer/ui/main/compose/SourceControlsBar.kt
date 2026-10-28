@@ -190,12 +190,6 @@ fun SourceControlsBar(
 ) {
     val isRtmpSource = activeRtmpIndex != null
 
-    // Group buttons that open a drawer or toggle stats should also dismiss the panel.
-    fun collapseAfter(action: () -> Unit): () -> Unit = {
-        onExpandedGroupChange(null)
-        action()
-    }
-
     Row(
         modifier = modifier.fillMaxHeight(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -218,13 +212,13 @@ fun SourceControlsBar(
                         isUvcSource = isUvcSource,
                         isScreenSource = isScreenSource,
                         onSelectCamera = onSelectCamera,
-                        onToggleCameraControls = collapseAfter(onToggleCameraControls),
-                        onToggleRtmpSettings = collapseAfter(onToggleRtmpSettings),
+                        onToggleCameraControls = onToggleCameraControls,
+                        onToggleRtmpSettings = onToggleRtmpSettings,
                         onToggleRtmpSource = onToggleRtmpSource,
                         onToggleUvc = onToggleUvc,
-                        onLaunchUvcTest = collapseAfter(onLaunchUvcTest),
+                        onLaunchUvcTest = onLaunchUvcTest,
                         onToggleScreen = onToggleScreen,
-                        onToggleVideoSettingsDrawer = collapseAfter(onToggleVideoSettingsDrawer)
+                        onToggleVideoSettingsDrawer = onToggleVideoSettingsDrawer
                     )
 
                     ControlGroup.AUDIO -> AudioGroupContent(
@@ -237,15 +231,15 @@ fun SourceControlsBar(
                         onToggleMonitorAudio = onToggleMonitorAudio,
                         onToggleBluetoothMic = onToggleBluetoothMic,
                         onToggleSystemAudio = onToggleSystemAudio,
-                        onToggleAudioSourceDrawer = collapseAfter(onToggleAudioSourceDrawer)
+                        onToggleAudioSourceDrawer = onToggleAudioSourceDrawer
                     )
 
                     ControlGroup.ENDPOINT -> EndpointGroupContent(
                         isEndpointSettingsDrawerOpen = isEndpointSettingsDrawerOpen,
                         isSrtlaEndpoint = isSrtlaEndpoint,
                         isSrtlaStatsVisible = isSrtlaStatsVisible,
-                        onToggleEndpointSettingsDrawer = collapseAfter(onToggleEndpointSettingsDrawer),
-                        onToggleSrtlaStats = collapseAfter(onToggleSrtlaStats)
+                        onToggleEndpointSettingsDrawer = onToggleEndpointSettingsDrawer,
+                        onToggleSrtlaStats = onToggleSrtlaStats
                     )
                 }
             }
