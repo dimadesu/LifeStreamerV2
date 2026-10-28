@@ -152,6 +152,11 @@ object ApplicationConstants {
         )
     }
 
+    object Endpoint {
+        const val defaultTargetBitrateKbps = 5000
+        const val defaultMinBitrateKbps = 300
+    }
+
     object Connection {
         /**
          * Default latency in milliseconds.

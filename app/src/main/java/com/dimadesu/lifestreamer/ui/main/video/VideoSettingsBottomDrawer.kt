@@ -3,21 +3,15 @@ package com.dimadesu.lifestreamer.ui.main.video
 import android.util.Size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,6 +20,8 @@ import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDrawerPanel
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDropdownRow
+import com.dimadesu.lifestreamer.ui.main.compose.SettingsSwitchRow
+import com.dimadesu.lifestreamer.ui.main.compose.SettingsWarningText
 
 /**
  * Stateful Composable for the Video Settings drawer/panel:
@@ -199,61 +195,6 @@ fun VideoSettingsBottomDrawer(
             if (isStreaming) {
                 SettingsWarningText(stringResource(R.string.video_settings_apply_after_stream))
             }
-        }
-    }
-}
-
-@Composable
-private fun SettingsWarningText(text: String) {
-    Text(
-        text = text,
-        fontSize = 13.sp,
-        color = Color(0xFFFFB74D),
-        lineHeight = 16.sp
-    )
-}
-
-/**
- * Title with an on/off switch and an optional explanation underneath.
- */
-@Composable
-private fun SettingsSwitchRow(
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    summary: String? = null
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = title,
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = Color(0xFF4CAF50),
-                    checkedThumbColor = Color.White
-                )
-            )
-        }
-        if (summary != null) {
-            Text(
-                text = summary,
-                fontSize = 12.sp,
-                color = Color(0x99FFFFFF),
-                lineHeight = 15.sp,
-                modifier = Modifier.padding(top = 2.dp)
-            )
         }
     }
 }
