@@ -72,6 +72,7 @@
     <string name="video_enable_key">video_enabled_key</string>
 
     <string name="video_settings_title">VIDEO SETTINGS</string>
+    <string name="audio_settings_title">AUDIO SETTINGS</string>
     <string name="close_video_settings">Close video settings</string>
     <string name="video_settings_apply_after_stream">Changes to video settings will apply after stream ends.</string>
 

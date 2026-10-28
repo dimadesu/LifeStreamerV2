@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -195,7 +196,7 @@ fun SourceControlsBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Second column (to the left): buttons of the expanded group.
-        if (expandedGroup != null) {
+        if (expandedGroup != null && !(expandedGroup == ControlGroup.ENDPOINT && !isSrtlaEndpoint)) {
             ControlGroupPanel(
                 modifier = Modifier.align(Alignment.Bottom)
             ) {
@@ -206,7 +207,6 @@ fun SourceControlsBar(
                         showCameraControls = showCameraControls,
                         isCameraControlsDrawerOpen = isCameraControlsDrawerOpen,
                         isRtmpSettingsDrawerOpen = isRtmpSettingsDrawerOpen,
-                        isVideoSettingsDrawerOpen = isVideoSettingsDrawerOpen,
                         activeRtmpIndex = activeRtmpIndex,
                         rtmpSourceCount = rtmpSourceCount,
                         isUvcSource = isUvcSource,
@@ -217,8 +217,7 @@ fun SourceControlsBar(
                         onToggleRtmpSource = onToggleRtmpSource,
                         onToggleUvc = onToggleUvc,
                         onLaunchUvcTest = onLaunchUvcTest,
-                        onToggleScreen = onToggleScreen,
-                        onToggleVideoSettingsDrawer = onToggleVideoSettingsDrawer
+                        onToggleScreen = onToggleScreen
                     )
 
                     ControlGroup.AUDIO -> AudioGroupContent(
@@ -227,18 +226,13 @@ fun SourceControlsBar(
                         showBluetoothToggle = showBluetoothToggle,
                         useBluetoothMic = useBluetoothMic,
                         useSystemAudioForCamera = useSystemAudioForCamera,
-                        isAudioSettingsActive = isAudioSourceDrawerOpen || isAudioDebugOverlayVisible,
                         onToggleMonitorAudio = onToggleMonitorAudio,
                         onToggleBluetoothMic = onToggleBluetoothMic,
-                        onToggleSystemAudio = onToggleSystemAudio,
-                        onToggleAudioSourceDrawer = onToggleAudioSourceDrawer
+                        onToggleSystemAudio = onToggleSystemAudio
                     )
 
                     ControlGroup.ENDPOINT -> EndpointGroupContent(
-                        isEndpointSettingsDrawerOpen = isEndpointSettingsDrawerOpen,
-                        isSrtlaEndpoint = isSrtlaEndpoint,
                         isSrtlaStatsVisible = isSrtlaStatsVisible,
-                        onToggleEndpointSettingsDrawer = onToggleEndpointSettingsDrawer,
                         onToggleSrtlaStats = onToggleSrtlaStats
                     )
                 }
@@ -256,13 +250,48 @@ fun SourceControlsBar(
         ) {
             columnHeader()
             ControlGroup.entries.forEach { group ->
-                SourceButton(
-                    text = group.label,
-                    isActive = expandedGroup == group,
-                    onClick = {
-                        onExpandedGroupChange(if (expandedGroup == group) null else group)
+                val settingsContentDescription = when (group) {
+                    ControlGroup.VIDEO -> stringResource(R.string.video_settings_title)
+                    ControlGroup.AUDIO -> stringResource(R.string.audio_settings_title)
+                    ControlGroup.ENDPOINT -> stringResource(R.string.endpoint_settings_title)
+                }
+                val isSettingsOpen = when (group) {
+                    ControlGroup.VIDEO -> isVideoSettingsDrawerOpen
+                    ControlGroup.AUDIO -> isAudioSourceDrawerOpen || isAudioDebugOverlayVisible
+                    ControlGroup.ENDPOINT -> isEndpointSettingsDrawerOpen
+                }
+                val onToggleSettings = when (group) {
+                    ControlGroup.VIDEO -> onToggleVideoSettingsDrawer
+                    ControlGroup.AUDIO -> onToggleAudioSourceDrawer
+                    ControlGroup.ENDPOINT -> onToggleEndpointSettingsDrawer
+                }
+                // Audio settings don't apply to an RTMP source; keep the cog slot so columns align.
+                val hasSettings = !(group == ControlGroup.AUDIO && isRtmpSource)
+                // ENDPOINT has nothing to expand for non-SRTLA endpoints.
+                val hasExpandableContent = !(group == ControlGroup.ENDPOINT && !isSrtlaEndpoint)
+
+                SourceButtonRow(modifier = Modifier) {
+                    SourceButton(
+                        text = group.label,
+                        isActive = expandedGroup == group,
+                        minWidth = GroupButtonMinWidth,
+                        onClick = {
+                            when {
+                                !hasExpandableContent -> onToggleSettings()
+                                else -> onExpandedGroupChange(if (expandedGroup == group) null else group)
+                            }
+                        }
+                    )
+                    if (hasSettings) {
+                        SettingsCogButton(
+                            isOpen = isSettingsOpen,
+                            contentDescription = settingsContentDescription,
+                            onClick = onToggleSettings
+                        )
+                    } else {
+                        Spacer(Modifier.size(40.dp))
                     }
-                )
+                }
             }
         }
     }
@@ -276,6 +305,7 @@ enum class ControlGroup(val label: String) {
 }
 
 private val GroupPanelWidth = 200.dp
+private val GroupButtonMinWidth = 110.dp
 
 /**
  * Scrollable column, bottom-aligned next to the group buttons, that hosts the buttons of the
@@ -300,10 +330,11 @@ private fun ControlGroupPanel(
 /** Row with a wide primary button and an optional square settings button next to it. */
 @Composable
 private fun SourceButtonRow(
+    modifier: Modifier = Modifier.fillMaxWidth(),
     content: @Composable RowScope.() -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         content = content
@@ -317,7 +348,6 @@ private fun VideoGroupContent(
     showCameraControls: Boolean,
     isCameraControlsDrawerOpen: Boolean,
     isRtmpSettingsDrawerOpen: Boolean,
-    isVideoSettingsDrawerOpen: Boolean,
     activeRtmpIndex: Int?,
     rtmpSourceCount: Int,
     isUvcSource: Boolean,
@@ -328,8 +358,7 @@ private fun VideoGroupContent(
     onToggleRtmpSource: (Int) -> Unit,
     onToggleUvc: () -> Unit,
     onLaunchUvcTest: () -> Unit,
-    onToggleScreen: () -> Unit,
-    onToggleVideoSettingsDrawer: () -> Unit
+    onToggleScreen: () -> Unit
 ) {
     val isRtmpSource = activeRtmpIndex != null
 
@@ -414,14 +443,6 @@ private fun VideoGroupContent(
             modifier = Modifier.fillMaxWidth()
         )
     }
-
-    SourceButton(
-        text = "VIDEO SETTINGS",
-        trailingIcon = R.drawable.ic_baseline_settings_24,
-        isActive = isVideoSettingsDrawerOpen,
-        onClick = onToggleVideoSettingsDrawer,
-        modifier = Modifier.fillMaxWidth()
-    )
 }
 
 @Composable
@@ -431,11 +452,9 @@ private fun AudioGroupContent(
     showBluetoothToggle: Boolean,
     useBluetoothMic: Boolean,
     useSystemAudioForCamera: Boolean,
-    isAudioSettingsActive: Boolean,
     onToggleMonitorAudio: () -> Unit,
     onToggleBluetoothMic: () -> Unit,
-    onToggleSystemAudio: () -> Unit,
-    onToggleAudioSourceDrawer: () -> Unit
+    onToggleSystemAudio: () -> Unit
 ) {
     SourceButton(
         text = "MONITOR 🎤",
@@ -461,41 +480,20 @@ private fun AudioGroupContent(
             onClick = onToggleSystemAudio,
             modifier = Modifier.fillMaxWidth()
         )
-
-        SourceButton(
-            text = "AUDIO SETTINGS",
-            trailingIcon = R.drawable.ic_baseline_settings_24,
-            isActive = isAudioSettingsActive,
-            onClick = onToggleAudioSourceDrawer,
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
 
 @Composable
 private fun EndpointGroupContent(
-    isEndpointSettingsDrawerOpen: Boolean,
-    isSrtlaEndpoint: Boolean,
     isSrtlaStatsVisible: Boolean,
-    onToggleEndpointSettingsDrawer: () -> Unit,
     onToggleSrtlaStats: () -> Unit
 ) {
     SourceButton(
-        text = "ENDPOINT SETTINGS",
-        trailingIcon = R.drawable.ic_baseline_settings_24,
-        isActive = isEndpointSettingsDrawerOpen,
-        onClick = onToggleEndpointSettingsDrawer,
+        text = "SRTLA STATS",
+        isActive = isSrtlaStatsVisible,
+        onClick = onToggleSrtlaStats,
         modifier = Modifier.fillMaxWidth()
     )
-
-    if (isSrtlaEndpoint) {
-        SourceButton(
-            text = "SRTLA STATS",
-            isActive = isSrtlaStatsVisible,
-            onClick = onToggleSrtlaStats,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
 }
 
 /**
@@ -548,6 +546,36 @@ fun SourceButton(
                 )
             }
         }
+    }
+}
+
+/**
+ * Square cog button displayed next to a group button; toggles that group's settings drawer.
+ */
+@Composable
+private fun SettingsCogButton(
+    isOpen: Boolean,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isOpen) Color(0xFF4CAF50) else Color(0xFF616161),
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.size(40.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_baseline_settings_24),
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
