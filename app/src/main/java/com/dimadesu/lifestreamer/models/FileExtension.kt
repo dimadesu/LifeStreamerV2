@@ -20,5 +20,11 @@ enum class FileExtension(val extension: String) {
                 else -> throw IllegalArgumentException("Unknown extension: $endpointType")
             }
         }
+
+        /** Removes a trailing file extension that this app adds, e.g. "video.ts" -> "video". */
+        fun stripKnownExtension(fileName: String): String {
+            val extension = entries.firstOrNull { fileName.endsWith(it.extension) }?.extension
+            return if (extension != null) fileName.removeSuffix(extension) else fileName
+        }
     }
 }

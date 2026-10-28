@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -36,23 +38,35 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -199,6 +213,158 @@ fun SettingsDrawerPanel(
                 }
             }
         }
+    }
+}
+
+/**
+ * Orange note about a limitation of the settings above it.
+ */
+@Composable
+fun SettingsWarningText(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        color = Color(0xFFFFB74D),
+        lineHeight = 16.sp
+    )
+}
+
+/**
+ * Title with an on/off switch and an optional explanation underneath.
+ */
+@Composable
+fun SettingsSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    summary: String? = null
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = Color(0xFF4CAF50),
+                    checkedThumbColor = Color.White
+                )
+            )
+        }
+        if (summary != null) {
+            Text(
+                text = summary,
+                fontSize = 12.sp,
+                color = Color(0x99FFFFFF),
+                lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Small bold heading that groups the settings below it.
+ */
+@Composable
+fun SettingsSectionTitle(text: String) {
+    Text(
+        text = text,
+        color = Color(0xFF4CAF50),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.8.sp
+    )
+}
+
+/**
+ * Title with a single-line text field underneath.
+ *
+ * Typing does not save anything. The text is passed to [onCommit] when the user taps Done, leaves the
+ * field or closes the drawer. Text that fails [isValid] is dropped and the field shows [value] again.
+ */
+@Composable
+fun SettingsTextFieldRow(
+    title: String,
+    value: String,
+    onCommit: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    maxLength: Int? = null,
+    isValid: (String) -> Boolean = { true }
+) {
+    val focusManager = LocalFocusManager.current
+    var text by remember(value) { mutableStateOf(value) }
+
+    val commit = rememberUpdatedState {
+        if (text != value) {
+            if (isValid(text)) onCommit(text) else text = value
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { commit.value() }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = title,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+        OutlinedTextField(
+            value = text,
+            onValueChange = { newText ->
+                if (maxLength == null || newText.length <= maxLength) {
+                    text = newText
+                }
+            },
+            singleLine = true,
+            textStyle = TextStyle(
+                color = Color.White,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    focusManager.clearFocus()
+                    commit.value()
+                }
+            ),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF4CAF50),
+                unfocusedBorderColor = Color(0x44FFFFFF),
+                cursorColor = Color(0xFF4CAF50),
+                focusedContainerColor = Color(0x22000000),
+                unfocusedContainerColor = Color(0x22000000)
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        commit.value()
+                    }
+                }
+        )
     }
 }
 

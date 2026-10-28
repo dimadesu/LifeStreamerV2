@@ -26,7 +26,6 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainActivityBinding
 import com.dimadesu.lifestreamer.rtmp.audio.MediaProjectionService
 import com.dimadesu.lifestreamer.services.CameraStreamerService
-import com.dimadesu.lifestreamer.ui.settings.SettingsActivity
 import com.dimadesu.lifestreamer.ui.help.FaqHelpActivity
 import com.dimadesu.lifestreamer.ui.help.KnownIssuesActivity
 import com.dimadesu.lifestreamer.ui.help.RtmpHelpActivity
@@ -116,10 +115,6 @@ class MainActivity : AppCompatActivity() {
         popup.show()
         popup.setOnMenuItemClickListener {
             when (it.itemId) {
-                R.id.action_settings -> {
-                    goToSettingsActivity()
-                    true
-                }
                 R.id.action_rtmp_help -> {
                     goToRtmpHelpActivity()
                     true
@@ -150,11 +145,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    private fun goToSettingsActivity() {
-        val intent = Intent(this, SettingsActivity::class.java)
-        startActivity(intent)
     }
 
     private fun goToRtmpHelpActivity() {

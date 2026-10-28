@@ -1,7 +1,6 @@
 <resources>
     <string name="app_name">LifeStreamerV2</string>
 
-    <string name="action_settings">Settings</string>
     <string name="action_rtmp_help">How to use RTMP as source</string>
     <string name="action_srt_help">How to use SRT as source</string>
     <string name="action_uvc_help">How to use USB source</string>
@@ -76,6 +75,11 @@
     <string name="close_video_settings">Close video settings</string>
     <string name="video_settings_apply_after_stream">Changes to video settings will apply after stream ends.</string>
 
+    <string name="endpoint_settings_title">ENDPOINT SETTINGS</string>
+    <string name="close_endpoint_settings">Close endpoint settings</string>
+    <string name="endpoint_settings_apply_after_stream">Changes to the endpoint type and server settings will apply the next time you go live.</string>
+    <string name="file_name_extension_note">The file extension is added automatically.</string>
+
     <string name="video_encoder">Encoder</string>
     <string name="video_encoder_key">video_encoder_key</string>
     <string name="default_video_encoder">video/avc</string>
@@ -141,7 +145,6 @@
     <string name="audio_source_type_key">audio_source_type_key</string>
 
     <!-- Endpoint -->
-    <string name="endpoint">Endpoint</string>
 
     <string name="endpoint_type">Type</string>
     <string name="endpoint_type_key">endpoint_type_key_v2</string>
@@ -156,7 +159,6 @@
     <string name="to_3gp_file">Record 3GP file</string>
 
     <string name="srt_server">SRT Server</string>
-    <string name="srt_server_key">srt_server_key</string>
     <string name="server_ip">Server address or IP (without srt:// prefix)</string>
     <string name="srt_server_ip_key">srt_server_ip_key</string>
     <string name="default_srt_server_url">127.0.0.1</string>
@@ -165,7 +167,6 @@
     <string name="default_srt_server_port">6000</string>
     <string name="srt_server_stream_id_key">server_stream_id_key</string>
     <string name="srt_server_stream_id">Stream ID</string>
-    <string name="default_srt_server_stream_id" />
     <string name="srt_server_passphrase_key">srt_server_passphrase_key</string>
     <string name="srt_server_passphrase">Passphrase</string>
     <string name="default_srt_server_stream_passphrase" />
@@ -175,7 +176,6 @@
     <string name="default_srt_server_latency">2000</string>
     <string name="srt_server_enable_bitrate_regulation_key">srt_server_enable_bitrate_regulation_key</string>
     <string name="srt_server_enable_bitrate_regulation">Enable adaptive bitrate</string>
-    <string name="bitrate_regulation_key">bitrate_regulation_key</string>
     <string name="bitrate_regulation">Adaptive bitrate</string>
     <string name="srt_server_video_target_bitrate_key">srt_server_video_target_bitrate_key</string>
     <string name="srt_server_video_target_bitrate">Video target bitrate (kb/s)</string>
@@ -199,14 +199,12 @@
     <string name="srt_server_moblin_regulator_mode_value_slow">slow</string>
     <string name="srt_server_moblin_regulator_mode_value_belabox">belabox</string>
 
-    <string name="rtmp_server_key">rtmp_server_key</string>
     <string name="rtmp_server">RTMP Server</string>
     <string name="rtmp_server_url_key">rtmp_server_url_key</string>
     <string name="default_rtmp_url">rtmp://127.0.0.1:1935/publish/live</string>
     <string name="server_url">URL</string>
 
     <!-- SRTLA (Bond Bunny) endpoint settings -->
-    <string name="srtla_key">srtla_key</string>
     <string name="srtla_settings">SRTLA</string>
     <string name="srtla_receiver_host_key">srtla_receiver_host_key</string>
     <string name="srtla_receiver_host">SRTLA server (example: au.srt.belabox.net or IP address)</string>
@@ -237,7 +235,6 @@
     <string name="moblink_port">Moblink server port</string>
     <string name="default_moblink_port">7777</string>
     <string name="moblink_bitrate_note">Recommended. When using Moblink relays, set \"Bitrate algorithm\" setting to \"Moblin slow\". This can help maintain a higher overall bitrate.</string>
-    <string name="moblink_bitrate_note_key">moblink_bitrate_note_key</string>
 
     <!-- RTMP source -->
     <string name="rtmp_source_category_title">RTMP (or SRT) as source</string>
@@ -264,7 +261,6 @@
     <string name="close_rtmp_controls">Close RTMP controls</string>
     <string name="close_audio_source_controls">Close audio source controls</string>
 
-    <string name="file_endpoint_key">file_endpoint_key</string>
     <string name="file">File</string>
     <string name="file_name_key">file_name_key</string>
     <string name="file_name">File name</string>

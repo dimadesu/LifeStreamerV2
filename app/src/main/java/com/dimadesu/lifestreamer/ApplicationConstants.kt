@@ -152,6 +152,14 @@ object ApplicationConstants {
         )
     }
 
+    object Endpoint {
+        /** Used while the user has never chosen a SRT port. */
+        const val defaultSrtPort = 9998
+
+        const val defaultTargetBitrateKbps = 10000
+        const val defaultMinBitrateKbps = 300
+    }
+
     object Connection {
         /**
          * Default latency in milliseconds.

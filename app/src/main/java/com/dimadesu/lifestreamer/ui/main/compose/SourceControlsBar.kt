@@ -73,6 +73,7 @@ fun SourceControlsBar(
     val isRtmpSettingsDrawerOpen by viewModel.isRtmpSettingsDrawerOpen.observeAsState(initial = false)
     val isAudioSourceDrawerOpen by viewModel.audioDrawer.isOpen.observeAsState(initial = false)
     val isVideoSettingsDrawerOpen by viewModel.videoDrawer.isOpen.observeAsState(initial = false)
+    val isEndpointSettingsDrawerOpen by viewModel.endpointDrawer.isOpen.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -90,6 +91,7 @@ fun SourceControlsBar(
         isRtmpSettingsDrawerOpen = isRtmpSettingsDrawerOpen,
         isAudioSourceDrawerOpen = isAudioSourceDrawerOpen,
         isVideoSettingsDrawerOpen = isVideoSettingsDrawerOpen,
+        isEndpointSettingsDrawerOpen = isEndpointSettingsDrawerOpen,
         activeRtmpIndex = activeRtmpIndex,
         rtmpSourceCount = rtmpSourceCount,
         isUvcSource = isUvcSource,
@@ -118,6 +120,7 @@ fun SourceControlsBar(
         onToggleAudioDebug = onToggleAudioDebug,
         onToggleAudioSourceDrawer = { viewModel.audioDrawer.toggleDrawer() },
         onToggleVideoSettingsDrawer = { viewModel.videoDrawer.toggleDrawer() },
+        onToggleEndpointSettingsDrawer = { viewModel.endpointDrawer.toggleDrawer() },
         onToggleSrtlaStats = onToggleSrtlaStats,
         modifier = modifier
     )
@@ -135,6 +138,7 @@ fun SourceControlsBar(
     isRtmpSettingsDrawerOpen: Boolean = false,
     isAudioSourceDrawerOpen: Boolean = false,
     isVideoSettingsDrawerOpen: Boolean = false,
+    isEndpointSettingsDrawerOpen: Boolean = false,
     activeRtmpIndex: Int?,
     rtmpSourceCount: Int,
     isUvcSource: Boolean,
@@ -160,6 +164,7 @@ fun SourceControlsBar(
     onToggleAudioDebug: () -> Unit = {},
     onToggleAudioSourceDrawer: () -> Unit = onToggleAudioDebug,
     onToggleVideoSettingsDrawer: () -> Unit = {},
+    onToggleEndpointSettingsDrawer: () -> Unit = {},
     onToggleSrtlaStats: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -315,7 +320,15 @@ fun SourceControlsBar(
                 )
             }
 
-            // 12. SRTLA Stats Button
+            // 12. Endpoint Settings Drawer Toggle Button
+            SourceButton(
+                text = "ENDPOINT",
+                trailingIcon = R.drawable.ic_baseline_settings_24,
+                isActive = isEndpointSettingsDrawerOpen,
+                onClick = onToggleEndpointSettingsDrawer
+            )
+
+            // 13. SRTLA Stats Button
             if (isSrtlaEndpoint) {
                 SourceButton(
                     text = "SRTLA STATS",

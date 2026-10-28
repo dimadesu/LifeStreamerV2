@@ -185,8 +185,10 @@ class DataStoreRepository(
             EndpointType.OGG_FILE,
             EndpointType.THREEGP_FILE -> {
                 val filename =
-                    preferences[stringPreferencesKey(context.getString(R.string.file_endpoint_key))]
-                        ?: "StreamPack"
+                    preferences[stringPreferencesKey(context.getString(R.string.file_name_key))]
+                        ?.let { FileExtension.stripKnownExtension(it) }
+                        ?.takeIf { it.isNotBlank() }
+                        ?: context.getString(R.string.default_file_name)
                 context.createVideoContentUri(
                     filename.appendIfNotEndsWith(FileExtension.fromEndpointType(endpointType).extension)
                 )
@@ -198,7 +200,7 @@ class DataStoreRepository(
                         ?: context.getString(R.string.default_srt_server_url)
                 val port =
                     preferences[stringPreferencesKey(context.getString(R.string.srt_server_port_key))]?.toInt()
-                        ?: 9998
+                        ?: ApplicationConstants.Endpoint.defaultSrtPort
                 val streamId =
                     preferences[stringPreferencesKey(context.getString(R.string.srt_server_stream_id_key))]
                         ?: ""
@@ -480,7 +482,7 @@ class DataStoreRepository(
                     )
                 )]?.toInt()
                     ?.times(1000)
-                    ?: 300000
+                    ?: (ApplicationConstants.Endpoint.defaultMinBitrateKbps * 1000)
             val videoMaxBitrate =
                 preferences[intPreferencesKey(
                     context.getString(
@@ -492,7 +494,7 @@ class DataStoreRepository(
                     )
                 )]?.toInt()
                     ?.times(1000)
-                    ?: 10000000
+                    ?: (ApplicationConstants.Endpoint.defaultTargetBitrateKbps * 1000)
             BitrateRegulatorConfig(
                 videoBitrateRange = Range(videoMinBitrate, videoMaxBitrate)
             )
@@ -542,6 +544,70 @@ class DataStoreRepository(
             preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
                 ?: com.dimadesu.lifestreamer.models.EndpointType.SRT.id
         com.dimadesu.lifestreamer.models.EndpointType.fromId(endpointTypeId)
+    }.distinctUntilChanged()
+
+    /**
+     * Endpoint settings with the same defaults the stream configuration falls back to, so what is
+     * shown is what is used.
+     */
+    val storedEndpointSettingsFlow: Flow<StoredEndpointSettings> = dataStore.data.map { preferences ->
+        fun text(keyRes: Int, defaultRes: Int? = null) =
+            preferences[stringPreferencesKey(context.getString(keyRes))]
+                ?: defaultRes?.let { context.getString(it) }.orEmpty()
+
+        fun flag(keyRes: Int, default: Boolean) =
+            preferences[booleanPreferencesKey(context.getString(keyRes))] ?: default
+
+        fun kbps(keyRes: Int, default: Int) =
+            preferences[intPreferencesKey(context.getString(keyRes))] ?: default
+
+        StoredEndpointSettings(
+            type = EndpointType.fromId(
+                preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toIntOrNull()
+                    ?: EndpointType.SRT.id
+            ),
+            srtAddress = text(R.string.srt_server_ip_key, R.string.default_srt_server_url),
+            srtPort = preferences[stringPreferencesKey(context.getString(R.string.srt_server_port_key))]
+                ?: ApplicationConstants.Endpoint.defaultSrtPort.toString(),
+            srtStreamId = text(R.string.srt_server_stream_id_key),
+            srtLatency = text(R.string.srt_server_latency_key, R.string.default_srt_server_latency),
+            srtPassphrase = text(R.string.srt_server_passphrase_key, R.string.default_srt_server_passphrase),
+            rtmpUrl = text(R.string.rtmp_server_url_key, R.string.default_rtmp_url),
+            srtlaReceiverHost = text(R.string.srtla_receiver_host_key, R.string.default_srtla_receiver_host),
+            srtlaReceiverPort = text(R.string.srtla_receiver_port_key, R.string.default_srtla_receiver_port),
+            srtlaListenPort = text(R.string.srtla_listen_port_key, R.string.default_srtla_listen_port),
+            srtlaStreamId = text(R.string.srtla_stream_id_key),
+            srtlaLatency = text(R.string.srtla_latency_key, R.string.default_srtla_latency),
+            srtlaPassphrase = text(R.string.srtla_passphrase_key),
+            moblinkEnabled = flag(R.string.moblink_enabled_key, false),
+            moblinkPassword = text(R.string.moblink_password_key, R.string.default_moblink_password),
+            moblinkPort = text(R.string.moblink_port_key, R.string.default_moblink_port),
+            srtAdaptiveBitrate = flag(R.string.srt_server_enable_bitrate_regulation_key, true),
+            srtTargetBitrateKbps = kbps(
+                R.string.srt_server_video_target_bitrate_key,
+                ApplicationConstants.Endpoint.defaultTargetBitrateKbps
+            ),
+            srtMinBitrateKbps = kbps(
+                R.string.srt_server_video_min_bitrate_key,
+                ApplicationConstants.Endpoint.defaultMinBitrateKbps
+            ),
+            srtRegulatorMode = text(
+                R.string.srt_server_moblin_regulator_mode_key,
+                R.string.srt_server_moblin_regulator_mode_value_belabox
+            ),
+            rtmpAdaptiveBitrate = flag(R.string.rtmp_server_enable_bitrate_regulation_key, false),
+            rtmpTargetBitrateKbps = kbps(
+                R.string.rtmp_server_video_target_bitrate_key,
+                ApplicationConstants.Endpoint.defaultTargetBitrateKbps
+            ),
+            rtmpMinBitrateKbps = kbps(
+                R.string.rtmp_server_video_min_bitrate_key,
+                ApplicationConstants.Endpoint.defaultMinBitrateKbps
+            ),
+            fileName = FileExtension.stripKnownExtension(
+                text(R.string.file_name_key, R.string.default_file_name)
+            )
+        )
     }.distinctUntilChanged()
 
     // Save methods for audio settings
@@ -602,6 +668,51 @@ class DataStoreRepository(
     suspend fun saveAudioProfile(profile: Int) {
         dataStore.edit { preferences ->
             preferences[stringPreferencesKey(context.getString(R.string.audio_profile_key))] = profile.toString()
+        }
+    }
+
+    /**
+     * Saves all endpoint settings in a single write so the stream configuration never observes a
+     * half-updated combination.
+     */
+    suspend fun saveEndpointSettings(settings: StoredEndpointSettings) {
+        dataStore.edit { preferences ->
+            fun put(keyRes: Int, value: String) {
+                preferences[stringPreferencesKey(context.getString(keyRes))] = value
+            }
+
+            fun put(keyRes: Int, value: Boolean) {
+                preferences[booleanPreferencesKey(context.getString(keyRes))] = value
+            }
+
+            fun put(keyRes: Int, value: Int) {
+                preferences[intPreferencesKey(context.getString(keyRes))] = value
+            }
+
+            put(R.string.endpoint_type_key, settings.type.id.toString())
+            put(R.string.srt_server_ip_key, settings.srtAddress)
+            put(R.string.srt_server_port_key, settings.srtPort)
+            put(R.string.srt_server_stream_id_key, settings.srtStreamId)
+            put(R.string.srt_server_latency_key, settings.srtLatency)
+            put(R.string.srt_server_passphrase_key, settings.srtPassphrase)
+            put(R.string.rtmp_server_url_key, settings.rtmpUrl)
+            put(R.string.srtla_receiver_host_key, settings.srtlaReceiverHost)
+            put(R.string.srtla_receiver_port_key, settings.srtlaReceiverPort)
+            put(R.string.srtla_listen_port_key, settings.srtlaListenPort)
+            put(R.string.srtla_stream_id_key, settings.srtlaStreamId)
+            put(R.string.srtla_latency_key, settings.srtlaLatency)
+            put(R.string.srtla_passphrase_key, settings.srtlaPassphrase)
+            put(R.string.moblink_enabled_key, settings.moblinkEnabled)
+            put(R.string.moblink_password_key, settings.moblinkPassword)
+            put(R.string.moblink_port_key, settings.moblinkPort)
+            put(R.string.srt_server_enable_bitrate_regulation_key, settings.srtAdaptiveBitrate)
+            put(R.string.srt_server_video_target_bitrate_key, settings.srtTargetBitrateKbps)
+            put(R.string.srt_server_video_min_bitrate_key, settings.srtMinBitrateKbps)
+            put(R.string.srt_server_moblin_regulator_mode_key, settings.srtRegulatorMode)
+            put(R.string.rtmp_server_enable_bitrate_regulation_key, settings.rtmpAdaptiveBitrate)
+            put(R.string.rtmp_server_video_target_bitrate_key, settings.rtmpTargetBitrateKbps)
+            put(R.string.rtmp_server_video_min_bitrate_key, settings.rtmpMinBitrateKbps)
+            put(R.string.file_name_key, settings.fileName)
         }
     }
 

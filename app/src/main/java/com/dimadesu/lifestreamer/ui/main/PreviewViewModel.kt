@@ -36,6 +36,7 @@ import android.util.Range
 import android.util.Rational
 import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.ui.main.audio.AudioDrawerController
+import com.dimadesu.lifestreamer.ui.main.endpoint.EndpointDrawerController
 import com.dimadesu.lifestreamer.ui.main.video.VideoDrawerController
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
@@ -570,6 +571,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
             override fun onAudioDrawerOpened() {
                 videoDrawer.setDrawerOpen(false)
+                endpointDrawer.setDrawerOpen(false)
                 closeCameraAndRtmpDrawers()
             }
 
@@ -587,6 +589,20 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         host = object : VideoDrawerController.Host {
             override fun onVideoDrawerOpened() {
                 audioDrawer.setDrawerOpen(false)
+                endpointDrawer.setDrawerOpen(false)
+                closeCameraAndRtmpDrawers()
+            }
+        }
+    )
+
+    // State and actions of the endpoint settings drawer
+    val endpointDrawer: EndpointDrawerController = EndpointDrawerController(
+        storageRepository = storageRepository,
+        scope = viewModelScope,
+        host = object : EndpointDrawerController.Host {
+            override fun onEndpointDrawerOpened() {
+                audioDrawer.setDrawerOpen(false)
+                videoDrawer.setDrawerOpen(false)
                 closeCameraAndRtmpDrawers()
             }
         }
@@ -739,6 +755,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         audioDrawer.start()
         videoDrawer.start()
+        endpointDrawer.start()
 
         // Status-to-notification messaging removed; UI no longer shows sliding panel
     }
@@ -4226,6 +4243,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             _isCameraControlsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
+            endpointDrawer.setDrawerOpen(false)
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4238,6 +4256,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             _isCameraControlsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
+            endpointDrawer.setDrawerOpen(false)
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4331,6 +4350,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             _isRtmpSettingsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
+            endpointDrawer.setDrawerOpen(false)
         }
         if (!next) {
             showExposureSlider.value = false
@@ -4345,6 +4365,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             _isRtmpSettingsDrawerOpen.value = false
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
+            endpointDrawer.setDrawerOpen(false)
         }
         if (!open) {
             showExposureSlider.value = false
