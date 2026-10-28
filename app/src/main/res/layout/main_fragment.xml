@@ -67,15 +67,6 @@
 
 
 
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/sourceControlsComposeView"
-            android:layout_width="wrap_content"
-            android:layout_height="0dp"
-            android:layout_marginTop="76dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
-
         <!-- Top-right controls (stream stats, audio source indicator, VU meter) -->
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/topRightControlsComposeView"
@@ -85,30 +76,17 @@
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <ScrollView
-            android:id="@+id/srtlaStatsScrollView"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/srtlaStatsDrawerComposeView"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:background="#80000000"
-            android:elevation="10dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:visibility="gone"
-            app:layout_constrainedHeight="true"
-            app:layout_constraintVertical_bias="1.0"
-            app:layout_constraintTop_toBottomOf="@+id/topRightControlsComposeView"
-            app:layout_constraintBottom_toTopOf="@+id/liveButton"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:elevation="30dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
-
-            <com.dimadesu.bondbunny.SrtlaStatsView
-                android:id="@+id/srtlaStatsView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="5dp"
-                android:paddingBottom="5dp" />
-
-        </ScrollView>
+            app:layout_constraintEnd_toEndOf="parent" />
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/cameraDrawerComposeView"
@@ -169,15 +147,6 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/liveButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/cameraSlidersComposeView"

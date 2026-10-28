@@ -43,6 +43,8 @@ import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -53,7 +55,6 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.databinding.MainFragmentBinding
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.models.StreamStatus
-import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.RtmpSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.audio.AudioSourceBottomDrawer
@@ -62,6 +63,7 @@ import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
+import com.dimadesu.lifestreamer.ui.main.compose.SrtlaStatsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
 import android.content.ActivityNotFoundException
 import com.dimadesu.lifestreamer.utils.DialogUtils
@@ -124,13 +126,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
 
     @SuppressLint("MissingPermission")
     private fun bindProperties() {
-        binding.cameraControlsComposeView.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                CameraControlsBar(viewModel = previewViewModel)
-            }
-        }
-
         binding.cameraDrawerComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -169,6 +164,13 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
+        binding.srtlaStatsDrawerComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                SrtlaStatsBottomDrawer(viewModel = previewViewModel)
+            }
+        }
+
         binding.cameraSlidersComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -203,29 +205,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        binding.liveButton.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                LiveButton(
-                    viewModel = previewViewModel,
-                    onClick = {
-                        val currentStatus = previewViewModel.streamStatus.value
-                        Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
-                        when (currentStatus) {
-                            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
-                                Log.d(TAG, "Starting stream...")
-                                startStreamIfPermissions(previewViewModel.requiredPermissions)
-                            }
-                            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
-                                Log.d(TAG, "Stopping stream...")
-                                stopStream()
-                            }
-                        }
-                    }
-                )
-            }
-        }
-
         // Commented out along with the switchCameraButton in XML
         /*
         binding.switchCameraButton.setOnClickListener {
@@ -233,7 +212,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
         */
 
-        binding.sourceControlsComposeView.apply {
+        binding.cameraControlsComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SourceControlsBar(
@@ -289,26 +268,29 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                         previewViewModel.audioDrawer.toggleDrawer()
                     },
                     onToggleSrtlaStats = {
-                        previewViewModel.setSrtlaStatsVisible(binding.srtlaStatsScrollView.visibility != View.VISIBLE)
+                        previewViewModel.toggleSrtlaStats()
+                    },
+                    liveButton = {
+                        LiveButton(
+                            viewModel = previewViewModel,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val currentStatus = previewViewModel.streamStatus.value
+                                Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
+                                when (currentStatus) {
+                                    StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                                        Log.d(TAG, "Starting stream...")
+                                        startStreamIfPermissions(previewViewModel.requiredPermissions)
+                                    }
+                                    StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                                        Log.d(TAG, "Stopping stream...")
+                                        stopStream()
+                                    }
+                                }
+                            }
+                        )
                     }
                 )
-            }
-        }
-
-        previewViewModel.isSrtlaStatsVisible.observe(viewLifecycleOwner) { visible ->
-            if (visible) {
-                binding.srtlaStatsScrollView.visibility = View.VISIBLE
-                binding.srtlaStatsView.startStatsUpdates()
-            } else {
-                binding.srtlaStatsView.stopStatsUpdates()
-                binding.srtlaStatsScrollView.visibility = View.GONE
-            }
-        }
-
-        // Observe Moblink relay status and push to SrtlaStatsView
-        viewLifecycleOwner.lifecycleScope.launch {
-            com.dimadesu.lifestreamer.srtla.SrtlaManager.relays.collect { relays ->
-                binding.srtlaStatsView.setRelays(relays)
             }
         }
 
@@ -681,7 +663,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     override fun onPause() {
         super.onPause()
         previewViewModel.onUiPaused()
-        binding.srtlaStatsView.stopStatsUpdates()
         // DO NOT stop streaming when going to background - the service should continue streaming
         // DO NOT stop preview either when the camera is being used for streaming -
         // the camera source is shared between preview and streaming, so stopping preview
@@ -697,9 +678,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
     override fun onResume() {
         super.onResume()
         previewViewModel.onUiResumed()
-        if (binding.srtlaStatsView.visibility == View.VISIBLE) {
-            binding.srtlaStatsView.startStatsUpdates()
-        }
         Log.d(TAG, "onResume() - app returning to foreground, preview should already be active")
         
         // Request permissions in onResume() instead of onStart() to fix preview freeze

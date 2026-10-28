@@ -3,12 +3,17 @@ package com.dimadesu.lifestreamer.ui.main.compose
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,8 +43,8 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 
 /**
- * Stateful Composable for the bottom-left controls column:
- * video source toggles (dynamic camera buttons, RTMP, USB, Screen) and audio/diagnostic toggles.
+ * Stateful Composable for the right-edge controls, grouped into VIDEO (sources + settings),
+ * AUDIO (mute, monitor, bluetooth, system audio) and ENDPOINT (SRTLA stats), each with a settings cog.
  */
 @Composable
 fun SourceControlsBar(
@@ -54,6 +60,7 @@ fun SourceControlsBar(
     onToggleSystemAudio: () -> Unit,
     onToggleAudioDebug: () -> Unit,
     onToggleSrtlaStats: () -> Unit,
+    liveButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cameras by viewModel.availableCamerasLiveData.observeAsState(initial = emptyList())
@@ -74,6 +81,7 @@ fun SourceControlsBar(
     val isAudioSourceDrawerOpen by viewModel.audioDrawer.isOpen.observeAsState(initial = false)
     val isVideoSettingsDrawerOpen by viewModel.videoDrawer.isOpen.observeAsState(initial = false)
     val isEndpointSettingsDrawerOpen by viewModel.endpointDrawer.isOpen.observeAsState(initial = false)
+    val isMuted by viewModel.isMutedLiveData.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -82,6 +90,7 @@ fun SourceControlsBar(
         }
     }
     val activeCameraId = localSelectedCameraId ?: currentCameraIdFromStreamer
+    var expandedGroup by rememberSaveable { mutableStateOf<ControlGroup?>(null) }
 
     SourceControlsBar(
         cameras = cameras,
@@ -122,12 +131,19 @@ fun SourceControlsBar(
         onToggleVideoSettingsDrawer = { viewModel.videoDrawer.toggleDrawer() },
         onToggleEndpointSettingsDrawer = { viewModel.endpointDrawer.toggleDrawer() },
         onToggleSrtlaStats = onToggleSrtlaStats,
+        expandedGroup = expandedGroup,
+        onExpandedGroupChange = { expandedGroup = it },
+        isMuted = isMuted,
+        onToggleMute = { viewModel.setMute(!isMuted) },
+        liveButton = liveButton,
         modifier = modifier
     )
 }
 
 /**
- * Stateless Composable for the bottom-left controls column.
+ * Stateless Composable for the right-edge controls: a column of group buttons
+ * (VIDEO / AUDIO / ENDPOINT) with settings cogs followed by [liveButton], and a second column to its left with the
+ * scrollable buttons of the expanded group (the mic mute toggle is at the top of AUDIO).
  */
 @Composable
 fun SourceControlsBar(
@@ -166,178 +182,335 @@ fun SourceControlsBar(
     onToggleVideoSettingsDrawer: () -> Unit = {},
     onToggleEndpointSettingsDrawer: () -> Unit = {},
     onToggleSrtlaStats: () -> Unit,
+    expandedGroup: ControlGroup? = null,
+    onExpandedGroupChange: (ControlGroup?) -> Unit = {},
+    isMuted: Boolean = false,
+    onToggleMute: () -> Unit = {},
+    liveButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isRtmpSource = activeRtmpIndex != null
 
-    Box(
+    Row(
         modifier = modifier.fillMaxHeight(),
-        contentAlignment = Alignment.BottomStart
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Second column (to the left): buttons of the expanded group.
+        if (expandedGroup != null && !(expandedGroup == ControlGroup.ENDPOINT && !isSrtlaEndpoint)) {
+            ControlGroupPanel(
+                modifier = Modifier.align(Alignment.Bottom)
+            ) {
+                when (expandedGroup) {
+                    ControlGroup.VIDEO -> VideoGroupContent(
+                        cameras = cameras,
+                        selectedCameraId = selectedCameraId,
+                        showCameraControls = showCameraControls,
+                        isCameraControlsDrawerOpen = isCameraControlsDrawerOpen,
+                        isRtmpSettingsDrawerOpen = isRtmpSettingsDrawerOpen,
+                        activeRtmpIndex = activeRtmpIndex,
+                        rtmpSourceCount = rtmpSourceCount,
+                        isUvcSource = isUvcSource,
+                        isScreenSource = isScreenSource,
+                        onSelectCamera = onSelectCamera,
+                        onToggleCameraControls = onToggleCameraControls,
+                        onToggleRtmpSettings = onToggleRtmpSettings,
+                        onToggleRtmpSource = onToggleRtmpSource,
+                        onToggleUvc = onToggleUvc,
+                        onLaunchUvcTest = onLaunchUvcTest,
+                        onToggleScreen = onToggleScreen
+                    )
+
+                    ControlGroup.AUDIO -> AudioGroupContent(
+                        isRtmpSource = isRtmpSource,
+                        isMonitorAudioOn = isMonitorAudioOn,
+                        showBluetoothToggle = showBluetoothToggle,
+                        useBluetoothMic = useBluetoothMic,
+                        useSystemAudioForCamera = useSystemAudioForCamera,
+                        isMuted = isMuted,
+                        onToggleMute = onToggleMute,
+                        onToggleMonitorAudio = onToggleMonitorAudio,
+                        onToggleBluetoothMic = onToggleBluetoothMic,
+                        onToggleSystemAudio = onToggleSystemAudio
+                    )
+
+                    ControlGroup.ENDPOINT -> EndpointGroupContent(
+                        isSrtlaStatsVisible = isSrtlaStatsVisible,
+                        onToggleSrtlaStats = onToggleSrtlaStats
+                    )
+                }
+            }
+        }
+
+        // First column (right edge): the group buttons with their settings cogs.
         Column(
             modifier = Modifier
+                .align(Alignment.Bottom)
                 .wrapContentHeight()
-                .verticalScroll(rememberScrollState())
                 .padding(bottom = 8.dp),
-            horizontalAlignment = Alignment.Start,
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
-            // 1. Dynamic Camera Selection buttons
-            if (showCameraControls && cameras.isNotEmpty()) {
-                cameras.forEach { camera ->
-                    val isSelected = (camera.id == selectedCameraId)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        SourceButton(
-                            text = camera.displayName,
-                            isActive = isSelected,
-                            onClick = { onSelectCamera(camera.id) }
-                        )
-                        if (isSelected) {
-                            CameraSettingsButton(
-                                isOpen = isCameraControlsDrawerOpen,
-                                onClick = onToggleCameraControls
-                            )
+            ControlGroup.entries.forEach { group ->
+                val settingsContentDescription = when (group) {
+                    ControlGroup.VIDEO -> stringResource(R.string.video_settings_title)
+                    ControlGroup.AUDIO -> stringResource(R.string.audio_settings_title)
+                    ControlGroup.ENDPOINT -> stringResource(R.string.endpoint_settings_title)
+                }
+                val isSettingsOpen = when (group) {
+                    ControlGroup.VIDEO -> isVideoSettingsDrawerOpen
+                    ControlGroup.AUDIO -> isAudioSourceDrawerOpen || isAudioDebugOverlayVisible
+                    ControlGroup.ENDPOINT -> isEndpointSettingsDrawerOpen
+                }
+                val onToggleSettings = when (group) {
+                    ControlGroup.VIDEO -> onToggleVideoSettingsDrawer
+                    ControlGroup.AUDIO -> onToggleAudioSourceDrawer
+                    ControlGroup.ENDPOINT -> onToggleEndpointSettingsDrawer
+                }
+                // Audio settings don't apply to an RTMP source; keep the cog slot so columns align.
+                val hasSettings = !(group == ControlGroup.AUDIO && isRtmpSource)
+                // ENDPOINT has nothing to expand for non-SRTLA endpoints.
+                val hasExpandableContent = !(group == ControlGroup.ENDPOINT && !isSrtlaEndpoint)
+
+                SourceButtonRow(modifier = Modifier) {
+                    SourceButton(
+                        text = group.label,
+                        isActive = expandedGroup == group,
+                        minWidth = GroupButtonMinWidth,
+                        onClick = {
+                            when {
+                                !hasExpandableContent -> onToggleSettings()
+                                else -> onExpandedGroupChange(if (expandedGroup == group) null else group)
+                            }
                         }
+                    )
+                    if (hasSettings) {
+                        SettingsCogButton(
+                            isOpen = isSettingsOpen,
+                            contentDescription = settingsContentDescription,
+                            onClick = onToggleSettings
+                        )
+                    } else {
+                        Spacer(Modifier.size(40.dp))
                     }
                 }
             }
+            Box(modifier = Modifier.width(GroupButtonMinWidth + 44.dp)) {
+                liveButton()
+            }
+        }
+    }
+}
 
-            // 2. RTMP Source button(s) with settings cog
-            if (!isUvcSource && !isScreenSource) {
-                if (activeRtmpIndex != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        SourceButton(
-                            text = if (activeRtmpIndex == 1) "RTMP SRC" else "RTMP SRC $activeRtmpIndex",
-                            isActive = true,
-                            onClick = { onToggleRtmpSource(activeRtmpIndex) }
-                        )
+/** Groups of main-screen controls. Only the group buttons are visible until one is expanded. */
+enum class ControlGroup(val label: String) {
+    VIDEO("VIDEO"),
+    AUDIO("AUDIO"),
+    ENDPOINT("ENDPOINT")
+}
+
+private val GroupPanelWidth = 200.dp
+private val GroupButtonMinWidth = 110.dp
+
+/**
+ * Scrollable column, bottom-aligned next to the group buttons, that hosts the buttons of the
+ * expanded [ControlGroup].
+ */
+@Composable
+private fun ControlGroupPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = modifier
+            .width(GroupPanelWidth)
+            .wrapContentHeight()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content
+    )
+}
+
+/** Row with a wide primary button and an optional square settings button next to it. */
+@Composable
+private fun SourceButtonRow(
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    content: @Composable RowScope.() -> Unit
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun VideoGroupContent(
+    cameras: List<PreviewViewModel.CameraInfo>,
+    selectedCameraId: String?,
+    showCameraControls: Boolean,
+    isCameraControlsDrawerOpen: Boolean,
+    isRtmpSettingsDrawerOpen: Boolean,
+    activeRtmpIndex: Int?,
+    rtmpSourceCount: Int,
+    isUvcSource: Boolean,
+    isScreenSource: Boolean,
+    onSelectCamera: (String) -> Unit,
+    onToggleCameraControls: () -> Unit,
+    onToggleRtmpSettings: () -> Unit,
+    onToggleRtmpSource: (Int) -> Unit,
+    onToggleUvc: () -> Unit,
+    onLaunchUvcTest: () -> Unit,
+    onToggleScreen: () -> Unit
+) {
+    val isRtmpSource = activeRtmpIndex != null
+
+    // Dynamic camera selection buttons
+    if (showCameraControls && cameras.isNotEmpty()) {
+        cameras.forEach { camera ->
+            val isSelected = (camera.id == selectedCameraId)
+            SourceButtonRow {
+                SourceButton(
+                    text = camera.displayName,
+                    isActive = isSelected,
+                    onClick = { onSelectCamera(camera.id) },
+                    modifier = Modifier.weight(1f)
+                )
+                if (isSelected) {
+                    CameraSettingsButton(
+                        isOpen = isCameraControlsDrawerOpen,
+                        onClick = onToggleCameraControls
+                    )
+                }
+            }
+        }
+    }
+
+    // RTMP source button(s) with settings cog
+    if (!isUvcSource && !isScreenSource) {
+        if (activeRtmpIndex != null) {
+            SourceButtonRow {
+                SourceButton(
+                    text = if (activeRtmpIndex == 1) "RTMP SRC" else "RTMP SRC $activeRtmpIndex",
+                    isActive = true,
+                    onClick = { onToggleRtmpSource(activeRtmpIndex) },
+                    modifier = Modifier.weight(1f)
+                )
+                RtmpSettingsButton(
+                    isOpen = isRtmpSettingsDrawerOpen,
+                    onClick = onToggleRtmpSettings
+                )
+            }
+        } else {
+            val maxIndex = rtmpSourceCount.coerceAtLeast(1)
+            for (i in 1..maxIndex) {
+                SourceButtonRow {
+                    SourceButton(
+                        text = if (i == 1) "RTMP SRC" else "RTMP SRC $i",
+                        isActive = false,
+                        onClick = { onToggleRtmpSource(i) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (i == 1) {
                         RtmpSettingsButton(
                             isOpen = isRtmpSettingsDrawerOpen,
                             onClick = onToggleRtmpSettings
                         )
                     }
-                } else {
-                    val maxIndex = rtmpSourceCount.coerceAtLeast(1)
-                    for (i in 1..maxIndex) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            SourceButton(
-                                text = if (i == 1) "RTMP SRC" else "RTMP SRC $i",
-                                isActive = false,
-                                onClick = { onToggleRtmpSource(i) }
-                            )
-                            if (i == 1) {
-                                RtmpSettingsButton(
-                                    isOpen = isRtmpSettingsDrawerOpen,
-                                    onClick = onToggleRtmpSettings
-                                )
-                            }
-                        }
-                    }
                 }
-            }
-
-            // 4. USB Source Button
-            if (!isRtmpSource && !isScreenSource) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    SourceButton(
-                        text = "USB SRC",
-                        isActive = isUvcSource,
-                        minWidth = 50.dp,
-                        onClick = onToggleUvc
-                    )
-                    if (!isUvcSource) {
-                        UsbSettingsButton(
-                            onClick = onLaunchUvcTest
-                        )
-                    }
-                }
-            }
-
-            // 6. Screen Capture Button
-            if (!isRtmpSource && !isUvcSource) {
-                SourceButton(
-                    text = "SCREEN",
-                    isActive = isScreenSource,
-                    minWidth = 50.dp,
-                    onClick = onToggleScreen
-                )
-            }
-
-            // 7. Monitor Audio Button
-            SourceButton(
-                text = "MONITOR 🎤",
-                isActive = isMonitorAudioOn,
-                onClick = onToggleMonitorAudio
-            )
-
-            // 8. Bluetooth Mic Toggle Button
-            if (showBluetoothToggle) {
-                SourceButton(
-                    text = "🎤",
-                    leadingIcon = R.drawable.ic_bluetooth,
-                    isActive = useBluetoothMic,
-                    minWidth = 50.dp,
-                    onClick = onToggleBluetoothMic
-                )
-            }
-
-            // 9. Audio Out (System Audio) Button
-            if (!isRtmpSource) {
-                SourceButton(
-                    text = "AUDIO OUT",
-                    isActive = useSystemAudioForCamera,
-                    onClick = onToggleSystemAudio
-                )
-            }
-
-            // 10. Video Settings Drawer Toggle Button
-            SourceButton(
-                text = "VIDEO",
-                trailingIcon = R.drawable.ic_baseline_settings_24,
-                isActive = isVideoSettingsDrawerOpen,
-                onClick = onToggleVideoSettingsDrawer
-            )
-
-            // 11. Audio Settings & Source Drawer Toggle Button
-            if (!isRtmpSource) {
-                SourceButton(
-                    text = "AUDIO",
-                    trailingIcon = R.drawable.ic_baseline_settings_24,
-                    isActive = isAudioSourceDrawerOpen || isAudioDebugOverlayVisible,
-                    onClick = onToggleAudioSourceDrawer
-                )
-            }
-
-            // 12. Endpoint Settings Drawer Toggle Button
-            SourceButton(
-                text = "ENDPOINT",
-                trailingIcon = R.drawable.ic_baseline_settings_24,
-                isActive = isEndpointSettingsDrawerOpen,
-                onClick = onToggleEndpointSettingsDrawer
-            )
-
-            // 13. SRTLA Stats Button
-            if (isSrtlaEndpoint) {
-                SourceButton(
-                    text = "SRTLA STATS",
-                    isActive = isSrtlaStatsVisible,
-                    onClick = onToggleSrtlaStats
-                )
             }
         }
     }
+
+    // USB source button
+    if (!isRtmpSource && !isScreenSource) {
+        SourceButtonRow {
+            SourceButton(
+                text = "USB SRC",
+                isActive = isUvcSource,
+                onClick = onToggleUvc,
+                modifier = Modifier.weight(1f)
+            )
+            if (!isUvcSource) {
+                UsbSettingsButton(onClick = onLaunchUvcTest)
+            }
+        }
+    }
+
+    // Screen capture button
+    if (!isRtmpSource && !isUvcSource) {
+        SourceButton(
+            text = "SCREEN",
+            isActive = isScreenSource,
+            onClick = onToggleScreen,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun AudioGroupContent(
+    isRtmpSource: Boolean,
+    isMonitorAudioOn: Boolean,
+    showBluetoothToggle: Boolean,
+    useBluetoothMic: Boolean,
+    useSystemAudioForCamera: Boolean,
+    isMuted: Boolean,
+    onToggleMute: () -> Unit,
+    onToggleMonitorAudio: () -> Unit,
+    onToggleBluetoothMic: () -> Unit,
+    onToggleSystemAudio: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+    ) {
+        CameraControlButton(
+            iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
+            contentDescription = stringResource(R.string.mute_unmute_microphone),
+            onClick = onToggleMute
+        )
+    }
+
+    SourceButton(
+        text = "MONITOR 🎤",
+        isActive = isMonitorAudioOn,
+        onClick = onToggleMonitorAudio,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    if (showBluetoothToggle) {
+        SourceButton(
+            text = "🎤",
+            leadingIcon = R.drawable.ic_bluetooth,
+            isActive = useBluetoothMic,
+            onClick = onToggleBluetoothMic,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    if (!isRtmpSource) {
+        SourceButton(
+            text = "AUDIO OUT",
+            isActive = useSystemAudioForCamera,
+            onClick = onToggleSystemAudio,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun EndpointGroupContent(
+    isSrtlaStatsVisible: Boolean,
+    onToggleSrtlaStats: () -> Unit
+) {
+    SourceButton(
+        text = "SRTLA STATS",
+        isActive = isSrtlaStatsVisible,
+        onClick = onToggleSrtlaStats,
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 /**
@@ -390,6 +563,36 @@ fun SourceButton(
                 )
             }
         }
+    }
+}
+
+/**
+ * Square cog button displayed next to a group button; toggles that group's settings drawer.
+ */
+@Composable
+private fun SettingsCogButton(
+    isOpen: Boolean,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(4.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isOpen) Color(0xFF4CAF50) else Color(0xFF616161),
+            contentColor = Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        modifier = modifier.size(40.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_baseline_settings_24),
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -480,6 +683,40 @@ fun UsbSettingsButton(
             modifier = Modifier.size(20.dp)
         )
     }
+}
+
+@Preview(name = "Video Group Expanded", showBackground = true, backgroundColor = 0xFF000000, widthDp = 640, heightDp = 360)
+@Composable
+private fun PreviewSourceControlsBarVideoGroupExpanded() {
+    SourceControlsBar(
+        cameras = listOf(
+            PreviewViewModel.CameraInfo("0", "Back (0)", "BACK"),
+            PreviewViewModel.CameraInfo("1", "Front (1)", "FRONT")
+        ),
+        selectedCameraId = "0",
+        showCameraControls = true,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = false,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleSrtlaStats = {},
+        expandedGroup = ControlGroup.VIDEO
+    )
 }
 
 @Preview(name = "Default Camera Mode", showBackground = true, backgroundColor = 0xFF000000)

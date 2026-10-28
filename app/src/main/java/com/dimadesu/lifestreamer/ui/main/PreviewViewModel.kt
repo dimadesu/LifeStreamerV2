@@ -573,6 +573,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 videoDrawer.setDrawerOpen(false)
                 endpointDrawer.setDrawerOpen(false)
                 closeCameraAndRtmpDrawers()
+                _isSrtlaStatsToggledOn.value = false
             }
 
             override fun onError(message: String) {
@@ -591,6 +592,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 audioDrawer.setDrawerOpen(false)
                 endpointDrawer.setDrawerOpen(false)
                 closeCameraAndRtmpDrawers()
+                _isSrtlaStatsToggledOn.value = false
             }
         }
     )
@@ -604,6 +606,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 audioDrawer.setDrawerOpen(false)
                 videoDrawer.setDrawerOpen(false)
                 closeCameraAndRtmpDrawers()
+                _isSrtlaStatsToggledOn.value = false
             }
         }
     )
@@ -4207,6 +4210,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun setSrtlaStatsVisible(visible: Boolean) {
         _isSrtlaStatsToggledOn.value = visible
+        if (visible) {
+            audioDrawer.setDrawerOpen(false)
+            videoDrawer.setDrawerOpen(false)
+            endpointDrawer.setDrawerOpen(false)
+            setRtmpSettingsDrawerOpen(false)
+            setCameraControlsDrawerOpen(false)
+        }
+    }
+
+    fun toggleSrtlaStats() {
+        setSrtlaStatsVisible(_isSrtlaStatsToggledOn.value != true)
     }
 
     /**
@@ -4244,6 +4258,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
+            _isSrtlaStatsToggledOn.value = false
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4257,6 +4272,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
+            _isSrtlaStatsToggledOn.value = false
             showExposureSlider.value = false
             showZoomSlider.value = false
             showLensDistanceSlider.value = false
@@ -4351,6 +4367,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
+            _isSrtlaStatsToggledOn.value = false
         }
         if (!next) {
             showExposureSlider.value = false
@@ -4366,6 +4383,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             audioDrawer.setDrawerOpen(false)
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
+            _isSrtlaStatsToggledOn.value = false
         }
         if (!open) {
             showExposureSlider.value = false

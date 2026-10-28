@@ -72,11 +72,14 @@
     <string name="video_enable_key">video_enabled_key</string>
 
     <string name="video_settings_title">VIDEO SETTINGS</string>
+    <string name="audio_settings_title">AUDIO SETTINGS</string>
     <string name="close_video_settings">Close video settings</string>
     <string name="video_settings_apply_after_stream">Changes to video settings will apply after stream ends.</string>
 
     <string name="endpoint_settings_title">ENDPOINT SETTINGS</string>
     <string name="close_endpoint_settings">Close endpoint settings</string>
+    <string name="srtla_stats_title">SRTLA STATS</string>
+    <string name="close_srtla_stats">Close SRTLA stats</string>
     <string name="endpoint_settings_apply_after_stream">Changes to the endpoint type and server settings will apply the next time you go live.</string>
     <string name="file_name_extension_note">The file extension is added automatically.</string>
 
