@@ -1,30 +1,25 @@
 package com.dimadesu.lifestreamer.ui.main.compose
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,10 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -48,7 +41,7 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 
 /**
- * Stateful Composable for the main-screen controls, grouped into VIDEO (sources + settings),
+ * Stateful Composable for the right-edge controls (mute + groups), grouped into VIDEO (sources + settings),
  * AUDIO (monitor, bluetooth, system audio + settings) and ENDPOINT (settings + SRTLA stats).
  */
 @Composable
@@ -85,6 +78,7 @@ fun SourceControlsBar(
     val isAudioSourceDrawerOpen by viewModel.audioDrawer.isOpen.observeAsState(initial = false)
     val isVideoSettingsDrawerOpen by viewModel.videoDrawer.isOpen.observeAsState(initial = false)
     val isEndpointSettingsDrawerOpen by viewModel.endpointDrawer.isOpen.observeAsState(initial = false)
+    val isMuted by viewModel.isMutedLiveData.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -136,13 +130,21 @@ fun SourceControlsBar(
         onToggleSrtlaStats = onToggleSrtlaStats,
         expandedGroup = expandedGroup,
         onExpandedGroupChange = { expandedGroup = it },
+        columnHeader = {
+            CameraControlButton(
+                iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
+                contentDescription = stringResource(R.string.mute_unmute_microphone),
+                onClick = { viewModel.setMute(!isMuted) }
+            )
+        },
         modifier = modifier
     )
 }
 
 /**
- * Stateless Composable for the main-screen controls: a bottom-left column of group buttons
- * (VIDEO / AUDIO / ENDPOINT) and a centered panel with the buttons of the expanded group.
+ * Stateless Composable for the right-edge controls: a column with [columnHeader] (e.g. mute)
+ * above the group buttons (VIDEO / AUDIO / ENDPOINT), and a second column to its left with the
+ * scrollable buttons of the expanded group.
  */
 @Composable
 fun SourceControlsBar(
@@ -183,6 +185,7 @@ fun SourceControlsBar(
     onToggleSrtlaStats: () -> Unit,
     expandedGroup: ControlGroup? = null,
     onExpandedGroupChange: (ControlGroup?) -> Unit = {},
+    columnHeader: @Composable ColumnScope.() -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isRtmpSource = activeRtmpIndex != null
@@ -193,40 +196,14 @@ fun SourceControlsBar(
         action()
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        if (expandedGroup != null) {
-            // Tap outside the panel to dismiss it.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) { detectTapGestures { onExpandedGroupChange(null) } }
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .wrapContentHeight()
-                .padding(bottom = 8.dp),
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
-        ) {
-            ControlGroup.entries.forEach { group ->
-                SourceButton(
-                    text = group.label,
-                    isActive = expandedGroup == group,
-                    onClick = {
-                        onExpandedGroupChange(if (expandedGroup == group) null else group)
-                    }
-                )
-            }
-        }
-
+    Row(
+        modifier = modifier.fillMaxHeight(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Second column (to the left): buttons of the expanded group.
         if (expandedGroup != null) {
             ControlGroupPanel(
-                title = expandedGroup.label,
-                onClose = { onExpandedGroupChange(null) },
-                modifier = Modifier.align(Alignment.Center)
+                modifier = Modifier.align(Alignment.Bottom)
             ) {
                 when (expandedGroup) {
                     ControlGroup.VIDEO -> VideoGroupContent(
@@ -273,6 +250,27 @@ fun SourceControlsBar(
                 }
             }
         }
+
+        // First column (right edge): header (e.g. mute) above the group buttons.
+        Column(
+            modifier = Modifier
+                .align(Alignment.Bottom)
+                .wrapContentHeight()
+                .padding(bottom = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
+        ) {
+            columnHeader()
+            ControlGroup.entries.forEach { group ->
+                SourceButton(
+                    text = group.label,
+                    isActive = expandedGroup == group,
+                    onClick = {
+                        onExpandedGroupChange(if (expandedGroup == group) null else group)
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -283,58 +281,26 @@ enum class ControlGroup(val label: String) {
     ENDPOINT("ENDPOINT")
 }
 
-private val GroupPanelWidth = 260.dp
+private val GroupPanelWidth = 200.dp
 
 /**
- * Centered floating panel that hosts the buttons of the expanded [ControlGroup].
+ * Scrollable column, bottom-aligned next to the group buttons, that hosts the buttons of the
+ * expanded [ControlGroup].
  */
 @Composable
 private fun ControlGroupPanel(
-    title: String,
-    onClose: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xE6212121),
-        contentColor = Color.White,
-        shadowElevation = 8.dp,
-        // Swallow taps on the panel background so they don't reach the dismiss layer.
+    Column(
         modifier = modifier
             .width(GroupPanelWidth)
-            .heightIn(max = 320.dp)
-            .pointerInput(Unit) { detectTapGestures { } }
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(
-                    onClick = onClose,
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 32.dp)
-                ) {
-                    Text(text = "✕", color = Color.White, fontSize = 16.sp)
-                }
-            }
-            Column(
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                content = content
-            )
-        }
-    }
+            .wrapContentHeight()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content
+    )
 }
 
 /** Row with a wide primary button and an optional square settings button next to it. */
