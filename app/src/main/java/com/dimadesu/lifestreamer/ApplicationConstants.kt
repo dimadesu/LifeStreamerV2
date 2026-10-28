@@ -4,6 +4,7 @@ import android.content.pm.ActivityInfo
 import android.media.AudioFormat
 import android.media.MediaFormat
 import android.util.Range
+import android.util.Size
 import io.github.thibaultbee.streampack.core.streamers.single.AudioConfig
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
 
@@ -50,6 +51,29 @@ object ApplicationConstants {
          * Default resolution for live stream.
          */
         val defaultResolution = defaultVideoConfig.resolution
+
+        /**
+         * Resolutions offered in the video settings when the camera-supported list is not used.
+         */
+        val standardResolutions = listOf(
+            Size(4032, 3024),
+            Size(3840, 2160),
+            Size(2560, 1440),
+            Size(1920, 1440),
+            Size(1920, 1080),
+            Size(1664, 936),
+            Size(1280, 720),
+            Size(1024, 768),
+            Size(960, 540),
+            Size(854, 480),
+            Size(640, 360),
+            Size(426, 240)
+        )
+
+        /**
+         * Bitrates offered in the video settings, in kbps.
+         */
+        val bitrateOptionsInKbps = (500..10_000 step 500).toList()
     }
 
     /**

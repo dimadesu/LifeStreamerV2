@@ -9,7 +9,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,11 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
@@ -66,7 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
@@ -116,33 +110,6 @@ fun RtmpSettingsBottomDrawer(
         modifier = modifier
     )
 }
-
-/**
- * Renders a vertical scrollbar on the edge of the container when content overflows.
- */
-private fun Modifier.verticalScrollbar(
-    scrollState: ScrollState,
-    color: Color = Color(0x66FFFFFF),
-    width: Dp = 3.dp
-): Modifier = this.then(
-    Modifier.drawWithContent {
-        drawContent()
-        val maxVal = scrollState.maxValue
-        if (maxVal > 0) {
-            val totalHeight = size.height
-            val visibleRatio = (totalHeight / (totalHeight + maxVal)).coerceIn(0.15f, 1f)
-            val thumbHeight = totalHeight * visibleRatio
-            val scrollRatio = scrollState.value.toFloat() / maxVal.toFloat()
-            val thumbOffset = (totalHeight - thumbHeight) * scrollRatio
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(size.width - width.toPx(), thumbOffset),
-                size = Size(width.toPx(), thumbHeight),
-                cornerRadius = CornerRadius(width.toPx() / 2, width.toPx() / 2)
-            )
-        }
-    }
-)
 
 /**
  * Stateless responsive panel for RTMP settings:
