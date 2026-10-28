@@ -42,8 +42,8 @@ import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 
 /**
- * Stateful Composable for the right-edge controls (mute + groups), grouped into VIDEO (sources + settings),
- * AUDIO (monitor, bluetooth, system audio + settings) and ENDPOINT (settings + SRTLA stats).
+ * Stateful Composable for the right-edge controls, grouped into VIDEO (sources + settings),
+ * AUDIO (mute, monitor, bluetooth, system audio) and ENDPOINT (SRTLA stats), each with a settings cog.
  */
 @Composable
 fun SourceControlsBar(
@@ -131,21 +131,16 @@ fun SourceControlsBar(
         onToggleSrtlaStats = onToggleSrtlaStats,
         expandedGroup = expandedGroup,
         onExpandedGroupChange = { expandedGroup = it },
-        columnHeader = {
-            CameraControlButton(
-                iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
-                contentDescription = stringResource(R.string.mute_unmute_microphone),
-                onClick = { viewModel.setMute(!isMuted) }
-            )
-        },
+        isMuted = isMuted,
+        onToggleMute = { viewModel.setMute(!isMuted) },
         modifier = modifier
     )
 }
 
 /**
- * Stateless Composable for the right-edge controls: a column with [columnHeader] (e.g. mute)
- * above the group buttons (VIDEO / AUDIO / ENDPOINT), and a second column to its left with the
- * scrollable buttons of the expanded group.
+ * Stateless Composable for the right-edge controls: a column of group buttons
+ * (VIDEO / AUDIO / ENDPOINT) with settings cogs, and a second column to its left with the
+ * scrollable buttons of the expanded group (the mic mute toggle is at the top of AUDIO).
  */
 @Composable
 fun SourceControlsBar(
@@ -186,7 +181,8 @@ fun SourceControlsBar(
     onToggleSrtlaStats: () -> Unit,
     expandedGroup: ControlGroup? = null,
     onExpandedGroupChange: (ControlGroup?) -> Unit = {},
-    columnHeader: @Composable ColumnScope.() -> Unit = {},
+    isMuted: Boolean = false,
+    onToggleMute: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isRtmpSource = activeRtmpIndex != null
@@ -226,6 +222,8 @@ fun SourceControlsBar(
                         showBluetoothToggle = showBluetoothToggle,
                         useBluetoothMic = useBluetoothMic,
                         useSystemAudioForCamera = useSystemAudioForCamera,
+                        isMuted = isMuted,
+                        onToggleMute = onToggleMute,
                         onToggleMonitorAudio = onToggleMonitorAudio,
                         onToggleBluetoothMic = onToggleBluetoothMic,
                         onToggleSystemAudio = onToggleSystemAudio
@@ -239,7 +237,7 @@ fun SourceControlsBar(
             }
         }
 
-        // First column (right edge): header (e.g. mute) above the group buttons.
+        // First column (right edge): the group buttons with their settings cogs.
         Column(
             modifier = Modifier
                 .align(Alignment.Bottom)
@@ -248,7 +246,6 @@ fun SourceControlsBar(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
-            columnHeader()
             ControlGroup.entries.forEach { group ->
                 val settingsContentDescription = when (group) {
                     ControlGroup.VIDEO -> stringResource(R.string.video_settings_title)
@@ -452,10 +449,23 @@ private fun AudioGroupContent(
     showBluetoothToggle: Boolean,
     useBluetoothMic: Boolean,
     useSystemAudioForCamera: Boolean,
+    isMuted: Boolean,
+    onToggleMute: () -> Unit,
     onToggleMonitorAudio: () -> Unit,
     onToggleBluetoothMic: () -> Unit,
     onToggleSystemAudio: () -> Unit
 ) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+    ) {
+        CameraControlButton(
+            iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
+            contentDescription = stringResource(R.string.mute_unmute_microphone),
+            onClick = onToggleMute
+        )
+    }
+
     SourceButton(
         text = "MONITOR 🎤",
         isActive = isMonitorAudioOn,
