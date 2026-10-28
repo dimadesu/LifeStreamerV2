@@ -66,13 +66,12 @@ fun SourceControlsBar(
     val showBluetoothToggle by viewModel.showBluetoothToggle.observeAsState(initial = false)
     val useBluetoothMic by viewModel.useBluetoothMic.observeAsState(initial = false)
     val useSystemAudioForCamera by viewModel.useSystemAudioForCameraLiveData.observeAsState(initial = false)
-    val isAudioDebugOverlayVisible by viewModel.isAudioDebugOverlayVisible.observeAsState(initial = false)
     val isSrtlaEndpoint by viewModel.isSrtlaEndpoint.observeAsState(initial = false)
     val isSrtlaStatsVisible by viewModel.isSrtlaStatsVisible.observeAsState(initial = false)
     val currentCameraIdFromStreamer by viewModel.currentCameraIdLiveData.observeAsState(initial = null)
     val isCameraControlsDrawerOpen by viewModel.isCameraControlsDrawerOpen.observeAsState(initial = false)
     val isRtmpSettingsDrawerOpen by viewModel.isRtmpSettingsDrawerOpen.observeAsState(initial = false)
-    val isAudioSourceDrawerOpen by viewModel.isAudioSourceDrawerOpen.observeAsState(initial = false)
+    val isAudioSourceDrawerOpen by viewModel.audioDrawer.isOpen.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -97,7 +96,7 @@ fun SourceControlsBar(
         showBluetoothToggle = showBluetoothToggle,
         useBluetoothMic = useBluetoothMic,
         useSystemAudioForCamera = useSystemAudioForCamera,
-        isAudioDebugOverlayVisible = isAudioDebugOverlayVisible,
+        isAudioDebugOverlayVisible = isAudioSourceDrawerOpen,
         isSrtlaEndpoint = isSrtlaEndpoint,
         isSrtlaStatsVisible = isSrtlaStatsVisible,
         onSelectCamera = { cameraId ->
@@ -115,7 +114,7 @@ fun SourceControlsBar(
         onToggleBluetoothMic = onToggleBluetoothMic,
         onToggleSystemAudio = onToggleSystemAudio,
         onToggleAudioDebug = onToggleAudioDebug,
-        onToggleAudioSourceDrawer = { viewModel.toggleAudioSourceDrawer() },
+        onToggleAudioSourceDrawer = { viewModel.audioDrawer.toggleDrawer() },
         onToggleSrtlaStats = onToggleSrtlaStats,
         modifier = modifier
     )
