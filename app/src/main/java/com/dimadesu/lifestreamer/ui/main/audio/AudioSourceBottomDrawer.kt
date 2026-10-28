@@ -1,4 +1,4 @@
-package com.dimadesu.lifestreamer.ui.main.compose
+package com.dimadesu.lifestreamer.ui.main.audio
 
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
@@ -67,7 +67,6 @@ import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
-import com.dimadesu.lifestreamer.ui.main.audio.AudioSettingsState
 import java.util.Locale
 
 /**

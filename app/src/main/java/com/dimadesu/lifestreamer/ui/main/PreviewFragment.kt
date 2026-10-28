@@ -56,7 +56,7 @@ import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.RtmpSettingsBottomDrawer
-import com.dimadesu.lifestreamer.ui.main.compose.AudioSourceBottomDrawer
+import com.dimadesu.lifestreamer.ui.main.audio.AudioSourceBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
