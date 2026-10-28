@@ -56,7 +56,7 @@ import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.CameraControlsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.RtmpSettingsBottomDrawer
-import com.dimadesu.lifestreamer.ui.main.compose.AudioSourceBottomDrawer
+import com.dimadesu.lifestreamer.ui.main.audio.AudioSourceBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
@@ -270,7 +270,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                         }
                     },
                     onToggleAudioDebug = {
-                        previewViewModel.toggleAudioDebugOverlay()
+                        previewViewModel.audioDrawer.toggleDrawer()
                     },
                     onToggleSrtlaStats = {
                         previewViewModel.setSrtlaStatsVisible(binding.srtlaStatsScrollView.visibility != View.VISIBLE)
@@ -765,7 +765,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         
         // Reload audio settings from DataStore (may have changed in Settings activity)
         // and apply if they differ from current values
-        previewViewModel.reloadAndApplyAudioSettingsIfChanged()
+        previewViewModel.audioDrawer.reloadAndApplyIfChanged()
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)

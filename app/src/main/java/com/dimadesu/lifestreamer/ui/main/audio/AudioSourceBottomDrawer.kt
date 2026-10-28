@@ -1,4 +1,4 @@
-package com.dimadesu.lifestreamer.ui.main.compose
+package com.dimadesu.lifestreamer.ui.main.audio
 
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
@@ -89,16 +89,17 @@ fun AudioSourceBottomDrawer(
     viewModel: PreviewViewModel,
     modifier: Modifier = Modifier
 ) {
-    val isOpen by viewModel.isAudioSourceDrawerOpen.observeAsState(initial = false)
+    val audio = viewModel.audioDrawer
+    val isOpen by audio.isOpen.observeAsState(initial = false)
     val isRtmpSource by viewModel.isRtmpSource.observeAsState(initial = false)
     val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
-    val audioSettingsState by viewModel.audioSettingsState.observeAsState(
-        initial = PreviewViewModel.AudioSettingsState()
+    val audioSettingsState by audio.settingsState.observeAsState(
+        initial = AudioSettingsState()
     )
-    val selectedSourceType by viewModel.selectedAudioSourceType.observeAsState(
+    val selectedSourceType by audio.selectedSourceType.observeAsState(
         initial = android.media.MediaRecorder.AudioSource.CAMCORDER
     )
-    val audioDebugInfo by viewModel.audioDebugInfoLiveData.observeAsState(initial = null)
+    val audioDebugInfo by audio.debugInfo.observeAsState(initial = null)
 
     val context = LocalContext.current
     val options = remember(context) {
@@ -114,21 +115,21 @@ fun AudioSourceBottomDrawer(
         isVisibleForSource = !isRtmpSource,
         audioSettingsState = audioSettingsState,
         isStreaming = isStreaming,
-        onSelectEncoder = { viewModel.setAudioEncoder(it) },
-        onSelectChannelConfig = { viewModel.setAudioChannelConfig(it) },
-        onSelectBitrate = { viewModel.setAudioBitrate(it) },
-        onSelectSampleRate = { viewModel.setAudioSampleRate(it) },
-        onSelectProfile = { viewModel.setAudioProfile(it) },
+        onSelectEncoder = { audio.setEncoder(it) },
+        onSelectChannelConfig = { audio.setChannelConfig(it) },
+        onSelectBitrate = { audio.setBitrate(it) },
+        onSelectSampleRate = { audio.setSampleRate(it) },
+        onSelectProfile = { audio.setProfile(it) },
         availableOptions = options,
         selectedSourceType = selectedSourceType,
         debugInfo = audioDebugInfo,
         onSelectSourceType = { newType ->
             if (newType != selectedSourceType) {
-                viewModel.setSelectedAudioSourceType(newType)
-                viewModel.applySelectedAudioSource()
+                audio.setSelectedSourceType(newType)
+                audio.applySelectedSource()
             }
         },
-        onClose = { viewModel.setAudioSourceDrawerOpen(false) },
+        onClose = { audio.setDrawerOpen(false) },
         modifier = modifier
     )
 }
@@ -172,7 +173,7 @@ private fun Modifier.verticalScrollbar(
 fun AudioSourceBottomDrawer(
     isOpen: Boolean,
     isVisibleForSource: Boolean,
-    audioSettingsState: PreviewViewModel.AudioSettingsState,
+    audioSettingsState: AudioSettingsState,
     isStreaming: Boolean = false,
     onSelectEncoder: (String) -> Unit,
     onSelectChannelConfig: (Int) -> Unit,
@@ -680,7 +681,7 @@ private fun AudioStatRow(
 // Previews
 // ---------------------------------------------------------------------------
 
-private val sampleAudioSettingsState = PreviewViewModel.AudioSettingsState(
+private val sampleAudioSettingsState = AudioSettingsState(
     encoder = "audio/mp4a-latm",
     channelConfig = 12,
     bitrate = 128000,
