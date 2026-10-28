@@ -195,29 +195,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        binding.liveButton.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                LiveButton(
-                    viewModel = previewViewModel,
-                    onClick = {
-                        val currentStatus = previewViewModel.streamStatus.value
-                        Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
-                        when (currentStatus) {
-                            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
-                                Log.d(TAG, "Starting stream...")
-                                startStreamIfPermissions(previewViewModel.requiredPermissions)
-                            }
-                            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
-                                Log.d(TAG, "Stopping stream...")
-                                stopStream()
-                            }
-                        }
-                    }
-                )
-            }
-        }
-
         // Commented out along with the switchCameraButton in XML
         /*
         binding.switchCameraButton.setOnClickListener {
@@ -282,6 +259,25 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     },
                     onToggleSrtlaStats = {
                         previewViewModel.setSrtlaStatsVisible(binding.srtlaStatsScrollView.visibility != View.VISIBLE)
+                    },
+                    liveButton = {
+                        LiveButton(
+                            viewModel = previewViewModel,
+                            onClick = {
+                                val currentStatus = previewViewModel.streamStatus.value
+                                Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
+                                when (currentStatus) {
+                                    StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                                        Log.d(TAG, "Starting stream...")
+                                        startStreamIfPermissions(previewViewModel.requiredPermissions)
+                                    }
+                                    StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                                        Log.d(TAG, "Stopping stream...")
+                                        stopStream()
+                                    }
+                                }
+                            }
+                        )
                     }
                 )
             }

@@ -1,6 +1,7 @@
 package com.dimadesu.lifestreamer.ui.main.compose
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,6 +60,7 @@ fun SourceControlsBar(
     onToggleSystemAudio: () -> Unit,
     onToggleAudioDebug: () -> Unit,
     onToggleSrtlaStats: () -> Unit,
+    liveButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cameras by viewModel.availableCamerasLiveData.observeAsState(initial = emptyList())
@@ -133,13 +135,14 @@ fun SourceControlsBar(
         onExpandedGroupChange = { expandedGroup = it },
         isMuted = isMuted,
         onToggleMute = { viewModel.setMute(!isMuted) },
+        liveButton = liveButton,
         modifier = modifier
     )
 }
 
 /**
  * Stateless Composable for the right-edge controls: a column of group buttons
- * (VIDEO / AUDIO / ENDPOINT) with settings cogs, and a second column to its left with the
+ * (VIDEO / AUDIO / ENDPOINT) with settings cogs followed by [liveButton], and a second column to its left with the
  * scrollable buttons of the expanded group (the mic mute toggle is at the top of AUDIO).
  */
 @Composable
@@ -183,6 +186,7 @@ fun SourceControlsBar(
     onExpandedGroupChange: (ControlGroup?) -> Unit = {},
     isMuted: Boolean = false,
     onToggleMute: () -> Unit = {},
+    liveButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isRtmpSource = activeRtmpIndex != null
@@ -289,6 +293,9 @@ fun SourceControlsBar(
                         Spacer(Modifier.size(40.dp))
                     }
                 }
+            }
+            Box(modifier = Modifier.width(GroupButtonMinWidth + 44.dp)) {
+                liveButton()
             }
         }
     }

@@ -88,9 +88,11 @@
             app:layout_constrainedHeight="true"
             app:layout_constraintVertical_bias="1.0"
             app:layout_constraintTop_toBottomOf="@+id/topRightControlsComposeView"
-            app:layout_constraintBottom_toTopOf="@+id/liveButton"
+            android:layout_marginBottom="8dp"
+            android:layout_marginEnd="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            app:layout_constraintEnd_toStartOf="@+id/cameraControlsComposeView">
 
             <com.dimadesu.bondbunny.SrtlaStatsView
                 android:id="@+id/srtlaStatsView"
@@ -160,15 +162,6 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/liveButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/cameraSlidersComposeView"
