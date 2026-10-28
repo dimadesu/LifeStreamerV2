@@ -200,7 +200,7 @@ class DataStoreRepository(
                         ?: context.getString(R.string.default_srt_server_url)
                 val port =
                     preferences[stringPreferencesKey(context.getString(R.string.srt_server_port_key))]?.toInt()
-                        ?: ApplicationConstants.Endpoint.defaultSrtPort
+                        ?: context.getString(R.string.default_srt_server_port).toInt()
                 val streamId =
                     preferences[stringPreferencesKey(context.getString(R.string.srt_server_stream_id_key))]
                         ?: ""
@@ -567,8 +567,7 @@ class DataStoreRepository(
                     ?: EndpointType.SRT.id
             ),
             srtAddress = text(R.string.srt_server_ip_key, R.string.default_srt_server_url),
-            srtPort = preferences[stringPreferencesKey(context.getString(R.string.srt_server_port_key))]
-                ?: ApplicationConstants.Endpoint.defaultSrtPort.toString(),
+            srtPort = text(R.string.srt_server_port_key, R.string.default_srt_server_port),
             srtStreamId = text(R.string.srt_server_stream_id_key),
             srtLatency = text(R.string.srt_server_latency_key, R.string.default_srt_server_latency),
             srtPassphrase = text(R.string.srt_server_passphrase_key, R.string.default_srt_server_passphrase),
