@@ -17,14 +17,6 @@ package com.dimadesu.lifestreamer.ui.main
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CameraCharacteristics
-import android.util.SizeF
-import kotlin.math.atan
-import kotlin.math.sqrt
-import kotlin.math.PI
-import androidx.appcompat.app.AlertDialog
-import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
 import android.app.AppOpsManager
@@ -60,8 +52,6 @@ import com.dimadesu.lifestreamer.ui.main.compose.RtmpSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.audio.AudioSourceBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.endpoint.EndpointSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsBottomDrawer
-import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
-import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.SrtlaStatsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
@@ -171,13 +161,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        binding.cameraSlidersComposeView.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                CameraSliders(viewModel = previewViewModel)
-            }
-        }
-
         binding.topRightControlsComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -205,14 +188,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        // Commented out along with the switchCameraButton in XML
-        /*
-        binding.switchCameraButton.setOnClickListener {
-            showCameraSelectionDialog()
-        }
-        */
-
-        binding.cameraControlsComposeView.apply {
+        binding.mainControlsComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SourceControlsBar(
@@ -270,25 +246,8 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     onToggleSrtlaStats = {
                         previewViewModel.toggleSrtlaStats()
                     },
-                    liveButton = {
-                        LiveButton(
-                            viewModel = previewViewModel,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                val currentStatus = previewViewModel.streamStatus.value
-                                Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
-                                when (currentStatus) {
-                                    StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
-                                        Log.d(TAG, "Starting stream...")
-                                        startStreamIfPermissions(previewViewModel.requiredPermissions)
-                                    }
-                                    StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
-                                        Log.d(TAG, "Stopping stream...")
-                                        stopStream()
-                                    }
-                                }
-                            }
-                        )
+                    onToggleLive = {
+                        toggleLiveStream()
                     }
                 )
             }
@@ -801,6 +760,21 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         }
     }
 
+    private fun toggleLiveStream() {
+        val currentStatus = previewViewModel.streamStatus.value
+        Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
+        when (currentStatus) {
+            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                Log.d(TAG, "Starting stream...")
+                startStreamIfPermissions(previewViewModel.requiredPermissions)
+            }
+            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                Log.d(TAG, "Stopping stream...")
+                stopStream()
+            }
+        }
+    }
+
     private fun startStreamIfPermissions(permissions: List<String>) {
         when {
             PermissionManager.hasPermissions(
@@ -841,83 +815,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 )
             }
         }
-    }
-
-    private fun showCameraSelectionDialog() {
-        val ctx = requireContext()
-        val cameraManager = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraIds = try {
-            cameraManager.cameraIdList
-        } catch (t: Throwable) {
-            Log.w(TAG, "Failed to list camera ids: ${t.message}")
-            return
-        }
-
-        if (cameraIds.isEmpty()) {
-            Log.w(TAG, "No camera devices available on this device")
-            return
-        }
-
-        val items = cameraIds.map { id ->
-            try {
-                val chars = cameraManager.getCameraCharacteristics(id)
-                val facingConst = chars.get(CameraCharacteristics.LENS_FACING)
-                val facing = when (facingConst) {
-                    CameraCharacteristics.LENS_FACING_FRONT -> "Front"
-                    CameraCharacteristics.LENS_FACING_BACK -> "Back"
-                    else -> "External"
-                }
-
-                // Use available focal lengths only. Sensor physical size isn't always
-                // provided on all devices, and focal length values alone are often
-                // the most consistently available data we can show.
-                val focalArr = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                val physicalSize = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE) as? SizeF
-                val fovLabel = if (focalArr != null && focalArr.isNotEmpty()) {
-                    // Prefer showing diagonal FOV when sensor physical size is available.
-                    val firstFocal = focalArr.first()
-                    val focalFormatted = "%.1f".format(firstFocal)
-                    if (physicalSize != null) {
-                        val sensorDiag = sqrt(physicalSize.width * physicalSize.width + physicalSize.height * physicalSize.height)
-                        // diagonal FOV in degrees = 2 * atan(sensorDiag / (2 * focal))
-                        val fovRad = 2.0 * atan((sensorDiag / (2.0 * firstFocal)).toDouble())
-                        val fovDeg = (fovRad * 180.0 / PI).toInt()
-                        "${fovDeg}°"
-                    } else {
-                        // If physical size is missing, show available focal(s)
-                        val formattedAll = focalArr.joinToString(",") { "%.1f".format(it) }
-                        "f=${formattedAll}mm"
-                    }
-                } else {
-                    "focal unknown"
-                }
-
-                "$id $facing $fovLabel"
-            } catch (t: Throwable) {
-                "Camera $id"
-            }
-        }.toTypedArray()
-
-        // Determine currently selected camera id if any
-        val currentSource = previewViewModel.streamer?.videoInput?.sourceFlow?.value
-        val currentCameraId = (currentSource as? ICameraSource)?.cameraId
-        val currentIndex = if (currentCameraId != null) cameraIds.indexOf(currentCameraId).coerceAtLeast(0) else -1
-
-        AlertDialog.Builder(ctx)
-            .setTitle("Select camera")
-            .setSingleChoiceItems(items, if (currentIndex >= 0) currentIndex else -1) { dialog, which ->
-                val selectedId = cameraIds[which]
-                lifecycleScope.launch {
-                    try {
-                        (previewViewModel.streamer as? IWithVideoSource)?.setCameraId(selectedId)
-                    } catch (t: Throwable) {
-                        Log.e(TAG, "Failed to set camera id $selectedId: ${t.message}")
-                    }
-                }
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     @SuppressLint("MissingPermission")

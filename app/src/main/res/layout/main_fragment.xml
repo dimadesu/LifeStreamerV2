@@ -148,19 +148,9 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
+        <!-- Main controls (video/audio/endpoint groups and live stream button) -->
         <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/cameraSlidersComposeView"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:clipChildren="false"
-            android:clipToPadding="false"
-            android:layout_marginEnd="8dp"
-            app:layout_constraintBottom_toBottomOf="@+id/cameraControlsComposeView"
-            app:layout_constraintEnd_toStartOf="@+id/cameraControlsComposeView"
-            app:layout_constraintTop_toTopOf="@+id/cameraControlsComposeView" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/cameraControlsComposeView"
+            android:id="@+id/mainControlsComposeView"
             android:layout_width="wrap_content"
             android:layout_height="0dp"
             android:layout_marginEnd="16dp"
