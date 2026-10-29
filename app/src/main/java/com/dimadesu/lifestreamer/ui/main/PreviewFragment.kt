@@ -188,7 +188,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             }
         }
 
-        binding.cameraControlsComposeView.apply {
+        binding.mainControlsComposeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SourceControlsBar(
