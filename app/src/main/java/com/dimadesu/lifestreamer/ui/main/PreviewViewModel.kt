@@ -614,9 +614,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private fun closeCameraAndRtmpDrawers() {
         _isCameraControlsDrawerOpen.value = false
         _isRtmpSettingsDrawerOpen.value = false
-        showExposureSlider.value = false
-        showZoomSlider.value = false
-        showLensDistanceSlider.value = false
     }
 
     // MediaProjection session for streaming
@@ -3471,11 +3468,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             Log.d(TAG, "Saved camera ID for later: $lastUsedCameraId")
                         }
 
-                        // Hide camera-specific sliders when switching away from camera
-                        showZoomSlider.value = false
-                        showExposureSlider.value = false
-                        showLensDistanceSlider.value = false
-
                         // Hide BT toggle - RTMP uses MediaProjection audio, not microphone
                         _showBluetoothToggle.postValue(false)
 
@@ -4082,9 +4074,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     _isScreenSource.postValue(true)
                     _activeRtmpIndex.postValue(null)
                     _userToggledUvc.postValue(false)
-                    showZoomSlider.value = false
-                    showExposureSlider.value = false
-                    showLensDistanceSlider.value = false
                     
                     if (proj != null) {
                         switchToMediaProjectionVideoSource(currentStreamer, proj)
@@ -4259,9 +4248,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
             _isSrtlaStatsToggledOn.value = false
-            showExposureSlider.value = false
-            showZoomSlider.value = false
-            showLensDistanceSlider.value = false
         }
     }
 
@@ -4273,9 +4259,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
             _isSrtlaStatsToggledOn.value = false
-            showExposureSlider.value = false
-            showZoomSlider.value = false
-            showLensDistanceSlider.value = false
         }
     }
 
@@ -4369,11 +4352,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             endpointDrawer.setDrawerOpen(false)
             _isSrtlaStatsToggledOn.value = false
         }
-        if (!next) {
-            showExposureSlider.value = false
-            showZoomSlider.value = false
-            showLensDistanceSlider.value = false
-        }
     }
 
     fun setCameraControlsDrawerOpen(open: Boolean) {
@@ -4384,11 +4362,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             videoDrawer.setDrawerOpen(false)
             endpointDrawer.setDrawerOpen(false)
             _isSrtlaStatsToggledOn.value = false
-        }
-        if (!open) {
-            showExposureSlider.value = false
-            showZoomSlider.value = false
-            showLensDistanceSlider.value = false
         }
     }
 
@@ -4487,10 +4460,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getWhiteBalanceModeName(mode: Int): String = Companion.getWhiteBalanceModeName(mode)
 
-    val showExposureSlider = MutableLiveData(false)
-    fun toggleExposureSlider() {
-        showExposureSlider.postValue(!(showExposureSlider.value)!!)
-    }
 
     val isExposureCompensationAvailable = MutableLiveData(false)
     val exposureCompensationRange = MutableLiveData<Range<Int>>()
@@ -4506,10 +4475,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
-    val showZoomSlider = MutableLiveData(false)
-    fun toggleZoomSlider() {
-        showZoomSlider.postValue(!(showZoomSlider.value)!!)
-    }
 
     val isZoomAvailable = MutableLiveData(false)
     val zoomRatioRange = MutableLiveData<Range<Float>>()
@@ -4592,7 +4557,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getAutoFocusModeName(mode: Int): String = Companion.getAutoFocusModeName(mode)
 
-    val showLensDistanceSlider = MutableLiveData(false)
     val lensDistanceRange = MutableLiveData<Range<Float>>()
     private val _lensDistance = MutableStateFlow(0f)
     val lensDistance: StateFlow<Float> = _lensDistance.asStateFlow()
@@ -4709,7 +4673,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         currentAutoFocusMode.postValue(afMode)
 
         // Lens distance
-        showLensDistanceSlider.postValue(false)
         lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
         setLensDistance(0f)
     }

@@ -60,7 +60,6 @@ import com.dimadesu.lifestreamer.ui.main.compose.RtmpSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.audio.AudioSourceBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.endpoint.EndpointSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsBottomDrawer
-import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.SrtlaStatsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
@@ -167,13 +166,6 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SrtlaStatsBottomDrawer(viewModel = previewViewModel)
-            }
-        }
-
-        binding.cameraSlidersComposeView.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                CameraSliders(viewModel = previewViewModel)
             }
         }
 
