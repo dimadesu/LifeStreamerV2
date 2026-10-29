@@ -250,10 +250,13 @@ fun SourceControlsBar(
         }
 
         // First column (right edge): the group buttons with their settings cogs.
+        val controlsScrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .align(Alignment.Bottom)
                 .wrapContentHeight()
+                .verticalScroll(controlsScrollState)
+                .verticalScrollbar(controlsScrollState)
                 .padding(bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
@@ -333,11 +336,13 @@ private fun ControlGroupPanel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val scrollState = rememberScrollState()
     Column(
         modifier = modifier
             .width(GroupPanelWidth)
             .wrapContentHeight()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
+            .verticalScrollbar(scrollState)
             .padding(bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content
