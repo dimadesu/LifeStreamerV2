@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 
 /**
@@ -60,7 +62,7 @@ fun SourceControlsBar(
     onToggleSystemAudio: () -> Unit,
     onToggleAudioDebug: () -> Unit,
     onToggleSrtlaStats: () -> Unit,
-    liveButton: @Composable () -> Unit = {},
+    onToggleLive: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cameras by viewModel.availableCamerasLiveData.observeAsState(initial = emptyList())
@@ -82,6 +84,8 @@ fun SourceControlsBar(
     val isVideoSettingsDrawerOpen by viewModel.videoDrawer.isOpen.observeAsState(initial = false)
     val isEndpointSettingsDrawerOpen by viewModel.endpointDrawer.isOpen.observeAsState(initial = false)
     val isMuted by viewModel.isMutedLiveData.observeAsState(initial = false)
+    val streamStatus by viewModel.streamStatus.collectAsState(initial = StreamStatus.NOT_STREAMING)
+    val isReconnecting by viewModel.isReconnectingLiveData.observeAsState(initial = false)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -135,14 +139,16 @@ fun SourceControlsBar(
         onExpandedGroupChange = { expandedGroup = it },
         isMuted = isMuted,
         onToggleMute = { viewModel.setMute(!isMuted) },
-        liveButton = liveButton,
+        streamStatus = streamStatus,
+        isReconnecting = isReconnecting,
+        onToggleLive = onToggleLive,
         modifier = modifier
     )
 }
 
 /**
  * Stateless Composable for the right-edge controls: a column of group buttons
- * (VIDEO / AUDIO / ENDPOINT) with settings cogs followed by [liveButton], and a second column to its left with the
+ * (VIDEO / AUDIO / ENDPOINT) with settings cogs followed by the live/stop button, and a second column to its left with the
  * scrollable buttons of the expanded group (the mic mute toggle is at the top of AUDIO).
  */
 @Composable
@@ -186,7 +192,9 @@ fun SourceControlsBar(
     onExpandedGroupChange: (ControlGroup?) -> Unit = {},
     isMuted: Boolean = false,
     onToggleMute: () -> Unit = {},
-    liveButton: @Composable () -> Unit = {},
+    streamStatus: StreamStatus = StreamStatus.NOT_STREAMING,
+    isReconnecting: Boolean = false,
+    onToggleLive: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isRtmpSource = activeRtmpIndex != null
@@ -295,7 +303,12 @@ fun SourceControlsBar(
                 }
             }
             Box(modifier = Modifier.width(GroupButtonMinWidth + 44.dp)) {
-                liveButton()
+                LiveButton(
+                    status = streamStatus,
+                    isReconnecting = isReconnecting,
+                    onClick = onToggleLive,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }

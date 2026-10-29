@@ -61,7 +61,6 @@ import com.dimadesu.lifestreamer.ui.main.audio.AudioSourceBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.endpoint.EndpointSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.CameraSliders
-import com.dimadesu.lifestreamer.ui.main.compose.LiveButton
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.SrtlaStatsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
@@ -270,25 +269,8 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                     onToggleSrtlaStats = {
                         previewViewModel.toggleSrtlaStats()
                     },
-                    liveButton = {
-                        LiveButton(
-                            viewModel = previewViewModel,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                val currentStatus = previewViewModel.streamStatus.value
-                                Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
-                                when (currentStatus) {
-                                    StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
-                                        Log.d(TAG, "Starting stream...")
-                                        startStreamIfPermissions(previewViewModel.requiredPermissions)
-                                    }
-                                    StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
-                                        Log.d(TAG, "Stopping stream...")
-                                        stopStream()
-                                    }
-                                }
-                            }
-                        )
+                    onToggleLive = {
+                        toggleLiveStream()
                     }
                 )
             }
@@ -797,6 +779,21 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 Log.d(TAG, "Preview streamer assigned")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to set video source provider: ${e.message}")
+            }
+        }
+    }
+
+    private fun toggleLiveStream() {
+        val currentStatus = previewViewModel.streamStatus.value
+        Log.d(TAG, "Live button clicked - currentStatus: $currentStatus")
+        when (currentStatus) {
+            StreamStatus.NOT_STREAMING, StreamStatus.ERROR -> {
+                Log.d(TAG, "Starting stream...")
+                startStreamIfPermissions(previewViewModel.requiredPermissions)
+            }
+            StreamStatus.STARTING, StreamStatus.CONNECTING, StreamStatus.STREAMING -> {
+                Log.d(TAG, "Stopping stream...")
+                stopStream()
             }
         }
     }
