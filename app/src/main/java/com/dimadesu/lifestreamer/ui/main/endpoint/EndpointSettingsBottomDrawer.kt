@@ -72,6 +72,7 @@ fun EndpointSettingsBottomDrawer(
                     options = EndpointType.entries.map { it to stringResource(it.labelResId) },
                     onSelectOption = { endpoint.setType(it) }
                 )
+                Divider()
             }
 
             // When opened for a specific type, show sections for that type only.
@@ -80,17 +81,18 @@ fun EndpointSettingsBottomDrawer(
             val capabilities = EndpointFactory(displayType).build()
 
             if (capabilities.hasSrtCapabilities) {
-                Divider()
                 SrtSection(settings, endpoint)
             }
             if (capabilities.hasRtmpCapabilities) {
-                Divider()
                 RtmpSection(settings, endpoint)
             }
             if (capabilities.hasSrtlaCapabilities) {
-                Divider()
                 SrtlaSection(settings, endpoint)
             }
+            if (capabilities.hasFileCapabilities) {
+                FileSection(settings, endpoint)
+            }
+
             if (capabilities.hasSrtCapabilities || capabilities.hasSrtlaCapabilities) {
                 Divider()
                 SrtAdaptiveBitrateSection(settings, endpoint)
@@ -98,10 +100,6 @@ fun EndpointSettingsBottomDrawer(
             if (capabilities.hasRtmpCapabilities) {
                 Divider()
                 RtmpAdaptiveBitrateSection(settings, endpoint)
-            }
-            if (capabilities.hasFileCapabilities) {
-                Divider()
-                FileSection(settings, endpoint)
             }
 
             if (isStreaming) {
