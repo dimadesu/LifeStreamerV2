@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
@@ -282,11 +280,10 @@ fun SourceControlsBar(
                 // ENDPOINT has nothing to expand for non-SRTLA endpoints.
                 val hasExpandableContent = !(group == ControlGroup.ENDPOINT && !isSrtlaEndpoint)
 
-                SourceButtonRow(modifier = Modifier) {
+                SourceButtonRow {
                     SourceButton(
                         text = group.label,
                         isActive = expandedGroup == group,
-                        minWidth = GroupButtonMinWidth,
                         onClick = {
                             when {
                                 !hasExpandableContent -> onToggleSettings()
@@ -305,12 +302,12 @@ fun SourceControlsBar(
                     }
                 }
             }
-            Box(modifier = Modifier.width(GroupButtonMinWidth + 44.dp)) {
+            Box {
                 LiveButton(
                     status = streamStatus,
                     isReconnecting = isReconnecting,
                     onClick = onToggleLive,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
                 )
             }
         }
@@ -324,8 +321,6 @@ enum class ControlGroup(val label: String) {
     ENDPOINT("ENDPOINT")
 }
 
-private val GroupPanelWidth = 200.dp
-private val GroupButtonMinWidth = 110.dp
 
 /**
  * Scrollable column, bottom-aligned next to the group buttons, that hosts the buttons of the
@@ -339,7 +334,6 @@ private fun ControlGroupPanel(
     val scrollState = rememberScrollState()
     Column(
         modifier = modifier
-            .width(GroupPanelWidth)
             .wrapContentHeight()
             .verticalScroll(scrollState)
             .verticalScrollbar(scrollState)
@@ -352,7 +346,7 @@ private fun ControlGroupPanel(
 /** Row with a wide primary button and an optional square settings button next to it. */
 @Composable
 private fun SourceButtonRow(
-    modifier: Modifier = Modifier.fillMaxWidth(),
+    modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
 ) {
     Row(
@@ -393,7 +387,6 @@ private fun VideoGroupContent(
                     text = camera.displayName,
                     isActive = isSelected,
                     onClick = { onSelectCamera(camera.id) },
-                    modifier = Modifier.weight(1f)
                 )
                 if (isSelected) {
                     CameraSettingsButton(
@@ -413,7 +406,6 @@ private fun VideoGroupContent(
                     text = if (activeRtmpIndex == 1) "RTMP SRC" else "RTMP SRC $activeRtmpIndex",
                     isActive = true,
                     onClick = { onToggleRtmpSource(activeRtmpIndex) },
-                    modifier = Modifier.weight(1f)
                 )
                 RtmpSettingsButton(
                     isOpen = isRtmpSettingsDrawerOpen,
@@ -428,7 +420,6 @@ private fun VideoGroupContent(
                         text = if (i == 1) "RTMP SRC" else "RTMP SRC $i",
                         isActive = false,
                         onClick = { onToggleRtmpSource(i) },
-                        modifier = Modifier.weight(1f)
                     )
                     if (i == 1) {
                         RtmpSettingsButton(
@@ -448,7 +439,6 @@ private fun VideoGroupContent(
                 text = "USB SRC",
                 isActive = isUvcSource,
                 onClick = onToggleUvc,
-                modifier = Modifier.weight(1f)
             )
             if (!isUvcSource) {
                 UsbSettingsButton(onClick = onLaunchUvcTest)
@@ -462,7 +452,6 @@ private fun VideoGroupContent(
             text = "SCREEN",
             isActive = isScreenSource,
             onClick = onToggleScreen,
-            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -481,7 +470,7 @@ private fun AudioGroupContent(
     onToggleSystemAudio: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier,
         horizontalArrangement = Arrangement.End
     ) {
         CameraControlButton(
@@ -495,7 +484,6 @@ private fun AudioGroupContent(
         text = "MONITOR 🎤",
         isActive = isMonitorAudioOn,
         onClick = onToggleMonitorAudio,
-        modifier = Modifier.fillMaxWidth()
     )
 
     if (showBluetoothToggle) {
@@ -504,7 +492,6 @@ private fun AudioGroupContent(
             leadingIcon = R.drawable.ic_bluetooth,
             isActive = useBluetoothMic,
             onClick = onToggleBluetoothMic,
-            modifier = Modifier.fillMaxWidth()
         )
     }
 
@@ -513,7 +500,6 @@ private fun AudioGroupContent(
             text = "AUDIO OUT",
             isActive = useSystemAudioForCamera,
             onClick = onToggleSystemAudio,
-            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -527,7 +513,6 @@ private fun EndpointGroupContent(
         text = "SRTLA STATS",
         isActive = isSrtlaStatsVisible,
         onClick = onToggleSrtlaStats,
-        modifier = Modifier.fillMaxWidth()
     )
 }
 
@@ -540,7 +525,6 @@ fun SourceButton(
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    minWidth: Dp = Dp.Unspecified,
     leadingIcon: Int? = null,
     trailingIcon: Int? = null,
 ) {
@@ -553,7 +537,7 @@ fun SourceButton(
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        modifier = modifier.defaultMinSize(minWidth = minWidth, minHeight = 40.dp)
+        modifier = modifier.defaultMinSize(minHeight = 40.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
