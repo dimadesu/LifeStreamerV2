@@ -384,17 +384,17 @@ private fun VideoGroupContent(
         cameras.forEach { camera ->
             val isSelected = (camera.id == selectedCameraId)
             SourceButtonRow {
-                SourceButton(
-                    text = camera.displayName,
-                    isActive = isSelected,
-                    onClick = { onSelectCamera(camera.id) },
-                )
                 if (isSelected) {
                     CameraSettingsButton(
                         isOpen = isCameraControlsDrawerOpen,
                         onClick = onToggleCameraControls
                     )
                 }
+                SourceButton(
+                    text = camera.displayName,
+                    isActive = isSelected,
+                    onClick = { onSelectCamera(camera.id) },
+                )
             }
         }
     }
