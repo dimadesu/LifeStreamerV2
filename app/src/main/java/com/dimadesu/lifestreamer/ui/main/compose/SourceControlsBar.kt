@@ -550,13 +550,14 @@ private fun EndpointGroupContent(
             )
         }
 
+        if (type == EndpointType.SRTLA) {
+            SourceButton(
+                text = "SRTLA STATS",
+                isActive = isSrtlaStatsVisible,
+                onClick = onToggleSrtlaStats
+            )
+        }
     }
-
-    SourceButton(
-        text = "SRTLA STATS",
-        isActive = isSrtlaStatsVisible,
-        onClick = onToggleSrtlaStats
-    )
 }
 
 /**
