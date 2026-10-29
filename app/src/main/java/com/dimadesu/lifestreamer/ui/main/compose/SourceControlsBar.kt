@@ -1026,3 +1026,67 @@ private fun PreviewSourceControlsBarAudioDrawerOpen() {
     )
 }
 
+@Preview(name = "Audio Group Expanded (Unmuted)", showBackground = true, backgroundColor = 0xFF000000, widthDp = 640, heightDp = 360)
+@Composable
+private fun PreviewSourceControlsBarAudioGroupExpanded() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = true,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleSrtlaStats = {},
+        expandedGroup = ControlGroup.AUDIO,
+        isMuted = false
+    )
+}
+
+@Preview(name = "Audio Group Expanded (Muted)", showBackground = true, backgroundColor = 0xFF000000, widthDp = 640, heightDp = 360)
+@Composable
+private fun PreviewSourceControlsBarAudioGroupExpandedMuted() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = true,
+        showBluetoothToggle = true,
+        useBluetoothMic = true,
+        useSystemAudioForCamera = true,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = false,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleSrtlaStats = {},
+        expandedGroup = ControlGroup.AUDIO,
+        isMuted = true
+    )
+}
+
