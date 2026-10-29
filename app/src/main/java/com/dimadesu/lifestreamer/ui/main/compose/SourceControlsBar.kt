@@ -256,7 +256,7 @@ fun SourceControlsBar(
                 .verticalScroll(controlsScrollState)
                 .verticalScrollbar(controlsScrollState)
                 .padding(bottom = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
         ) {
             ControlGroup.entries.forEach { group ->
@@ -339,6 +339,7 @@ private fun ControlGroupPanel(
             .verticalScrollbar(scrollState)
             .padding(bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.End,
         content = content
     )
 }
