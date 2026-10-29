@@ -3370,8 +3370,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         val characteristics = cameraManager.getCameraCharacteristics(id)
                         val facingConst = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
                         val facing = when (facingConst) {
-                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT -> "Front"
-                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK -> "Back"
+                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT -> "FRONT"
+                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK -> "BACK"
                             else -> "External"
                         }
                         

@@ -41,8 +41,8 @@
     <string name="service_notification_action_exit">Quit</string>
 
     <!-- Preview -->
-    <string name="live">Start Live</string>
-    <string name="stop">Stop</string>
+    <string name="live">START</string>
+    <string name="stop">STOP</string>
 
     <string name="permission">Permission</string>
     <string name="permission_not_granted">To function properly, StreamPack needs your permission.</string>
