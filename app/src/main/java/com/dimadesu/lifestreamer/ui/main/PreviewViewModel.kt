@@ -4179,32 +4179,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     val videoConfigLiveData: LiveData<VideoConfig?> = storageRepository.videoConfigFlow.asLiveData()
 
-    /**
-     * Raw "user tapped SRTLA STATS" toggle. Not directly exposed: actual visibility is
-     * derived from this AND the current endpoint being SRTLA (see [isSrtlaStatsVisible]),
-     * so the panel auto-hides when the endpoint changes away from SRTLA, and auto-reappears
-     * if the endpoint is switched back to SRTLA while the toggle is still on.
-     */
     private val _isSrtlaStatsToggledOn = MutableLiveData(false)
 
-    /**
-     * Whether the SRTLA stats panel should be shown. Derived from [isSrtlaEndpoint] combined
-     * with the user's toggle state, so it automatically hides (and re-shows) as the endpoint
-     * changes, without requiring the SRTLA STATS button to be visible to dismiss it.
-     */
-    val isSrtlaStatsVisible: LiveData<Boolean> = MediatorLiveData<Boolean>().apply {
-        value = false
-        var endpointIsSrtla = false
-        var toggledOn = false
-        addSource(isSrtlaEndpoint) {
-            endpointIsSrtla = it
-            value = endpointIsSrtla && toggledOn
-        }
-        addSource(_isSrtlaStatsToggledOn) {
-            toggledOn = it
-            value = endpointIsSrtla && toggledOn
-        }
-    }
+    /** Whether the SRTLA stats panel is shown, regardless of the current endpoint type. */
+    val isSrtlaStatsVisible: LiveData<Boolean> = _isSrtlaStatsToggledOn.map { it == true }
 
     fun setSrtlaStatsVisible(visible: Boolean) {
         _isSrtlaStatsToggledOn.value = visible
