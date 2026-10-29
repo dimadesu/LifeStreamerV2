@@ -39,6 +39,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.models.EndpointType
 import com.dimadesu.lifestreamer.models.StreamStatus
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
 
@@ -84,6 +85,8 @@ fun SourceControlsBar(
     val isMuted by viewModel.isMutedLiveData.observeAsState(initial = false)
     val streamStatus by viewModel.streamStatus.collectAsState(initial = StreamStatus.NOT_STREAMING)
     val isReconnecting by viewModel.isReconnectingLiveData.observeAsState(initial = false)
+    val currentEndpointType by viewModel.currentEndpointType.observeAsState(initial = EndpointType.SRT)
+    val endpointDrawerOpenForType by viewModel.endpointDrawer.openForType.observeAsState(initial = null)
 
     var localSelectedCameraId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentCameraIdFromStreamer) {
@@ -114,6 +117,8 @@ fun SourceControlsBar(
         isAudioDebugOverlayVisible = isAudioSourceDrawerOpen,
         isSrtlaEndpoint = isSrtlaEndpoint,
         isSrtlaStatsVisible = isSrtlaStatsVisible,
+        currentEndpointType = currentEndpointType,
+        endpointDrawerOpenForType = endpointDrawerOpenForType,
         onSelectCamera = { cameraId ->
             localSelectedCameraId = cameraId
             onSelectCamera(cameraId)
@@ -132,6 +137,8 @@ fun SourceControlsBar(
         onToggleAudioSourceDrawer = { viewModel.audioDrawer.toggleDrawer() },
         onToggleVideoSettingsDrawer = { viewModel.videoDrawer.toggleDrawer() },
         onToggleEndpointSettingsDrawer = { viewModel.endpointDrawer.toggleDrawer() },
+        onSelectEndpointType = { viewModel.setEndpointType(it) },
+        onOpenEndpointTypeSettings = { viewModel.endpointDrawer.openForType(it) },
         onToggleSrtlaStats = onToggleSrtlaStats,
         expandedGroup = expandedGroup,
         onExpandedGroupChange = { expandedGroup = it },
@@ -170,6 +177,8 @@ fun SourceControlsBar(
     isAudioDebugOverlayVisible: Boolean,
     isSrtlaEndpoint: Boolean,
     isSrtlaStatsVisible: Boolean,
+    currentEndpointType: EndpointType = EndpointType.SRT,
+    endpointDrawerOpenForType: EndpointType? = null,
     onSelectCamera: (String) -> Unit,
     onToggleCameraControls: () -> Unit = {},
     onToggleRtmpSettings: () -> Unit = {},
@@ -185,6 +194,8 @@ fun SourceControlsBar(
     onToggleAudioSourceDrawer: () -> Unit = onToggleAudioDebug,
     onToggleVideoSettingsDrawer: () -> Unit = {},
     onToggleEndpointSettingsDrawer: () -> Unit = {},
+    onSelectEndpointType: (EndpointType) -> Unit = {},
+    onOpenEndpointTypeSettings: (EndpointType) -> Unit = {},
     onToggleSrtlaStats: () -> Unit,
     expandedGroup: ControlGroup? = null,
     onExpandedGroupChange: (ControlGroup?) -> Unit = {},
@@ -202,7 +213,7 @@ fun SourceControlsBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Second column (to the left): buttons of the expanded group.
-        if (expandedGroup != null && !(expandedGroup == ControlGroup.ENDPOINT && !isSrtlaEndpoint)) {
+        if (expandedGroup != null) {
             ControlGroupPanel(
                 modifier = Modifier.align(Alignment.Bottom)
             ) {
@@ -240,14 +251,21 @@ fun SourceControlsBar(
                     )
 
                     ControlGroup.ENDPOINT -> EndpointGroupContent(
+                        currentEndpointType = currentEndpointType,
+                        endpointDrawerOpenForType = endpointDrawerOpenForType,
+                        isEndpointSettingsDrawerOpen = isEndpointSettingsDrawerOpen,
                         isSrtlaStatsVisible = isSrtlaStatsVisible,
+                        onSelectEndpointType = onSelectEndpointType,
+                        onOpenEndpointTypeSettings = onOpenEndpointTypeSettings,
                         onToggleSrtlaStats = onToggleSrtlaStats
                     )
                 }
             }
         }
 
-        // First column (right edge): the group buttons with their settings cogs.
+        // First column (right edge): the group buttons.
+        // The ENDPOINT group cog is removed from this column — each endpoint type has its own cog in the expanded panel.
+        // Code for endpoint group cog is kept for future use.
         val controlsScrollState = rememberScrollState()
         Column(
             modifier = Modifier
@@ -273,23 +291,22 @@ fun SourceControlsBar(
                 val onToggleSettings = when (group) {
                     ControlGroup.VIDEO -> onToggleVideoSettingsDrawer
                     ControlGroup.AUDIO -> onToggleAudioSourceDrawer
+                    // Endpoint settings cog removed from group row — kept here for future use.
                     ControlGroup.ENDPOINT -> onToggleEndpointSettingsDrawer
                 }
-                // Audio settings don't apply to an RTMP source; keep the cog slot so columns align.
-                val hasSettings = !(group == ControlGroup.AUDIO && isRtmpSource)
-                // ENDPOINT has nothing to expand for non-SRTLA endpoints.
-                val hasExpandableContent = !(group == ControlGroup.ENDPOINT && !isSrtlaEndpoint)
+                // Endpoint cog removed (code kept); audio cog hidden for RTMP source.
+                val showEndpointCog = false
+                val hasSettings = when (group) {
+                    ControlGroup.AUDIO -> !isRtmpSource
+                    ControlGroup.ENDPOINT -> showEndpointCog
+                    else -> true
+                }
 
                 SourceButtonRow {
                     SourceButton(
                         text = group.label,
                         isActive = expandedGroup == group,
-                        onClick = {
-                            when {
-                                !hasExpandableContent -> onToggleSettings()
-                                else -> onExpandedGroupChange(if (expandedGroup == group) null else group)
-                            }
-                        }
+                        onClick = { onExpandedGroupChange(if (expandedGroup == group) null else group) }
                     )
                     if (hasSettings) {
                         SettingsCogButton(
@@ -297,7 +314,8 @@ fun SourceControlsBar(
                             contentDescription = settingsContentDescription,
                             onClick = onToggleSettings
                         )
-                    } else {
+                    } else if (group == ControlGroup.AUDIO) {
+                        // Keep the cog slot for audio so columns align when audio cog is hidden
                         Spacer(Modifier.size(40.dp))
                     }
                 }
@@ -507,14 +525,44 @@ private fun AudioGroupContent(
 
 @Composable
 private fun EndpointGroupContent(
+    currentEndpointType: EndpointType,
+    endpointDrawerOpenForType: EndpointType?,
+    isEndpointSettingsDrawerOpen: Boolean,
     isSrtlaStatsVisible: Boolean,
+    onSelectEndpointType: (EndpointType) -> Unit,
+    onOpenEndpointTypeSettings: (EndpointType) -> Unit,
     onToggleSrtlaStats: () -> Unit
 ) {
-    SourceButton(
-        text = "SRTLA STATS",
-        isActive = isSrtlaStatsVisible,
-        onClick = onToggleSrtlaStats,
-    )
+    EndpointType.entries.forEach { type ->
+        val isSelected = (type == currentEndpointType)
+        val isSettingsOpen = isEndpointSettingsDrawerOpen && endpointDrawerOpenForType == type
+
+        SourceButtonRow {
+            SourceButton(
+                text = stringResource(type.labelResId),
+                isActive = isSelected,
+                onClick = { onSelectEndpointType(type) }
+            )
+            SettingsCogButton(
+                isOpen = isSettingsOpen,
+                contentDescription = stringResource(type.labelResId) + " " + stringResource(R.string.endpoint_settings_title),
+                onClick = { onOpenEndpointTypeSettings(type) }
+            )
+        }
+
+        if (type == EndpointType.SRTLA) {
+            SourceButton(
+                text = "SRTLA STATS",
+                isActive = isSrtlaStatsVisible,
+                onClick = {
+                    if (currentEndpointType != EndpointType.SRTLA) {
+                        onSelectEndpointType(EndpointType.SRTLA)
+                    }
+                    onToggleSrtlaStats()
+                }
+            )
+        }
+    }
 }
 
 /**
@@ -686,6 +734,38 @@ fun UsbSettingsButton(
             modifier = Modifier.size(20.dp)
         )
     }
+}
+
+@Preview(name = "Endpoint Group Expanded", showBackground = true, backgroundColor = 0xFF000000, widthDp = 640, heightDp = 360)
+@Composable
+private fun PreviewSourceControlsBarEndpointGroupExpanded() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = false,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = false,
+        currentEndpointType = EndpointType.SRTLA,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleSrtlaStats = {},
+        expandedGroup = ControlGroup.ENDPOINT
+    )
 }
 
 @Preview(name = "Video Group Expanded", showBackground = true, backgroundColor = 0xFF000000, widthDp = 640, heightDp = 360)

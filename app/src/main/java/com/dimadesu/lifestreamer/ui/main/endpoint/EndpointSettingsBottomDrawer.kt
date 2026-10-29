@@ -30,7 +30,8 @@ import com.dimadesu.lifestreamer.ui.main.compose.SettingsWarningText
 /**
  * Stateful Composable for the Endpoint Settings drawer/panel:
  * - Slides in as a bottom drawer (portrait) or side inspector (landscape).
- * - Displays the endpoint type and the settings of that endpoint: server, adaptive bitrate or file.
+ * - When [endpoint.openForType] is set, shows settings only for that endpoint type (no type dropdown).
+ * - When opened generically (openForType == null), shows the type dropdown and all sections.
  */
 @Composable
 fun EndpointSettingsBottomDrawer(
@@ -41,10 +42,18 @@ fun EndpointSettingsBottomDrawer(
     val isOpen by endpoint.isOpen.observeAsState(initial = false)
     val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
     val settings by endpoint.settings.observeAsState(initial = StoredEndpointSettings())
+    val openForType by endpoint.openForType.observeAsState(initial = null)
+
+    // Title reflects which type's settings are shown when opened via a cog icon
+    val title = if (openForType != null) {
+        stringResource(openForType!!.labelResId) + " " + stringResource(R.string.endpoint_settings_title)
+    } else {
+        stringResource(R.string.endpoint_settings_title)
+    }
 
     SettingsDrawerPanel(
         isOpen = isOpen,
-        title = stringResource(R.string.endpoint_settings_title),
+        title = title,
         closeContentDescription = stringResource(R.string.close_endpoint_settings),
         onClose = { endpoint.setDrawerOpen(false) },
         modifier = modifier
@@ -53,15 +62,22 @@ fun EndpointSettingsBottomDrawer(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            SettingsDropdownRow(
-                title = stringResource(R.string.endpoint_type),
-                currentValue = settings.type,
-                currentValueName = stringResource(settings.type.labelResId),
-                options = EndpointType.entries.map { it to stringResource(it.labelResId) },
-                onSelectOption = { endpoint.setType(it) }
-            )
+            // Endpoint type dropdown — hidden for now per user request, code kept for future use.
+            val showEndpointTypeDropdown = false
+            if (showEndpointTypeDropdown) {
+                SettingsDropdownRow(
+                    title = stringResource(R.string.endpoint_type),
+                    currentValue = settings.type,
+                    currentValueName = stringResource(settings.type.labelResId),
+                    options = EndpointType.entries.map { it to stringResource(it.labelResId) },
+                    onSelectOption = { endpoint.setType(it) }
+                )
+            }
 
-            val capabilities = EndpointFactory(settings.type).build()
+            // When opened for a specific type, show sections for that type only.
+            // When opened generically (no specific type), show sections based on current settings.type.
+            val displayType = openForType ?: settings.type
+            val capabilities = EndpointFactory(displayType).build()
 
             if (capabilities.hasSrtCapabilities) {
                 Divider()

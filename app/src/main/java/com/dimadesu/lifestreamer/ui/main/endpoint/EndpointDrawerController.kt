@@ -40,6 +40,14 @@ class EndpointDrawerController(
     private val _settings = MutableLiveData(StoredEndpointSettings())
     val settings: LiveData<StoredEndpointSettings> = _settings
 
+    /**
+     * When non-null, the drawer was opened by tapping a specific endpoint type's cog icon.
+     * The drawer will show settings only for this type (no type dropdown).
+     * Null means the drawer was opened generically.
+     */
+    private val _openForType = MutableLiveData<EndpointType?>(null)
+    val openForType: LiveData<EndpointType?> = _openForType
+
     // Text fields can save at about the same time (for example on focus loss and on close)
     private val updateMutex = Mutex()
 
@@ -53,11 +61,29 @@ class EndpointDrawerController(
     }
 
     fun toggleDrawer() {
+        _openForType.value = null
         setDrawerOpen(!(_isOpen.value ?: false))
+    }
+
+    /**
+     * Opens the drawer scoped to a specific endpoint type — used when tapping a type's cog icon.
+     * The drawer will only show settings relevant to that type (no type dropdown shown).
+     * If the drawer is already open for this type, tapping toggles it closed.
+     */
+    fun openForType(type: EndpointType) {
+        if (_isOpen.value == true && _openForType.value == type) {
+            setDrawerOpen(false)
+        } else {
+            _openForType.value = type
+            setDrawerOpen(true)
+        }
     }
 
     fun setDrawerOpen(open: Boolean) {
         _isOpen.value = open
+        if (!open) {
+            _openForType.value = null
+        }
         if (open) {
             host.onEndpointDrawerOpened()
         }

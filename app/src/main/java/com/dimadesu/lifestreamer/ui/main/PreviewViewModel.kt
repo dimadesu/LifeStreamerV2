@@ -4168,6 +4168,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         .map { it != null }
         .asLiveData()
 
+    /** The currently selected endpoint type, driven by DataStore. */
+    val currentEndpointType: LiveData<com.dimadesu.lifestreamer.models.EndpointType> =
+        storageRepository.endpointTypeFlow.asLiveData()
+
+    /** Sets the active endpoint type and persists it to DataStore. */
+    fun setEndpointType(type: com.dimadesu.lifestreamer.models.EndpointType) {
+        endpointDrawer.setType(type)
+    }
+
     val videoConfigLiveData: LiveData<VideoConfig?> = storageRepository.videoConfigFlow.asLiveData()
 
     /**
