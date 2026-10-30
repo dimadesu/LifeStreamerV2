@@ -17,12 +17,21 @@ package com.dimadesu.lifestreamer.utils
 
 import android.content.Context
 import android.content.DialogInterface
-import androidx.appcompat.app.AlertDialog
+import android.view.ContextThemeWrapper
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.dimadesu.lifestreamer.R
 
 object DialogUtils {
+    /**
+     * Creates a Material 3 dialog builder. The app theme is AppCompat-based, so the context is
+     * wrapped with the Material 3 [R.style.AppTheme] to get Material 3 dialog styling.
+     */
+    @JvmStatic
+    fun materialDialogBuilder(context: Context): MaterialAlertDialogBuilder =
+        MaterialAlertDialogBuilder(ContextThemeWrapper(context, R.style.AppTheme))
+
     fun showAlertDialog(context: Context, title: String, message: String = "") {
-        AlertDialog.Builder(context)
+        materialDialogBuilder(context)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(android.R.string.ok) { dialogInterface: DialogInterface, _: Int -> dialogInterface.dismiss() }
@@ -30,7 +39,7 @@ object DialogUtils {
     }
 
     fun showPermissionAlertDialog(context: Context, afterPositiveButton: () -> Unit = {}) {
-        AlertDialog.Builder(context)
+        materialDialogBuilder(context)
             .setTitle(R.string.permission)
             .setMessage(R.string.permission_not_granted)
             .setPositiveButton(android.R.string.ok) { dialogInterface: DialogInterface, _: Int ->

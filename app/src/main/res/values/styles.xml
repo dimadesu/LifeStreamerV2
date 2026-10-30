@@ -6,6 +6,8 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <!-- Dialog text buttons are inflated without their Material theme overlay, so set this explicitly. -->
+        <item name="colorOnContainer">@color/colorPrimary</item>
     </style>
 
 </resources>

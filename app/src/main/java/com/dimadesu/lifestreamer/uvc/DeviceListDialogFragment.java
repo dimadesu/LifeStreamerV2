@@ -3,15 +3,17 @@ package com.dimadesu.lifestreamer.uvc;
 import android.app.Dialog;
 import android.hardware.usb.UsbDevice;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.dimadesu.lifestreamer.R;
+import com.dimadesu.lifestreamer.utils.DialogUtils;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.herohan.uvcapp.ICameraHelper;
 
 import java.lang.ref.WeakReference;
@@ -36,10 +38,10 @@ public class DeviceListDialogFragment extends DialogFragment {
     @NonNull
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        View view = getLayoutInflater().inflate(R.layout.fragment_device_list, null);
+        MaterialAlertDialogBuilder builder = DialogUtils.materialDialogBuilder(requireActivity());
+        View view = LayoutInflater.from(builder.getContext()).inflate(R.layout.fragment_device_list, null);
         initDeviceList(view);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity());
         builder.setTitle("Select Device");
         builder.setView(view);
         builder.setNegativeButton("Cancel", (dialog, which) -> {

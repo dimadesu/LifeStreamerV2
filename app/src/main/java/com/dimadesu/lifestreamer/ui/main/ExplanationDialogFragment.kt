@@ -2,11 +2,11 @@ package com.dimadesu.lifestreamer.ui.main
 
 import android.app.Dialog
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.utils.DialogUtils
 
 /**
  * Reusable explanation dialog that survives orientation changes.
@@ -40,7 +40,7 @@ class ExplanationDialogFragment : DialogFragment() {
         val messageRes = requireArguments().getInt(ARG_MESSAGE)
         val requestKey = requireArguments().getString(ARG_REQUEST_KEY)!!
 
-        return AlertDialog.Builder(requireContext())
+        return DialogUtils.materialDialogBuilder(requireContext())
             .setTitle(titleRes)
             .setMessage(messageRes)
             .setPositiveButton(R.string.continue_button) { _, _ ->
