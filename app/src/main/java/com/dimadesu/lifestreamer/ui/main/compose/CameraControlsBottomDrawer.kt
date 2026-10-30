@@ -391,7 +391,7 @@ fun CameraControlsBottomDrawer(
                 // 6. Stabilization Dropdown
                 if (isStabilizationAvailable && availableStabilizationModes.isNotEmpty()) {
                     CameraDropdownRow(
-                        title = "Stabilization",
+                        title = "Stabilisation",
                         iconRes = R.drawable.ic_baseline_video_stable_24,
                         currentValueName = PreviewViewModel.getStabilizationModeName(currentStabilizationMode),
                         options = availableStabilizationModes.map { it to PreviewViewModel.getStabilizationModeName(it) },

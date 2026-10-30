@@ -14,7 +14,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Controller managing camera video noise reduction:
  * - Detects per-camera capabilities (Off, Fast, High Quality, Minimal, Zero Shutter Lag)
- * - Retains user preferred mode across camera switches with automatic fallback
+ * - Resets to the best default mode on camera change, like other camera controls
  * - Exposes reactive state for UI controls
  */
 class CameraNoiseReductionController {
@@ -33,9 +33,11 @@ class CameraNoiseReductionController {
 
     /**
      * Called when the active camera source changes.
-     * Computes available modes, picks the best target mode, and applies it when active.
+     * Resets the user preference, computes available modes, picks the best default mode,
+     * and applies it when active.
      */
     fun onCameraChanged(settings: CameraSettings, scope: CoroutineScope) {
+        userPreferredMode = null
         val availModes = getAvailableModes(settings.characteristics)
         _isAvailable.postValue(availModes.size > 1)
         _availableModes.postValue(availModes)

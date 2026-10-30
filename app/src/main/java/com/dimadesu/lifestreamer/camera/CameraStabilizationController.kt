@@ -16,7 +16,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Controller managing camera video and optical stabilization:
  * - Detects per-camera capabilities (Off, Optical/OIS, Video/EIS, Preview)
- * - Retains user preferred mode across camera switches with automatic fallback
+ * - Resets to the best default mode on camera change, like other camera controls
  * - Ensures mutual exclusivity between OIS and EIS
  * - Exposes reactive state for UI controls
  */
@@ -36,9 +36,11 @@ class CameraStabilizationController {
 
     /**
      * Called when the active camera source changes.
-     * Computes available modes, picks the best target mode, and applies it when active.
+     * Resets the user preference, computes available modes, picks the best default mode,
+     * and applies it when active.
      */
     fun onCameraChanged(settings: CameraSettings, scope: CoroutineScope) {
+        userPreferredMode = null
         val availModes = getAvailableModes(settings.characteristics)
         _isAvailable.postValue(availModes.size > 1)
         _availableModes.postValue(availModes)
@@ -107,7 +109,7 @@ class CameraStabilizationController {
                     _currentMode.postValue(mode)
                     if (isUserExplicit) {
                         val modeName = getStabilizationModeName(mode)
-                        onFeedback?.invoke("Stabilization: $modeName")
+                        onFeedback?.invoke("Stabilisation: $modeName")
                     }
                 } else {
                     Log.w(TAG, "Cannot set stabilization: camera session is not active")
