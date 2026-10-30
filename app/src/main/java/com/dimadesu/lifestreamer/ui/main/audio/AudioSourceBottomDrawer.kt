@@ -331,8 +331,12 @@ fun AudioSourceBottomDrawer(
                                 color = Color(0xFFFFB74D),
                                 lineHeight = 16.sp
                             )
-                            if (!isRtmpSource) Text(
-                                text = "Audio source can be changed during the stream.",
+                            Text(
+                                text = if (isRtmpSource) {
+                                    "Audio source is saved and applies when using the device mic."
+                                } else {
+                                    "Audio source can be changed during the stream."
+                                },
                                 fontSize = 13.sp,
                                 color = Color(0xFFFFB74D),
                                 lineHeight = 16.sp
@@ -340,62 +344,63 @@ fun AudioSourceBottomDrawer(
                         }
                     }
 
-                    // Audio source (mic type) only applies to device mic; RTMP source audio comes from MediaProjection
-                    if (!isRtmpSource) {
-                        HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
+                    HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                        // 2. Audio Source Selection Section (BOTTOM existing UI)
+                    // 2. Audio Source Selection Section (BOTTOM existing UI)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "AUDIO SOURCE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0x99FFFFFF),
+                            letterSpacing = 0.5.sp
+                        )
+
+                        // Option Buttons (stacked on separate lines)
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "AUDIO SOURCE",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0x99FFFFFF),
-                                letterSpacing = 0.5.sp
-                            )
-
-                            // Option Buttons (stacked on separate lines)
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                availableOptions.forEach { option ->
-                                    val isSelected = option.value == selectedSourceType
-                                    AudioSourceOptionButton(
-                                        name = option.name,
-                                        isSelected = isSelected,
-                                        onClick = { onSelectSourceType(option.value) },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                            availableOptions.forEach { option ->
+                                val isSelected = option.value == selectedSourceType
+                                AudioSourceOptionButton(
+                                    name = option.name,
+                                    isSelected = isSelected,
+                                    onClick = { onSelectSourceType(option.value) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
+                        }
 
-                            // Helper hint banner
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0x14FFFFFF),
-                                border = BorderStroke(0.5.dp, Color(0x22FFFFFF)),
-                                modifier = Modifier.fillMaxWidth()
+                        // Helper hint banner
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0x14FFFFFF),
+                            border = BorderStroke(0.5.dp, Color(0x22FFFFFF)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = "💡",
-                                        fontSize = 12.sp
-                                    )
-                                    Text(
-                                        text = "Try VOICE_COMMUNICATION if USB audio is too loud or clipping.",
-                                        fontSize = 12.sp,
-                                        color = Color(0xCCFFFFFF),
-                                        lineHeight = 15.sp
-                                    )
-                                }
+                                Text(
+                                    text = "💡",
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = if (isRtmpSource) {
+                                        "RTMP source audio is captured via MediaProjection. This setting applies to the device mic."
+                                    } else {
+                                        "Try VOICE_COMMUNICATION if USB audio is too loud or clipping."
+                                    },
+                                    fontSize = 12.sp,
+                                    color = Color(0xCCFFFFFF),
+                                    lineHeight = 15.sp
+                                )
                             }
                         }
                     }
