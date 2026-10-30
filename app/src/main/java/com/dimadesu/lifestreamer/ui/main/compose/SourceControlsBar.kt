@@ -488,16 +488,13 @@ private fun AudioGroupContent(
     onToggleBluetoothMic: () -> Unit,
     onToggleSystemAudio: () -> Unit
 ) {
-    Row(
-        modifier = Modifier,
-        horizontalArrangement = Arrangement.End
-    ) {
-        CameraControlButton(
-            iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
-            contentDescription = stringResource(R.string.mute_unmute_microphone),
-            onClick = onToggleMute
-        )
-    }
+    CameraControlButton(
+        iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
+        contentDescription = stringResource(R.string.mute_unmute_microphone),
+        onClick = onToggleMute,
+        // SourceButtons get 4dp above and below from Material's minimum touch target; match it here
+        modifier = Modifier.padding(vertical = 4.dp)
+    )
 
     SourceButton(
         text = "MONITOR 🎤",
