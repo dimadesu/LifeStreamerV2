@@ -15,6 +15,7 @@ import com.dimadesu.lifestreamer.models.EndpointType
 import com.dimadesu.lifestreamer.services.CameraStreamerService
 import com.dimadesu.lifestreamer.ui.main.audio.AudioDebugInfoReader.Companion.audioSourceName
 import com.dimadesu.lifestreamer.utils.StreamerInfoFactory
+import io.github.thibaultbee.streampack.core.elements.sources.IMediaProjectionSource
 import io.github.thibaultbee.streampack.core.streamers.single.AudioConfig
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import kotlinx.coroutines.CoroutineScope
@@ -203,7 +204,10 @@ class AudioDrawerController(
                 // ConditionalAudioSourceFactory is used (e.g. after SYS AUDIO is toggled off).
                 val btActive = host.isBluetoothMicActive
                 val sysAudioActive = host.isSystemAudioActive
-                val rtmpActive = host.isRtmpSourceActive
+                // Also check the live audio source: _activeRtmpIndex is posted asynchronously and the
+                // RTMP bitmap fallback keeps MediaProjection audio, so the flag alone can lag behind.
+                val rtmpActive = host.isRtmpSourceActive ||
+                    currentStreamer.audioInput?.sourceFlow?.value is IMediaProjectionSource
                 if (btActive || sysAudioActive || rtmpActive) {
                     Log.i(
                         TAG,

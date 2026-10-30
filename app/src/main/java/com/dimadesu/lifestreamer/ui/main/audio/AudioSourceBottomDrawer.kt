@@ -80,7 +80,6 @@ fun AudioSourceBottomDrawer(
 ) {
     val audio = viewModel.audioDrawer
     val isOpen by audio.isOpen.observeAsState(initial = false)
-    val isRtmpSource by viewModel.isRtmpSource.observeAsState(initial = false)
     val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
     val audioSettingsState by audio.settingsState.observeAsState(
         initial = AudioSettingsState()
@@ -101,7 +100,6 @@ fun AudioSourceBottomDrawer(
 
     AudioSourceBottomDrawer(
         isOpen = isOpen,
-        isVisibleForSource = !isRtmpSource,
         audioSettingsState = audioSettingsState,
         isStreaming = isStreaming,
         onSelectEncoder = { audio.setEncoder(it) },
@@ -134,7 +132,6 @@ fun AudioSourceBottomDrawer(
 @Composable
 fun AudioSourceBottomDrawer(
     isOpen: Boolean,
-    isVisibleForSource: Boolean,
     audioSettingsState: AudioSettingsState,
     isStreaming: Boolean = false,
     onSelectEncoder: (String) -> Unit,
@@ -157,7 +154,7 @@ fun AudioSourceBottomDrawer(
         modifier = modifier.fillMaxSize()
     ) {
         AnimatedVisibility(
-            visible = isOpen && isVisibleForSource,
+            visible = isOpen,
             enter = if (isLandscape) {
                 slideInHorizontally(initialOffsetX = { it }) + fadeIn()
             } else {
@@ -567,7 +564,6 @@ private val sampleAudioSettingsState = AudioSettingsState(
 private fun PreviewAudioSourceBottomDrawerPortraitActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isVisibleForSource = true,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
@@ -601,7 +597,6 @@ private fun PreviewAudioSourceBottomDrawerPortraitActive() {
 private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isVisibleForSource = true,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
@@ -635,7 +630,6 @@ private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
 private fun PreviewAudioSourceBottomDrawerIdle() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isVisibleForSource = true,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
