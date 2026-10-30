@@ -80,7 +80,6 @@ fun AudioSourceBottomDrawer(
 ) {
     val audio = viewModel.audioDrawer
     val isOpen by audio.isOpen.observeAsState(initial = false)
-    val isRtmpSource by viewModel.isRtmpSource.observeAsState(initial = false)
     val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
     val audioSettingsState by audio.settingsState.observeAsState(
         initial = AudioSettingsState()
@@ -101,7 +100,6 @@ fun AudioSourceBottomDrawer(
 
     AudioSourceBottomDrawer(
         isOpen = isOpen,
-        isRtmpSource = isRtmpSource,
         audioSettingsState = audioSettingsState,
         isStreaming = isStreaming,
         onSelectEncoder = { audio.setEncoder(it) },
@@ -134,7 +132,6 @@ fun AudioSourceBottomDrawer(
 @Composable
 fun AudioSourceBottomDrawer(
     isOpen: Boolean,
-    isRtmpSource: Boolean,
     audioSettingsState: AudioSettingsState,
     isStreaming: Boolean = false,
     onSelectEncoder: (String) -> Unit,
@@ -332,11 +329,7 @@ fun AudioSourceBottomDrawer(
                                 lineHeight = 16.sp
                             )
                             Text(
-                                text = if (isRtmpSource) {
-                                    "Audio source is saved and applies when using the device mic."
-                                } else {
-                                    "Audio source can be changed during the stream."
-                                },
+                                text = "Audio source can be changed during the stream.",
                                 fontSize = 13.sp,
                                 color = Color(0xFFFFB74D),
                                 lineHeight = 16.sp
@@ -392,11 +385,7 @@ fun AudioSourceBottomDrawer(
                                     fontSize = 12.sp
                                 )
                                 Text(
-                                    text = if (isRtmpSource) {
-                                        "RTMP source audio is captured via MediaProjection. This setting applies to the device mic."
-                                    } else {
-                                        "Try VOICE_COMMUNICATION if USB audio is too loud or clipping."
-                                    },
+                                    text = "Try VOICE_COMMUNICATION if USB audio is too loud or clipping.",
                                     fontSize = 12.sp,
                                     color = Color(0xCCFFFFFF),
                                     lineHeight = 15.sp
@@ -575,7 +564,6 @@ private val sampleAudioSettingsState = AudioSettingsState(
 private fun PreviewAudioSourceBottomDrawerPortraitActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isRtmpSource = false,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
@@ -609,7 +597,6 @@ private fun PreviewAudioSourceBottomDrawerPortraitActive() {
 private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isRtmpSource = false,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
@@ -643,7 +630,6 @@ private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
 private fun PreviewAudioSourceBottomDrawerIdle() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isRtmpSource = false,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
