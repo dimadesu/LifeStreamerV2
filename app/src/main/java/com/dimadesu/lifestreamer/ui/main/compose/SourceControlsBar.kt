@@ -492,6 +492,8 @@ private fun AudioGroupContent(
         iconRes = if (isMuted) R.drawable.ic_baseline_mic_off_24 else R.drawable.ic_baseline_mic_24,
         contentDescription = stringResource(R.string.mute_unmute_microphone),
         onClick = onToggleMute,
+        isActive = isMuted,
+        activeContainerColor = Color(0xFFD32F2F),
         // SourceButtons get 4dp above and below from Material's minimum touch target; match it here
         modifier = Modifier.padding(vertical = 4.dp)
     )
