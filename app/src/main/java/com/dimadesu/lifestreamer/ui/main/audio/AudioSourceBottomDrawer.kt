@@ -101,7 +101,7 @@ fun AudioSourceBottomDrawer(
 
     AudioSourceBottomDrawer(
         isOpen = isOpen,
-        isVisibleForSource = !isRtmpSource,
+        isRtmpSource = isRtmpSource,
         audioSettingsState = audioSettingsState,
         isStreaming = isStreaming,
         onSelectEncoder = { audio.setEncoder(it) },
@@ -134,7 +134,7 @@ fun AudioSourceBottomDrawer(
 @Composable
 fun AudioSourceBottomDrawer(
     isOpen: Boolean,
-    isVisibleForSource: Boolean,
+    isRtmpSource: Boolean,
     audioSettingsState: AudioSettingsState,
     isStreaming: Boolean = false,
     onSelectEncoder: (String) -> Unit,
@@ -157,7 +157,7 @@ fun AudioSourceBottomDrawer(
         modifier = modifier.fillMaxSize()
     ) {
         AnimatedVisibility(
-            visible = isOpen && isVisibleForSource,
+            visible = isOpen,
             enter = if (isLandscape) {
                 slideInHorizontally(initialOffsetX = { it }) + fadeIn()
             } else {
@@ -331,7 +331,7 @@ fun AudioSourceBottomDrawer(
                                 color = Color(0xFFFFB74D),
                                 lineHeight = 16.sp
                             )
-                            Text(
+                            if (!isRtmpSource) Text(
                                 text = "Audio source can be changed during the stream.",
                                 fontSize = 13.sp,
                                 color = Color(0xFFFFB74D),
@@ -340,59 +340,62 @@ fun AudioSourceBottomDrawer(
                         }
                     }
 
-                    HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
+                    // Audio source (mic type) only applies to device mic; RTMP source audio comes from MediaProjection
+                    if (!isRtmpSource) {
+                        HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                    // 2. Audio Source Selection Section (BOTTOM existing UI)
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "AUDIO SOURCE",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0x99FFFFFF),
-                            letterSpacing = 0.5.sp
-                        )
-
-                        // Option Buttons (stacked on separate lines)
+                        // 2. Audio Source Selection Section (BOTTOM existing UI)
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            availableOptions.forEach { option ->
-                                val isSelected = option.value == selectedSourceType
-                                AudioSourceOptionButton(
-                                    name = option.name,
-                                    isSelected = isSelected,
-                                    onClick = { onSelectSourceType(option.value) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
+                            Text(
+                                text = "AUDIO SOURCE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0x99FFFFFF),
+                                letterSpacing = 0.5.sp
+                            )
 
-                        // Helper hint banner
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0x14FFFFFF),
-                            border = BorderStroke(0.5.dp, Color(0x22FFFFFF)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            // Option Buttons (stacked on separate lines)
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = "💡",
-                                    fontSize = 12.sp
-                                )
-                                Text(
-                                    text = "Try VOICE_COMMUNICATION if USB audio is too loud or clipping.",
-                                    fontSize = 12.sp,
-                                    color = Color(0xCCFFFFFF),
-                                    lineHeight = 15.sp
-                                )
+                                availableOptions.forEach { option ->
+                                    val isSelected = option.value == selectedSourceType
+                                    AudioSourceOptionButton(
+                                        name = option.name,
+                                        isSelected = isSelected,
+                                        onClick = { onSelectSourceType(option.value) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+
+                            // Helper hint banner
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0x14FFFFFF),
+                                border = BorderStroke(0.5.dp, Color(0x22FFFFFF)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "💡",
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "Try VOICE_COMMUNICATION if USB audio is too loud or clipping.",
+                                        fontSize = 12.sp,
+                                        color = Color(0xCCFFFFFF),
+                                        lineHeight = 15.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -567,7 +570,7 @@ private val sampleAudioSettingsState = AudioSettingsState(
 private fun PreviewAudioSourceBottomDrawerPortraitActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isVisibleForSource = true,
+        isRtmpSource = false,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
@@ -601,7 +604,7 @@ private fun PreviewAudioSourceBottomDrawerPortraitActive() {
 private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isVisibleForSource = true,
+        isRtmpSource = false,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},
@@ -635,7 +638,7 @@ private fun PreviewAudioSourceBottomDrawerLandscapeActive() {
 private fun PreviewAudioSourceBottomDrawerIdle() {
     AudioSourceBottomDrawer(
         isOpen = true,
-        isVisibleForSource = true,
+        isRtmpSource = false,
         audioSettingsState = sampleAudioSettingsState,
         isStreaming = false,
         onSelectEncoder = {},

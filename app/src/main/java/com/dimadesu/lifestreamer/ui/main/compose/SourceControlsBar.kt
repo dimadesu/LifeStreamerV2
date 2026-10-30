@@ -294,10 +294,9 @@ fun SourceControlsBar(
                     // Endpoint settings cog removed from group row — kept here for future use.
                     ControlGroup.ENDPOINT -> onToggleEndpointSettingsDrawer
                 }
-                // Endpoint cog removed (code kept); audio cog hidden for RTMP source.
+                // Endpoint cog removed (code kept).
                 val showEndpointCog = false
                 val hasSettings = when (group) {
-                    ControlGroup.AUDIO -> !isRtmpSource
                     ControlGroup.ENDPOINT -> showEndpointCog
                     else -> true
                 }
@@ -314,9 +313,6 @@ fun SourceControlsBar(
                             contentDescription = settingsContentDescription,
                             onClick = onToggleSettings
                         )
-                    } else if (group == ControlGroup.AUDIO) {
-                        // Keep the cog slot for audio so columns align when audio cog is hidden
-                        Spacer(Modifier.size(40.dp))
                     }
                 }
             }
