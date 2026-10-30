@@ -1095,3 +1095,69 @@ private fun PreviewSourceControlsBarAudioGroupExpandedMuted() {
     )
 }
 
+@Preview(name = "Endpoint Types - SRT selected", showBackground = true, backgroundColor = 0xFF000000, widthDp = 360, heightDp = 640)
+@Composable
+private fun PreviewEndpointTypesSrt() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = false,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = false,
+        isSrtlaStatsVisible = false,
+        currentEndpointType = EndpointType.SRT,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleSrtlaStats = {},
+        expandedGroup = ControlGroup.ENDPOINT
+    )
+}
+
+@Preview(name = "Endpoint Types - SRTLA, settings open, stats on", showBackground = true, backgroundColor = 0xFF000000, widthDp = 360, heightDp = 640)
+@Composable
+private fun PreviewEndpointTypesSrtlaSettingsOpen() {
+    SourceControlsBar(
+        cameras = emptyList(),
+        selectedCameraId = null,
+        showCameraControls = false,
+        isEndpointSettingsDrawerOpen = true,
+        activeRtmpIndex = null,
+        rtmpSourceCount = 1,
+        isUvcSource = false,
+        isScreenSource = false,
+        isMonitorAudioOn = false,
+        showBluetoothToggle = false,
+        useBluetoothMic = false,
+        useSystemAudioForCamera = false,
+        isAudioDebugOverlayVisible = false,
+        isSrtlaEndpoint = true,
+        isSrtlaStatsVisible = true,
+        currentEndpointType = EndpointType.SRTLA,
+        endpointDrawerOpenForType = EndpointType.SRTLA,
+        onSelectCamera = {},
+        onToggleRtmpSource = {},
+        onToggleUvc = {},
+        onLaunchUvcTest = {},
+        onToggleScreen = {},
+        onToggleMonitorAudio = {},
+        onToggleBluetoothMic = {},
+        onToggleSystemAudio = {},
+        onToggleSrtlaStats = {},
+        expandedGroup = ControlGroup.ENDPOINT
+    )
+}
+
