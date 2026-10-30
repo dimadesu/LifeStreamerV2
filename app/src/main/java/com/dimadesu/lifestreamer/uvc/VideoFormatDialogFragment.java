@@ -2,13 +2,13 @@ package com.dimadesu.lifestreamer.uvc;
 
 import android.app.Dialog;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 
 import com.serenegiant.usb.Format;
@@ -16,6 +16,8 @@ import com.serenegiant.usb.Size;
 import com.serenegiant.usb.UVCCamera;
 import com.dimadesu.lifestreamer.R;
 import com.dimadesu.lifestreamer.databinding.FragmentVideoFormatBinding;
+import com.dimadesu.lifestreamer.utils.DialogUtils;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,11 +53,11 @@ public class VideoFormatDialogFragment extends DialogFragment {
     @NonNull
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        mBinding = FragmentVideoFormatBinding.inflate(getLayoutInflater());
+        MaterialAlertDialogBuilder builder = DialogUtils.materialDialogBuilder(requireActivity());
+        mBinding = FragmentVideoFormatBinding.inflate(LayoutInflater.from(builder.getContext()));
 
         updateDialogUI();
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity());
         builder.setTitle("Video Format");
         builder.setView(mBinding.getRoot());
         builder.setPositiveButton("OK", (dialog, which) -> {
