@@ -532,7 +532,13 @@ private fun EndpointGroupContent(
     onOpenEndpointTypeSettings: (EndpointType) -> Unit,
     onToggleSrtlaStats: () -> Unit
 ) {
-    EndpointType.entries.forEach { type ->
+    // Only TS, FLV and MP4 are shown among file endpoints for now; other file types are hidden but kept for future use.
+    val hiddenFileEndpointTypes = setOf(
+        EndpointType.WEBM_FILE,
+        EndpointType.OGG_FILE,
+        EndpointType.THREEGP_FILE,
+    )
+    EndpointType.entries.filterNot { it in hiddenFileEndpointTypes }.forEach { type ->
         val isSelected = (type == currentEndpointType)
         val isSettingsOpen = isEndpointSettingsDrawerOpen && endpointDrawerOpenForType == type
 
