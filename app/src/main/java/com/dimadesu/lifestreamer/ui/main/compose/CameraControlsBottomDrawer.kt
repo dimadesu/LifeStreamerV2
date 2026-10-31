@@ -551,32 +551,34 @@ private fun CameraDropdownRow(
                     .background(Color(0xFF242426))
                     .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
             ) {
-                options.forEach { (optionId, optionName) ->
-                    val isSelected = optionId == currentValue
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = optionName,
-                                color = if (isSelected) Color(0xFF4CAF50) else Color.White,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 13.sp
-                            )
-                        },
-                        leadingIcon = if (isSelected) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(16.dp)
+                DrawerFontScale {
+                    options.forEach { (optionId, optionName) ->
+                        val isSelected = optionId == currentValue
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = optionName,
+                                    color = if (isSelected) Color(0xFF4CAF50) else Color.White,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 13.sp
                                 )
+                            },
+                            leadingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            } else null,
+                            onClick = {
+                                onSelectOption(optionId)
+                                expanded = false
                             }
-                        } else null,
-                        onClick = {
-                            onSelectOption(optionId)
-                            expanded = false
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
