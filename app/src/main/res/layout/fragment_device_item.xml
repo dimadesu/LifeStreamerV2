@@ -20,7 +20,7 @@
     android:layout_marginBottom="2dp"
     android:layout_toRightOf="@id/rbDeviceSelected"
     android:textAppearance="?attr/textAppearanceListItem"
-    android:textColor="@android:color/black"
+    android:textColor="?android:attr/textColorPrimary"
     android:textSize="16sp"
     tools:text="device name" />
 
@@ -33,7 +33,7 @@
     android:layout_marginBottom="10dp"
     android:layout_toRightOf="@id/rbDeviceSelected"
     android:textAppearance="?attr/textAppearanceListItem"
-    android:textColor="@android:color/darker_gray"
+    android:textColor="?android:attr/textColorSecondary"
     android:textSize="14sp"
     tools:text="/dev/usb1" />
 </RelativeLayout>
