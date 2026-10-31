@@ -83,6 +83,7 @@
     <string name="srtla_stats_title">SRTLA STATS</string>
     <string name="close_srtla_stats">Close SRTLA stats</string>
     <string name="endpoint_settings_apply_after_stream">Changes to the endpoint type and server settings will apply the next time you go live.</string>
+    <string name="endpoint_settings_adaptive_bitrate_live_update">Adaptive bitrate settings can be updated during the stream.</string>
     <string name="file_name_extension_note">The file extension is added automatically.</string>
 
     <string name="video_encoder">Encoder</string>
