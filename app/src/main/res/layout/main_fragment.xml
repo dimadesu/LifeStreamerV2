@@ -67,6 +67,15 @@
 
 
 
+        <!-- Top-left controls (quit button, help dropdown) -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/topLeftControlsComposeView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="10dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
         <!-- Top-right controls (stream stats, audio source indicator, VU meter) -->
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/topRightControlsComposeView"

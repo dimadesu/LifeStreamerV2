@@ -54,7 +54,13 @@ import com.dimadesu.lifestreamer.ui.main.endpoint.EndpointSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsBottomDrawer
 import com.dimadesu.lifestreamer.ui.main.compose.SourceControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.SrtlaStatsBottomDrawer
+import com.dimadesu.lifestreamer.ui.main.compose.TopLeftControlsBar
 import com.dimadesu.lifestreamer.ui.main.compose.TopRightControlsBar
+import com.dimadesu.lifestreamer.ui.help.FaqHelpActivity
+import com.dimadesu.lifestreamer.ui.help.KnownIssuesActivity
+import com.dimadesu.lifestreamer.ui.help.RtmpHelpActivity
+import com.dimadesu.lifestreamer.ui.help.SrtHelpActivity
+import com.dimadesu.lifestreamer.ui.help.UvcHelpActivity
 import android.content.ActivityNotFoundException
 import com.dimadesu.lifestreamer.utils.DialogUtils
 import com.dimadesu.lifestreamer.utils.PermissionManager
@@ -158,6 +164,20 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 SrtlaStatsBottomDrawer(viewModel = previewViewModel)
+            }
+        }
+
+        binding.topLeftControlsComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                TopLeftControlsBar(
+                    onQuit = { (requireActivity() as? MainActivity)?.exitApp() },
+                    onRtmpHelp = { startActivity(Intent(requireContext(), RtmpHelpActivity::class.java)) },
+                    onSrtHelp = { startActivity(Intent(requireContext(), SrtHelpActivity::class.java)) },
+                    onUvcHelp = { startActivity(Intent(requireContext(), UvcHelpActivity::class.java)) },
+                    onKnownIssues = { startActivity(Intent(requireContext(), KnownIssuesActivity::class.java)) },
+                    onFaq = { startActivity(Intent(requireContext(), FaqHelpActivity::class.java)) }
+                )
             }
         }
 
