@@ -14,7 +14,6 @@ import androidx.fragment.app.DialogFragment;
 import com.serenegiant.usb.Format;
 import com.serenegiant.usb.Size;
 import com.serenegiant.usb.UVCCamera;
-import com.dimadesu.lifestreamer.R;
 import com.dimadesu.lifestreamer.databinding.FragmentVideoFormatBinding;
 import com.dimadesu.lifestreamer.utils.DialogUtils;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -113,7 +112,7 @@ public class VideoFormatDialogFragment extends DialogFragment {
 
     private void refreshFormatSpinner() {
         List<String> formatTextList = new ArrayList<>(mTypeAndNameMap.values());
-        ArrayAdapter<String> formatAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, formatTextList);
+        ArrayAdapter<String> formatAdapter = new ArrayAdapter<>(mBinding.getRoot().getContext(), android.R.layout.simple_spinner_item, formatTextList);
         formatAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         mBinding.spVideoFormatFormat.setAdapter(formatAdapter);
         mTypeList = new ArrayList<>(mTypeAndNameMap.keySet());
@@ -123,7 +122,7 @@ public class VideoFormatDialogFragment extends DialogFragment {
     private void refreshResolutionSpinner() {
         mResolutionMap = mTypeAndResolutionMap.get(mSize.type);
         List<String> resolutionTextList = new ArrayList<>(mResolutionMap.keySet());
-        ArrayAdapter<String> resolutionAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, resolutionTextList);
+        ArrayAdapter<String> resolutionAdapter = new ArrayAdapter<>(mBinding.getRoot().getContext(), android.R.layout.simple_spinner_item, resolutionTextList);
         resolutionAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         mBinding.spVideoFormatResolution.setAdapter(resolutionAdapter);
         mResolutionList = new ArrayList<>(mResolutionMap.keySet());
@@ -140,7 +139,7 @@ public class VideoFormatDialogFragment extends DialogFragment {
 
     private void refreshFrameRateSpinner() {
         mFrameRateList = mResolutionMap.get(mSize.width + RESOLUTION_SEPARATOR + mSize.height);
-        ArrayAdapter<Integer> rateAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, mFrameRateList);
+        ArrayAdapter<Integer> rateAdapter = new ArrayAdapter<>(mBinding.getRoot().getContext(), android.R.layout.simple_spinner_item, mFrameRateList);
         rateAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         mBinding.spVideoFormatFrameRate.setAdapter(rateAdapter);
         int index = mFrameRateList.indexOf(mSize.fps);
