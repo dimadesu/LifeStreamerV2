@@ -216,6 +216,7 @@ fun CameraControlsBottomDrawer(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val screenHeight = configuration.screenHeightDp.dp
 
+    DrawerFontScale {
     Box(
         modifier = modifier.fillMaxSize()
     ) {
@@ -413,6 +414,7 @@ fun CameraControlsBottomDrawer(
                 }
             }
         }
+    }
     }
 }
 }

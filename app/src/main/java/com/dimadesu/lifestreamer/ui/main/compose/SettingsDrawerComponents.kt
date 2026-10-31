@@ -45,6 +45,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -67,6 +69,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -99,6 +102,23 @@ fun Modifier.verticalScrollbar(
     }
 )
 
+private const val DRAWER_FONT_SCALE = 1.2f
+
+/**
+ * Enlarges all text in the settings drawers. Their font sizes are hardcoded in sp,
+ * so scaling the font scale of the local density grows them together while
+ * still respecting the user's system font size.
+ */
+@Composable
+fun DrawerFontScale(content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(density.density, density.fontScale * DRAWER_FONT_SCALE)
+    ) {
+        content()
+    }
+}
+
 /**
  * Shared chrome of the settings drawers:
  * - Slides in as a side inspector from the right edge in landscape.
@@ -118,6 +138,7 @@ fun SettingsDrawerPanel(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val screenHeight = configuration.screenHeightDp.dp
 
+    DrawerFontScale {
     Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
             visible = isOpen,
@@ -213,6 +234,7 @@ fun SettingsDrawerPanel(
                 }
             }
         }
+    }
     }
 }
 
