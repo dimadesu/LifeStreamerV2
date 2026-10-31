@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
+import com.dimadesu.lifestreamer.ui.main.compose.DrawerFontScale
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDropdownRow
 import com.dimadesu.lifestreamer.ui.main.compose.verticalScrollbar
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
@@ -150,6 +151,7 @@ fun AudioSourceBottomDrawer(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val screenHeight = configuration.screenHeightDp.dp
 
+    DrawerFontScale {
     Box(
         modifier = modifier.fillMaxSize()
     ) {
@@ -460,6 +462,7 @@ fun AudioSourceBottomDrawer(
                 }
             }
         }
+    }
     }
 }
 
