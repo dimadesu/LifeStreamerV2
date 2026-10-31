@@ -198,7 +198,8 @@ fun SettingsDrawerPanel(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f).padding(end = 8.dp)
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_baseline_settings_24),
@@ -208,6 +209,7 @@ fun SettingsDrawerPanel(
                             )
                             Text(
                                 text = title,
+                                modifier = Modifier.weight(1f, fill = false),
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
