@@ -8,6 +8,8 @@
     <string name="action_known_issues">Known issues and workarounds</string>
     <string name="action_quit">Quit</string>
     <string name="action_help">Help</string>
+    <string name="quit_confirm_message">Quit the app? Any active stream will be stopped.</string>
+    <string name="action_cancel">Cancel</string>
 
     <!-- Camera Streaming Service -->
     <string name="streaming_channel_name">Camera Streaming</string>

@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +35,28 @@ fun TopLeftControlsBar(
     modifier: Modifier = Modifier
 ) {
     var helpExpanded by rememberSaveable { mutableStateOf(false) }
+    var showQuitConfirm by rememberSaveable { mutableStateOf(false) }
+
+    if (showQuitConfirm) {
+        AlertDialog(
+            onDismissRequest = { showQuitConfirm = false },
+            title = { Text(stringResource(R.string.action_quit)) },
+            text = { Text(stringResource(R.string.quit_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showQuitConfirm = false
+                    onQuit()
+                }) {
+                    Text(stringResource(R.string.action_quit))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQuitConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
+    }
 
     Row(
         modifier = modifier,
@@ -41,7 +65,7 @@ fun TopLeftControlsBar(
         CameraControlButton(
             iconRes = R.drawable.ic_baseline_close_24,
             contentDescription = stringResource(R.string.action_quit),
-            onClick = onQuit
+            onClick = { showQuitConfirm = true }
         )
 
         Box {
