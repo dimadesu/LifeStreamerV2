@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -15,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -37,21 +39,29 @@ fun TopLeftControlsBar(
     var helpExpanded by rememberSaveable { mutableStateOf(false) }
     var showQuitConfirm by rememberSaveable { mutableStateOf(false) }
 
+    // Compose has no app MaterialTheme, so match the XML AppTheme's colorPrimary used by other dialogs
+    val dialogButtonColors = ButtonDefaults.textButtonColors(
+        contentColor = colorResource(R.color.colorPrimary)
+    )
+
     if (showQuitConfirm) {
         AlertDialog(
             onDismissRequest = { showQuitConfirm = false },
             title = { Text(stringResource(R.string.action_quit)) },
             text = { Text(stringResource(R.string.quit_confirm_message)) },
             confirmButton = {
-                TextButton(onClick = {
-                    showQuitConfirm = false
-                    onQuit()
-                }) {
+                TextButton(
+                    colors = dialogButtonColors,
+                    onClick = {
+                        showQuitConfirm = false
+                        onQuit()
+                    }
+                ) {
                     Text(stringResource(R.string.action_quit))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showQuitConfirm = false }) {
+                TextButton(colors = dialogButtonColors, onClick = { showQuitConfirm = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             }
