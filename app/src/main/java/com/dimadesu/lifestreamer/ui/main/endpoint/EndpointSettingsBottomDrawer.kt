@@ -104,6 +104,9 @@ fun EndpointSettingsBottomDrawer(
 
             if (isStreaming) {
                 SettingsWarningText(stringResource(R.string.endpoint_settings_apply_after_stream))
+                if (capabilities.hasSrtCapabilities || capabilities.hasSrtlaCapabilities || capabilities.hasRtmpCapabilities) {
+                    SettingsWarningText(stringResource(R.string.endpoint_settings_adaptive_bitrate_live_update))
+                }
             }
         }
     }
