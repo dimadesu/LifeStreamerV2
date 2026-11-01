@@ -41,5 +41,9 @@ data class StoredEndpointSettings(
     val rtmpTargetBitrateKbps: Int = 0,
     val rtmpMinBitrateKbps: Int = 0,
 
-    val fileName: String = ""
+    val fileName: String = "",
+
+    val isLocalRecordingEnabled: Boolean = false,
+    val localRecordingType: EndpointType = EndpointType.MP4_FILE,
+    val localRecordingFileName: String = ""
 )

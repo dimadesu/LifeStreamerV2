@@ -274,6 +274,10 @@
     <string name="local_recording_enabled_key">local_recording_enabled_key</string>
     <string name="local_recording_file_name_key">local_recording_file_name_key</string>
     <string name="local_recording_format_key">local_recording_format_key</string>
+    <string name="local_file_recording_title">Local File Recording</string>
+    <string name="record_to_local_file">Record to file alongside live stream</string>
+    <string name="recording_format">Format</string>
+    <string name="recording_file_name">File name</string>
 
     <!-- Video and audio encoders -->
     <string name="video_encoder_h264">AVC/H.264</string>

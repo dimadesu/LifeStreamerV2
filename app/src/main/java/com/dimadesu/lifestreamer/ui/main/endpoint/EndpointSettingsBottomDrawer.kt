@@ -102,6 +102,11 @@ fun EndpointSettingsBottomDrawer(
                 RtmpAdaptiveBitrateSection(settings, endpoint)
             }
 
+            if (capabilities.hasSrtCapabilities || capabilities.hasSrtlaCapabilities || capabilities.hasRtmpCapabilities) {
+                Divider()
+                LocalRecordingSection(settings, endpoint)
+            }
+
             if (isStreaming) {
                 SettingsWarningText(stringResource(R.string.endpoint_settings_apply_after_stream))
                 if (capabilities.hasSrtCapabilities || capabilities.hasSrtlaCapabilities || capabilities.hasRtmpCapabilities) {
@@ -332,6 +337,35 @@ private fun FileSection(settings: StoredEndpointSettings, endpoint: EndpointDraw
         color = Color(0x99FFFFFF),
         lineHeight = 15.sp
     )
+}
+
+@Composable
+private fun LocalRecordingSection(settings: StoredEndpointSettings, endpoint: EndpointDrawerController) {
+    SettingsSectionTitle(stringResource(R.string.local_file_recording_title))
+    SettingsSwitchRow(
+        title = stringResource(R.string.record_to_local_file),
+        checked = settings.isLocalRecordingEnabled,
+        onCheckedChange = endpoint::setLocalRecordingEnabled
+    )
+    if (settings.isLocalRecordingEnabled) {
+        val recordingFormats = listOf(
+            EndpointType.MP4_FILE,
+            EndpointType.TS_FILE,
+            EndpointType.FLV_FILE
+        )
+        SettingsDropdownRow(
+            title = stringResource(R.string.recording_format),
+            currentValue = settings.localRecordingType,
+            currentValueName = stringResource(settings.localRecordingType.labelResId),
+            options = recordingFormats.map { it to stringResource(it.labelResId) },
+            onSelectOption = endpoint::setLocalRecordingType
+        )
+        SettingsTextFieldRow(
+            title = stringResource(R.string.recording_file_name),
+            value = settings.localRecordingFileName,
+            onCommit = endpoint::setLocalRecordingFileName
+        )
+    }
 }
 
 // Always offers the current value, even when it is not one of the steps

@@ -158,6 +158,12 @@ class EndpointDrawerController(
 
     fun setFileName(value: String) = update { it.copy(fileName = value.trim()) }
 
+    fun setLocalRecordingEnabled(enabled: Boolean) = update { it.copy(isLocalRecordingEnabled = enabled) }
+
+    fun setLocalRecordingType(type: EndpointType) = update { it.copy(localRecordingType = type) }
+
+    fun setLocalRecordingFileName(value: String) = update { it.copy(localRecordingFileName = value.trim()) }
+
     private companion object {
         const val TAG = "EndpointDrawerController"
     }
