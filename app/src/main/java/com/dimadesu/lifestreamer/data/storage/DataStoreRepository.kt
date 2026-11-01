@@ -318,6 +318,28 @@ class DataStoreRepository(
     }.distinctUntilChanged()
 
     /**
+     * Flow emitting whether local video recording alongside live streaming is enabled.
+     */
+    val isLocalRecordingEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[booleanPreferencesKey(context.getString(R.string.local_recording_enabled_key))]
+            ?: false
+    }.distinctUntilChanged()
+
+    /**
+     * Flow emitting a UriMediaDescriptor for local video recording.
+     */
+    val localRecordingDescriptorFlow: Flow<UriMediaDescriptor> = dataStore.data.map { preferences ->
+        val rawFilename = preferences[stringPreferencesKey(context.getString(R.string.local_recording_file_name_key))]
+            ?.let { FileExtension.stripKnownExtension(it) }
+            ?.takeIf { it.isNotBlank() }
+            ?: "Recording_${System.currentTimeMillis()}"
+        val format = preferences[stringPreferencesKey(context.getString(R.string.local_recording_format_key))]
+            ?: "mp4"
+        val fullFilename = rawFilename.appendIfNotEndsWith(".$format")
+        context.createVideoContentUri(fullFilename)
+    }.distinctUntilChanged()
+
+    /**
      * Get the DataStore key for an RTMP source URL at the given 1-based index.
      * Index 1 uses the original key for backward compatibility.
      */
@@ -712,6 +734,19 @@ class DataStoreRepository(
             put(R.string.rtmp_server_video_target_bitrate_key, settings.rtmpTargetBitrateKbps)
             put(R.string.rtmp_server_video_min_bitrate_key, settings.rtmpMinBitrateKbps)
             put(R.string.file_name_key, settings.fileName)
+        }
+    }
+
+    suspend fun saveLocalRecordingEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[booleanPreferencesKey(context.getString(R.string.local_recording_enabled_key))] = enabled
+        }
+    }
+
+    suspend fun saveLocalRecordingSettings(filename: String, format: String = "mp4") {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.local_recording_file_name_key))] = filename
+            preferences[stringPreferencesKey(context.getString(R.string.local_recording_format_key))] = format
         }
     }
 

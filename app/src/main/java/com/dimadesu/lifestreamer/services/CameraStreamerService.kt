@@ -56,6 +56,13 @@ import kotlinx.coroutines.flow.drop
 import com.dimadesu.lifestreamer.audio.BluetoothAudioSource
 import com.dimadesu.lifestreamer.audio.ScoOrchestrator
 
+import io.github.thibaultbee.streampack.core.elements.endpoints.DualEndpoint
+import io.github.thibaultbee.streampack.core.elements.endpoints.DualEndpointFactory
+import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicEndpointFactory
+import io.github.thibaultbee.streampack.core.elements.endpoints.DynamicLocalEndpointFactory
+import io.github.thibaultbee.streampack.core.elements.endpoints.openSecond
+import io.github.thibaultbee.streampack.core.elements.endpoints.startStreamSecond
+
 /**
  * CameraStreamerService extending StreamerService for camera streaming
  */
@@ -64,7 +71,11 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
         override fun create(context: Context): ISingleStreamer {
             return SingleStreamer(
                 context,
-                audioInputMode = StreamerPipeline.AudioInputMode.PUSH
+                audioInputMode = StreamerPipeline.AudioInputMode.PUSH,
+                endpointFactory = DualEndpointFactory(
+                    mainEndpointFactory = DynamicLocalEndpointFactory(),
+                    secondEndpointFactory = DynamicEndpointFactory()
+                )
             )
         }
     },
@@ -1144,14 +1155,24 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
                 return
             }
 
-            // Read configured endpoint descriptor
-            val descriptor = try {
+            // Read configured endpoint descriptor and local recording config
+            val remoteDescriptor = try {
                 storageRepository.endpointDescriptorFlow.first()
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to read endpoint descriptor from storage: ${e.message}")
                 customNotificationUtils.notify(onErrorNotification(Throwable("No endpoint configured")) ?: onCreateNotification())
                 return
             }
+
+            val isLocalRecordingEnabled = storageRepository.isLocalRecordingEnabledFlow.first()
+            val localDescriptor = if (isLocalRecordingEnabled) {
+                try {
+                    storageRepository.localRecordingDescriptorFlow.first()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to read local recording descriptor: ${e.message}")
+                    null
+                }
+            } else null
 
             // Final validation: Ensure both sources are still configured right before starting stream
             val (sourcesValid, sourceError) = validateSourcesConfigured()
@@ -1164,7 +1185,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
             }
             Log.i(TAG, "startStreamFromConfiguredEndpoint: Final source validation passed")
 
-            Log.i(TAG, "startStreamFromConfiguredEndpoint: opening descriptor $descriptor")
+            Log.i(TAG, "startStreamFromConfiguredEndpoint: opening remote descriptor $remoteDescriptor (localRecordingEnabled=$isLocalRecordingEnabled)")
             // Indicate start sequence
             try { _serviceStreamStatus.tryEmit(StreamStatus.STARTING) } catch (_: Throwable) {}
 
@@ -1180,12 +1201,22 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
             try {
                 // Indicate we're attempting to connect/open
                 try { _serviceStreamStatus.tryEmit(StreamStatus.CONNECTING) } catch (_: Throwable) {}
-                // Use NonCancellable for camera configuration to prevent "Broken pipe" errors
-                // if coroutine is cancelled during camera setup
-                withTimeout(5000) { // 5s open timeout
-                    // withContext(NonCancellable) {
-                        currentStreamer.open(descriptor)
-                    // }
+
+                val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+
+                if (isLocalRecordingEnabled && localDescriptor != null && dualEndpoint != null) {
+                    Log.i(TAG, "Opening DualEndpoint: mainEndpoint=$localDescriptor, secondEndpoint=$remoteDescriptor")
+                    withTimeout(5000) {
+                        currentStreamer.open(localDescriptor)
+                    }
+                    withTimeout(5000) {
+                        dualEndpoint.openSecond(remoteDescriptor)
+                    }
+                } else {
+                    Log.i(TAG, "Opening Single/Main Endpoint: $remoteDescriptor")
+                    withTimeout(5000) {
+                        currentStreamer.open(remoteDescriptor)
+                    }
                 }
                 
                 // Wait for encoders to be initialized after open
@@ -1227,9 +1258,15 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
                 // We're ready to start streaming
                 try { _serviceStreamStatus.tryEmit(StreamStatus.CONNECTING) } catch (_: Throwable) {}
                 
+                val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+
                 // Protect startStream() from cancellation to prevent camera configuration errors
                 // withContext(NonCancellable) {
                     currentStreamer.startStream()
+                    if (isLocalRecordingEnabled && localDescriptor != null && dualEndpoint != null) {
+                        Log.i(TAG, "Starting DualEndpoint secondEndpoint stream...")
+                        dualEndpoint.startStreamSecond()
+                    }
                 // }
                 
                 // Reset video config bitrate to clear any modified bitrate from previous stream's regulator
@@ -1258,7 +1295,7 @@ class CameraStreamerService : StreamerService<ISingleStreamer>(
             try {
                 streamConfigurationHelper.attachBitrateRegulator(
                     currentStreamer as? IVideoSingleStreamer,
-                    descriptor.type.sinkType,
+                    remoteDescriptor.type.sinkType,
                     TAG
                 )
             } catch (e: Exception) {

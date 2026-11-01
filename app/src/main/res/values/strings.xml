@@ -271,6 +271,9 @@
     <string name="file_name_key">file_name_key</string>
     <string name="file_name">File name</string>
     <string name="default_file_name">StreamPackFile</string>
+    <string name="local_recording_enabled_key">local_recording_enabled_key</string>
+    <string name="local_recording_file_name_key">local_recording_file_name_key</string>
+    <string name="local_recording_format_key">local_recording_format_key</string>
 
     <!-- Video and audio encoders -->
     <string name="video_encoder_h264">AVC/H.264</string>
