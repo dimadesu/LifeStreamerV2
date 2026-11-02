@@ -733,8 +733,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private val _availableCamerasLiveData = MutableLiveData<List<CameraInfo>>(emptyList())
     val availableCamerasLiveData: LiveData<List<CameraInfo>> = _availableCamerasLiveData
 
-    private val _isConcurrentCameraSupportedLiveData = MutableLiveData<Boolean>(false)
-    val isConcurrentCameraSupportedLiveData: LiveData<Boolean> = _isConcurrentCameraSupportedLiveData
+    private val _concurrentCameraPairsLiveData = MutableLiveData<List<Pair<String, String>>>(emptyList())
+    val concurrentCameraPairsLiveData: LiveData<List<Pair<String, String>>> = _concurrentCameraPairsLiveData
 
     private val _isConcurrentCameraActiveLiveData = MutableLiveData<Boolean>(false)
     val isConcurrentCameraActiveLiveData: LiveData<Boolean> = _isConcurrentCameraActiveLiveData
@@ -3427,11 +3427,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 }
                 
                 _availableCamerasLiveData.postValue(cameraList)
-                _isConcurrentCameraSupportedLiveData.postValue(cameraManager.concurrentCameraPairs.isNotEmpty())
+                _concurrentCameraPairsLiveData.postValue(cameraManager.concurrentCameraPairs)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load cameras: ${e.message}")
                 _availableCamerasLiveData.postValue(emptyList())
-                _isConcurrentCameraSupportedLiveData.postValue(false)
+                _concurrentCameraPairsLiveData.postValue(emptyList())
             }
         }
     }
@@ -3442,13 +3442,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (currentStreamer == null) {
             Log.e(TAG, "Streamer service not available for dual camera toggle")
             _streamerErrorLiveData.postValue("Service not available")
-            return
-        }
-
-        val pairs = application.cameraManager.concurrentCameraPairs
-        if (pairs.isEmpty()) {
-            Log.w(TAG, "Concurrent camera streaming not supported on this device")
-            _streamerErrorLiveData.postValue("Concurrent camera streaming not supported")
             return
         }
 
@@ -3478,17 +3471,16 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             application.cameraManager.defaultCameraId
                         }
 
-                        // Find a pair that includes activeCameraId so it stays as primary (full screen)
+                        val pairs = application.cameraManager.concurrentCameraPairs
                         val matchedPair = pairs.firstOrNull { it.first == activeCameraId || it.second == activeCameraId }
-                        val (primaryId, secondaryId) = if (matchedPair != null) {
-                            if (matchedPair.first == activeCameraId) {
-                                Pair(matchedPair.first, matchedPair.second)
-                            } else {
-                                Pair(matchedPair.second, matchedPair.first)
-                            }
-                        } else {
-                            Pair(pairs.first().first, pairs.first().second)
+                        if (matchedPair == null) {
+                            Log.w(TAG, "Concurrent camera streaming not supported for camera $activeCameraId")
+                            _streamerErrorLiveData.postValue("PIP not supported for the selected camera")
+                            return@withLock
                         }
+                        val primaryId = activeCameraId
+                        val secondaryId =
+                            if (matchedPair.first == activeCameraId) matchedPair.second else matchedPair.first
 
                         val mode = _currentCompositionModeLiveData.value ?: CompositionMode.PIP_TOP_RIGHT
                         currentStreamer.setConcurrentDualCamera(

@@ -127,8 +127,10 @@ fun CameraControlsBottomDrawer(
     val currentNoiseReductionMode by viewModel.currentNoiseReductionMode.observeAsState(initial = PreviewViewModel.NOISE_REDUCTION_MODE_OFF)
 
     // Concurrent Dual Camera
-    val isConcurrentCameraSupported by viewModel.isConcurrentCameraSupportedLiveData.observeAsState(initial = false)
+    val concurrentCameraPairs by viewModel.concurrentCameraPairsLiveData.observeAsState(initial = emptyList())
     val isConcurrentCameraActive by viewModel.isConcurrentCameraActiveLiveData.observeAsState(initial = false)
+    val isConcurrentCameraSupported = isConcurrentCameraActive ||
+        concurrentCameraPairs.any { it.first == currentCameraId || it.second == currentCameraId }
     val currentCompositionMode by viewModel.currentCompositionModeLiveData.observeAsState(initial = CompositionMode.PIP_TOP_RIGHT)
 
     CameraControlsBottomDrawer(
