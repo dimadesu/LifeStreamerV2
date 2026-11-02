@@ -329,7 +329,35 @@ fun CameraControlsBottomDrawer(
 
                 HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                // 1. Zoom Inline Slider
+                // 1. Concurrent Dual Camera (PiP / Split Screen)
+                if (isConcurrentCameraSupported) {
+                    DualCameraSwitchRow(
+                        isConcurrentActive = isConcurrentCameraActive,
+                        onCheckedChange = { onToggleConcurrentCamera() }
+                    )
+
+                    if (isConcurrentCameraActive) {
+                        val compositionModes = listOf(
+                            CompositionMode.PIP_TOP_RIGHT,
+                            CompositionMode.PIP_TOP_LEFT,
+                            CompositionMode.PIP_BOTTOM_RIGHT,
+                            CompositionMode.PIP_BOTTOM_LEFT,
+                            CompositionMode.SIDE_BY_SIDE,
+                            CompositionMode.TOP_BOTTOM
+                        )
+                        CameraDropdownRow(
+                            title = "Layout Mode",
+                            iconRes = R.drawable.ic_baseline_linked_camera_24,
+                            currentValueName = PreviewViewModel.getCompositionModeName(currentCompositionMode),
+                            options = compositionModes.map { it to PreviewViewModel.getCompositionModeName(it) },
+                            currentValue = currentCompositionMode,
+                            onSelectOption = onSelectCompositionMode
+                        )
+                    }
+                    HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
+                }
+
+                // 2. Zoom Inline Slider
                 if (isZoomAvailable && zoomRange != null) {
                     ZoomSliderBlock(
                         zoom = zoom,
@@ -338,7 +366,7 @@ fun CameraControlsBottomDrawer(
                     )
                 }
 
-                // 2. Exposure Compensation Inline Slider
+                // 3. Exposure Compensation Inline Slider
                 if (isExposureCompensationAvailable && exposureRange != null) {
                     ExposureCompensationSliderBlock(
                         exposure = exposure,
@@ -359,7 +387,7 @@ fun CameraControlsBottomDrawer(
                     HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
                 }
 
-                // 3. Torch Toggle Switch
+                // 4. Torch Toggle Switch
                 if (isFlashAvailable) {
                     TorchSwitchRow(
                         isTorchOn = isTorchOn,
@@ -367,7 +395,7 @@ fun CameraControlsBottomDrawer(
                     )
                 }
 
-                // 4. Focus Mode Dropdown
+                // 5. Focus Mode Dropdown
                 if (isAutoFocusModeAvailable && availableAutoFocusModes.isNotEmpty()) {
                     CameraDropdownRow(
                         title = "Focus",
@@ -395,7 +423,7 @@ fun CameraControlsBottomDrawer(
                     }
                 }
 
-                // 5. White Balance Dropdown
+                // 6. White Balance Dropdown
                 if (isAutoWhiteBalanceAvailable && availableWhiteBalanceModes.isNotEmpty()) {
                     CameraDropdownRow(
                         title = "White Balance",
@@ -407,7 +435,7 @@ fun CameraControlsBottomDrawer(
                     )
                 }
 
-                // 6. Stabilization Dropdown
+                // 7. Stabilization Dropdown
                 if (isStabilizationAvailable && availableStabilizationModes.isNotEmpty()) {
                     CameraDropdownRow(
                         title = "Stabilisation",
@@ -419,7 +447,7 @@ fun CameraControlsBottomDrawer(
                     )
                 }
 
-                // 7. Video Noise Reduction Dropdown
+                // 8. Video Noise Reduction Dropdown
                 if (isNoiseReductionAvailable && availableNoiseReductionModes.isNotEmpty()) {
                     CameraDropdownRow(
                         title = "Noise Reduction",
@@ -429,34 +457,6 @@ fun CameraControlsBottomDrawer(
                         currentValue = currentNoiseReductionMode,
                         onSelectOption = onSelectNoiseReductionMode
                     )
-                }
-
-                // 8. Concurrent Dual Camera
-                if (isConcurrentCameraSupported) {
-                    HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
-                    DualCameraSwitchRow(
-                        isConcurrentActive = isConcurrentCameraActive,
-                        onCheckedChange = { onToggleConcurrentCamera() }
-                    )
-
-                    if (isConcurrentCameraActive) {
-                        val compositionModes = listOf(
-                            CompositionMode.PIP_TOP_RIGHT,
-                            CompositionMode.PIP_TOP_LEFT,
-                            CompositionMode.PIP_BOTTOM_RIGHT,
-                            CompositionMode.PIP_BOTTOM_LEFT,
-                            CompositionMode.SIDE_BY_SIDE,
-                            CompositionMode.TOP_BOTTOM
-                        )
-                        CameraDropdownRow(
-                            title = "Layout Mode",
-                            iconRes = R.drawable.ic_baseline_linked_camera_24,
-                            currentValueName = PreviewViewModel.getCompositionModeName(currentCompositionMode),
-                            options = compositionModes.map { it to PreviewViewModel.getCompositionModeName(it) },
-                            currentValue = currentCompositionMode,
-                            onSelectOption = onSelectCompositionMode
-                        )
-                    }
                 }
             }
         }
