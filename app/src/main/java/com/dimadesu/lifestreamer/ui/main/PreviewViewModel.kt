@@ -2857,6 +2857,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
     }
 
+    fun resetPipLayout() {
+        _isConcurrentCameraActiveLiveData.postValue(false)
+        setCompositionMode(CompositionMode.PIP_TOP_RIGHT)
+    }
+
     @RequiresPermission(Manifest.permission.CAMERA)
     fun switchBackToFront(): Boolean {
         /**
@@ -2868,6 +2873,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (videoSource is ICameraSource) {
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
+                    resetPipLayout()
                     streamer?.switchBackToFront(application)
                 }
             }
@@ -2889,7 +2895,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
                     try {
-                        _isConcurrentCameraActiveLiveData.postValue(false)
+                        resetPipLayout()
                         currentStreamer.setNextCameraId(application)
                         Log.i(TAG, "Camera toggled successfully")
                     } catch (e: Exception) {
@@ -2909,7 +2915,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch(defaultDispatcher) {
             videoSourceMutex.withLock {
                 try {
-                    _isConcurrentCameraActiveLiveData.postValue(false)
+                    resetPipLayout()
                     currentStreamer.setCameraId(cameraId)
                     Log.i(TAG, "Selected camera: $cameraId")
                 } catch (e: Exception) {
@@ -3459,7 +3465,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             application.cameraManager.defaultCameraId
                         }
 
-                        _isConcurrentCameraActiveLiveData.postValue(false)
+                        resetPipLayout()
                         currentStreamer.setCameraId(currentMainCameraId)
                         Log.i(TAG, "Reverted PiP off to single camera: $currentMainCameraId")
                     } else {
@@ -3482,7 +3488,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         val secondaryId =
                             if (matchedPair.first == activeCameraId) matchedPair.second else matchedPair.first
 
-                        val mode = _currentCompositionModeLiveData.value ?: CompositionMode.PIP_TOP_RIGHT
+                        setCompositionMode(CompositionMode.PIP_TOP_RIGHT)
+                        val mode = CompositionMode.PIP_TOP_RIGHT
                         currentStreamer.setConcurrentDualCamera(
                             primaryCameraId = primaryId,
                             secondaryCameraId = secondaryId,
