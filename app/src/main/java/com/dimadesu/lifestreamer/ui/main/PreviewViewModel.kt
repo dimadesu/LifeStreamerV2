@@ -2889,7 +2889,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
                     try {
-                        delay(300)
                         _isConcurrentCameraActiveLiveData.postValue(false)
                         currentStreamer.setNextCameraId(application)
                         Log.i(TAG, "Camera toggled successfully")
@@ -2910,7 +2909,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch(defaultDispatcher) {
             videoSourceMutex.withLock {
                 try {
-                    delay(100)
                     _isConcurrentCameraActiveLiveData.postValue(false)
                     currentStreamer.setCameraId(cameraId)
                     Log.i(TAG, "Selected camera: $cameraId")
@@ -3457,7 +3455,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         viewModelScope.launch(defaultDispatcher) {
             videoSourceMutex.withLock {
                 try {
-                    delay(300)
                     if (_isConcurrentCameraActiveLiveData.value == true) {
                         // Revert PiP off: restore single camera mode for the currently active main camera
                         val activeSource = currentStreamer.videoInput?.sourceFlow?.value
