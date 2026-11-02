@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
+import io.github.thibaultbee.streampack.core.elements.processing.video.CompositionMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -125,10 +126,20 @@ fun CameraControlsBottomDrawer(
     val availableNoiseReductionModes by viewModel.availableNoiseReductionModes.observeAsState(initial = emptyList())
     val currentNoiseReductionMode by viewModel.currentNoiseReductionMode.observeAsState(initial = PreviewViewModel.NOISE_REDUCTION_MODE_OFF)
 
+    // Concurrent Dual Camera
+    val isConcurrentCameraSupported by viewModel.isConcurrentCameraSupportedLiveData.observeAsState(initial = false)
+    val isConcurrentCameraActive by viewModel.isConcurrentCameraActiveLiveData.observeAsState(initial = false)
+    val currentCompositionMode by viewModel.currentCompositionModeLiveData.observeAsState(initial = CompositionMode.PIP_TOP_RIGHT)
+
     CameraControlsBottomDrawer(
         isOpen = isOpen,
         showCameraControls = showCameraControls,
         cameraDisplayName = activeCameraName,
+        isConcurrentCameraSupported = isConcurrentCameraSupported,
+        isConcurrentCameraActive = isConcurrentCameraActive,
+        onToggleConcurrentCamera = { viewModel.toggleConcurrentDualCamera() },
+        currentCompositionMode = currentCompositionMode,
+        onSelectCompositionMode = { viewModel.setCompositionMode(it) },
         isFlashAvailable = isFlashAvailable,
         isTorchOn = isTorchOn,
         onSetTorch = { viewModel.setTorch(it) },
@@ -178,6 +189,11 @@ fun CameraControlsBottomDrawer(
     isOpen: Boolean,
     showCameraControls: Boolean,
     cameraDisplayName: String?,
+    isConcurrentCameraSupported: Boolean = false,
+    isConcurrentCameraActive: Boolean = false,
+    onToggleConcurrentCamera: () -> Unit = {},
+    currentCompositionMode: CompositionMode = CompositionMode.PIP_TOP_RIGHT,
+    onSelectCompositionMode: (CompositionMode) -> Unit = {},
     isFlashAvailable: Boolean,
     isTorchOn: Boolean,
     onSetTorch: (Boolean) -> Unit,
@@ -414,6 +430,34 @@ fun CameraControlsBottomDrawer(
                         onSelectOption = onSelectNoiseReductionMode
                     )
                 }
+
+                // 8. Concurrent Dual Camera
+                if (isConcurrentCameraSupported) {
+                    HorizontalDivider(color = Color(0x1AFFFFFF), thickness = 0.5.dp)
+                    DualCameraSwitchRow(
+                        isConcurrentActive = isConcurrentCameraActive,
+                        onCheckedChange = { onToggleConcurrentCamera() }
+                    )
+
+                    if (isConcurrentCameraActive) {
+                        val compositionModes = listOf(
+                            CompositionMode.PIP_TOP_RIGHT,
+                            CompositionMode.PIP_TOP_LEFT,
+                            CompositionMode.PIP_BOTTOM_RIGHT,
+                            CompositionMode.PIP_BOTTOM_LEFT,
+                            CompositionMode.SIDE_BY_SIDE,
+                            CompositionMode.TOP_BOTTOM
+                        )
+                        CameraDropdownRow(
+                            title = "Layout Mode",
+                            iconRes = R.drawable.ic_baseline_linked_camera_24,
+                            currentValueName = PreviewViewModel.getCompositionModeName(currentCompositionMode),
+                            options = compositionModes.map { it to PreviewViewModel.getCompositionModeName(it) },
+                            currentValue = currentCompositionMode,
+                            onSelectOption = onSelectCompositionMode
+                        )
+                    }
+                }
             }
         }
     }
@@ -477,16 +521,71 @@ private fun TorchSwitchRow(
 }
 
 /**
+ * Row displaying Dual Camera toggle switch with icon and description.
+ */
+@Composable
+private fun DualCameraSwitchRow(
+    isConcurrentActive: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_baseline_linked_camera_24),
+                contentDescription = null,
+                tint = if (isConcurrentActive) Color(0xFF4CAF50) else Color(0xB3FFFFFF),
+                modifier = Modifier.size(20.dp)
+            )
+            Column {
+                Text(
+                    text = "Dual Camera (PiP)",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (isConcurrentActive) "Front + Rear Active" else "Single Camera",
+                    color = if (isConcurrentActive) Color(0xFF4CAF50) else Color(0x80FFFFFF),
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Switch(
+            checked = isConcurrentActive,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Color(0xFF4CAF50),
+                uncheckedThumbColor = Color(0xFFAAAAAA),
+                uncheckedTrackColor = Color(0x33FFFFFF),
+                uncheckedBorderColor = Color(0x44FFFFFF)
+            )
+        )
+    }
+}
+
+/**
  * Clean camera-style dropdown row with icon, title, and compact interactive selection pill.
  */
 @Composable
-private fun CameraDropdownRow(
+private fun <T> CameraDropdownRow(
     title: String,
     iconRes: Int,
     currentValueName: String,
-    options: List<Pair<Int, String>>,
-    currentValue: Int,
-    onSelectOption: (Int) -> Unit,
+    options: List<Pair<T, String>>,
+    currentValue: T,
+    onSelectOption: (T) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
