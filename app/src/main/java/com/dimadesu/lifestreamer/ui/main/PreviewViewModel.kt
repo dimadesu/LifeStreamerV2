@@ -69,6 +69,7 @@ import com.dimadesu.lifestreamer.utils.ReconnectTimer
 import com.dimadesu.lifestreamer.utils.StreamConfigurationHelper
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.cameras
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.cameraManager
+import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.defaultCameraId
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMediaDescriptor
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
@@ -2876,11 +2877,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleCamera() {
-        /**
-         * If video frame rate is not supported by the new camera, streamer will throw an
-         * exception instead of crashing. You can either catch the exception or check if the
-         * configuration is valid for the new camera with [Context.isFrameRateSupported].
-         */
         val currentStreamer = serviceStreamer
         if (currentStreamer == null) {
             Log.e(TAG, "Streamer service not available for camera toggle")
@@ -2893,9 +2889,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
                     try {
-                        // Add delay before switching camera to allow previous camera to fully release
-                        // This prevents resource conflicts when hot-swapping cameras
                         delay(300)
+                        _isConcurrentCameraActiveLiveData.postValue(false)
                         currentStreamer.setNextCameraId(application)
                         Log.i(TAG, "Camera toggled successfully")
                     } catch (e: Exception) {
@@ -2906,6 +2901,24 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         } else {
             Log.w(TAG, "Video source is not a camera source, cannot toggle")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun selectCamera(cameraId: String) {
+        val currentStreamer = serviceStreamer ?: return
+        viewModelScope.launch(defaultDispatcher) {
+            videoSourceMutex.withLock {
+                try {
+                    delay(100)
+                    _isConcurrentCameraActiveLiveData.postValue(false)
+                    currentStreamer.setCameraId(cameraId)
+                    Log.i(TAG, "Selected camera: $cameraId")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to select camera $cameraId: ${e.message}", e)
+                    _streamerErrorLiveData.postValue("Failed to switch camera: ${e.message}")
+                }
+            }
         }
     }
     
@@ -3441,24 +3454,53 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             return
         }
 
-        val (rearId, frontId) = pairs.first()
         viewModelScope.launch(defaultDispatcher) {
             videoSourceMutex.withLock {
                 try {
                     delay(300)
                     if (_isConcurrentCameraActiveLiveData.value == true) {
-                        currentStreamer.setCameraId(rearId)
+                        // Revert PiP off: restore single camera mode for the currently active main camera
+                        val activeSource = currentStreamer.videoInput?.sourceFlow?.value
+                        val currentMainCameraId = if (activeSource is ConcurrentDualCameraSource) {
+                            activeSource.primaryCameraId
+                        } else if (activeSource is ICameraSource) {
+                            activeSource.cameraId
+                        } else {
+                            application.cameraManager.defaultCameraId
+                        }
+
                         _isConcurrentCameraActiveLiveData.postValue(false)
-                        Log.i(TAG, "Reverted to single camera: $rearId")
+                        currentStreamer.setCameraId(currentMainCameraId)
+                        Log.i(TAG, "Reverted PiP off to single camera: $currentMainCameraId")
                     } else {
+                        // Activate PiP on: keep currently selected camera as full screen main camera
+                        val activeSource = currentStreamer.videoInput?.sourceFlow?.value
+                        val activeCameraId = if (activeSource is ICameraSource) {
+                            activeSource.cameraId
+                        } else {
+                            application.cameraManager.defaultCameraId
+                        }
+
+                        // Find a pair that includes activeCameraId so it stays as primary (full screen)
+                        val matchedPair = pairs.firstOrNull { it.first == activeCameraId || it.second == activeCameraId }
+                        val (primaryId, secondaryId) = if (matchedPair != null) {
+                            if (matchedPair.first == activeCameraId) {
+                                Pair(matchedPair.first, matchedPair.second)
+                            } else {
+                                Pair(matchedPair.second, matchedPair.first)
+                            }
+                        } else {
+                            Pair(pairs.first().first, pairs.first().second)
+                        }
+
                         val mode = _currentCompositionModeLiveData.value ?: CompositionMode.PIP_TOP_RIGHT
                         currentStreamer.setConcurrentDualCamera(
-                            primaryCameraId = rearId,
-                            secondaryCameraId = frontId,
+                            primaryCameraId = primaryId,
+                            secondaryCameraId = secondaryId,
                             compositionMode = mode
                         )
                         _isConcurrentCameraActiveLiveData.postValue(true)
-                        Log.i(TAG, "Activated concurrent dual camera: $rearId + $frontId ($mode)")
+                        Log.i(TAG, "Activated PiP dual camera: Main=$primaryId, PiP=$secondaryId ($mode)")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to toggle concurrent dual camera", e)
@@ -4663,6 +4705,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
+        if (videoSource !is ConcurrentDualCameraSource && _isConcurrentCameraActiveLiveData.value == true) {
+            _isConcurrentCameraActiveLiveData.postValue(false)
+        }
         if (videoSource is ICameraSource) {
             notifyCameraChanged(videoSource)
         } else {

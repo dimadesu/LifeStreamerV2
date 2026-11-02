@@ -214,15 +214,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
                 SourceControlsBar(
                     viewModel = previewViewModel,
                     onSelectCamera = { cameraId ->
-                        lifecycleScope.launch {
-                            try {
-                                (previewViewModel.streamer as? IWithVideoSource)?.setCameraId(cameraId)
-                                Log.i(TAG, "Switched to camera: $cameraId")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to switch camera: ${e.message}", e)
-                                Toast.makeText(requireContext(), "Failed to switch camera", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        previewViewModel.selectCamera(cameraId)
                     },
                     onToggleRtmpSource = { rtmpIndex ->
                         toggleVideoSourceWithExplanation(rtmpIndex = rtmpIndex)
