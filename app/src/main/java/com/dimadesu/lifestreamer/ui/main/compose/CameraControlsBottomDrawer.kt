@@ -64,8 +64,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.camera.CompositionMode
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
-import io.github.thibaultbee.streampack.core.elements.processing.video.CompositionMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -350,8 +350,8 @@ fun CameraControlsBottomDrawer(
                         CameraDropdownRow(
                             title = "Layout Mode",
                             iconRes = R.drawable.ic_baseline_linked_camera_24,
-                            currentValueName = PreviewViewModel.getCompositionModeName(currentCompositionMode),
-                            options = compositionModes.map { it to PreviewViewModel.getCompositionModeName(it) },
+                            currentValueName = currentCompositionMode.displayName,
+                            options = compositionModes.map { it to it.displayName },
                             currentValue = currentCompositionMode,
                             onSelectOption = onSelectCompositionMode
                         )
