@@ -71,6 +71,6 @@ Maybe this can become a completely new app.
 
 Maybe some ideas from here can be added to V1.
 
-Maybe some day this will replace V1.
+Maybe someday this will replace V1.
 
 Not sure yet.
