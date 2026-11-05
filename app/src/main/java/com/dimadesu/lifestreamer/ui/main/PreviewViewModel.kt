@@ -2865,6 +2865,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     @RequiresPermission(Manifest.permission.CAMERA)
     fun toggleCamera() {
+        /**
+         * If video frame rate is not supported by the new camera, streamer will throw an
+         * exception instead of crashing. You can either catch the exception or check if the
+         * configuration is valid for the new camera with [Context.isFrameRateSupported].
+         */
         val currentStreamer = serviceStreamer
         if (currentStreamer == null) {
             Log.e(TAG, "Streamer service not available for camera toggle")
@@ -2877,6 +2882,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             viewModelScope.launch(defaultDispatcher) {
                 videoSourceMutex.withLock {
                     try {
+                        // Add delay before switching camera to allow previous camera to fully release
+                        // This prevents resource conflicts when hot-swapping cameras
+                        delay(300)
                         currentStreamer.setNextCameraId(application)
                         Log.i(TAG, "Camera toggled successfully")
                     } catch (e: Exception) {
