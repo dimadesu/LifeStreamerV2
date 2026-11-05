@@ -5,8 +5,6 @@ import android.hardware.camera2.CameraManager
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
-import io.github.thibaultbee.streampack.core.elements.processing.video.CompositionMode
-import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ConcurrentDualCameraSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.isBackCamera
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.isFrontCamera
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
