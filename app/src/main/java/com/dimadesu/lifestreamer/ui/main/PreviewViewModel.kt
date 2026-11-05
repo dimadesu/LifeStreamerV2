@@ -88,10 +88,10 @@ import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.Media
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ConcurrentDualCameraSource
-import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.concurrentCameraPairs
+import com.dimadesu.lifestreamer.camera.concurrentCameraPairs
 import io.github.thibaultbee.streampack.core.elements.processing.video.CompositionMode
 import io.github.thibaultbee.streampack.core.interfaces.setCameraId
-import io.github.thibaultbee.streampack.core.interfaces.setConcurrentDualCamera
+import com.dimadesu.lifestreamer.camera.setConcurrentDualCamera
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
