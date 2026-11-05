@@ -86,6 +86,9 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSettings
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.ICameraSource
+import com.dimadesu.lifestreamer.camera.CompositionMode
+import com.dimadesu.lifestreamer.camera.DualCameraController
+import io.github.thibaultbee.streampack.core.interfaces.setCameraId
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitmapSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
@@ -2894,6 +2897,22 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.w(TAG, "Video source is not a camera source, cannot toggle")
         }
     }
+
+    @SuppressLint("MissingPermission")
+    fun selectCamera(cameraId: String) {
+        val currentStreamer = serviceStreamer ?: return
+        viewModelScope.launch(defaultDispatcher) {
+            videoSourceMutex.withLock {
+                try {
+                    currentStreamer.setCameraId(cameraId)
+                    Log.i(TAG, "Selected camera: $cameraId")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to select camera $cameraId: ${e.message}", e)
+                    _streamerErrorLiveData.postValue("Failed to switch camera: ${e.message}")
+                }
+            }
+        }
+    }
     
     /**
      * Toggle audio monitoring - intelligently switches between RTMP audio and microphone monitoring
@@ -3402,11 +3421,29 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 }
                 
                 _availableCamerasLiveData.postValue(cameraList)
+                dualCameraController.loadPairs(cameraManager)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load cameras: ${e.message}")
                 _availableCamerasLiveData.postValue(emptyList())
+                dualCameraController.loadPairs(null)
             }
         }
+    }
+
+    fun toggleConcurrentDualCamera() {
+        dualCameraController.toggle(
+            context = application,
+            streamer = serviceStreamer,
+            scope = viewModelScope,
+            dispatcher = defaultDispatcher,
+            videoSourceMutex = videoSourceMutex
+        ) { error ->
+            _streamerErrorLiveData.postValue(error)
+        }
+    }
+
+    fun setCompositionMode(mode: CompositionMode) {
+        dualCameraController.setCompositionMode(serviceStreamer, mode)
     }
 
     @RequiresPermission(Manifest.permission.CAMERA)
@@ -4593,8 +4630,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getNoiseReductionModeName(mode: Int): String = CameraNoiseReductionController.getNoiseReductionModeName(mode)
 
+    val dualCameraController = DualCameraController()
+
+    val concurrentCameraPairsLiveData: LiveData<List<Pair<String, String>>> = dualCameraController.concurrentCameraPairs
+    val isConcurrentCameraActiveLiveData: LiveData<Boolean> = dualCameraController.isActive
+    val currentCompositionModeLiveData: LiveData<CompositionMode> = dualCameraController.compositionMode
+
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
+        dualCameraController.onSourceChanged(videoSource, viewModelScope) { toast ->
+            _toastMessageLiveData.postValue(toast)
+        }
         if (videoSource is ICameraSource) {
             notifyCameraChanged(videoSource)
         } else {
