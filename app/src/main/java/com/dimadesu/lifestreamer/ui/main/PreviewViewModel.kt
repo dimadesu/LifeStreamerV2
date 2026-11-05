@@ -4699,8 +4699,26 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getNoiseReductionModeName(mode: Int): String = CameraNoiseReductionController.getNoiseReductionModeName(mode)
 
+    private var secondaryCameraErrorJob: Job? = null
+
+    private fun observeSecondaryCameraError(videoSource: ConcurrentDualCameraSource) {
+        secondaryCameraErrorJob?.cancel()
+        secondaryCameraErrorJob = viewModelScope.launch {
+            videoSource.secondaryCameraErrorFlow.filterNotNull().collect { error ->
+                Log.e(TAG, "Secondary camera failed to start", error)
+                _toastMessageLiveData.postValue("PiP camera failed to start, using main camera only")
+            }
+        }
+    }
+
     private fun notifySourceChanged() {
         val videoSource = streamer?.videoInput?.sourceFlow?.value ?: return
+        if (videoSource is ConcurrentDualCameraSource) {
+            observeSecondaryCameraError(videoSource)
+        } else {
+            secondaryCameraErrorJob?.cancel()
+            secondaryCameraErrorJob = null
+        }
         if (videoSource !is ConcurrentDualCameraSource && _isConcurrentCameraActiveLiveData.value == true) {
             _isConcurrentCameraActiveLiveData.postValue(false)
         }
