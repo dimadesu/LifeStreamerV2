@@ -388,10 +388,12 @@ private fun RtmpUrlField(
         OutlinedTextField(
             value = text,
             onValueChange = { newText ->
-                text = newText
-                onUrlChange(newText)
+                val cleaned = newText.replace("\n", "")
+                text = cleaned
+                onUrlChange(cleaned)
             },
-            singleLine = true,
+            singleLine = false,
+            maxLines = 4,
             textStyle = TextStyle(
                 color = Color.White,
                 fontSize = 12.sp,
