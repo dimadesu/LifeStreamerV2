@@ -353,11 +353,13 @@ fun SettingsTextFieldRow(
         OutlinedTextField(
             value = text,
             onValueChange = { newText ->
-                if (maxLength == null || newText.length <= maxLength) {
-                    text = newText
+                val cleaned = newText.replace("\n", "")
+                if (maxLength == null || cleaned.length <= maxLength) {
+                    text = cleaned
                 }
             },
-            singleLine = true,
+            singleLine = false,
+            maxLines = 4,
             textStyle = TextStyle(
                 color = Color.White,
                 fontSize = 12.sp,
