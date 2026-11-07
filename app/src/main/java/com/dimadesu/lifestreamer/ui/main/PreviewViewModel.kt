@@ -93,6 +93,10 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitm
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
 import io.github.thibaultbee.streampack.core.streamers.single.AudioConfig
+import io.github.thibaultbee.streampack.core.elements.endpoints.DualEndpoint
+import io.github.thibaultbee.streampack.core.elements.endpoints.IEndpointInternal
+import io.github.thibaultbee.streampack.core.elements.endpoints.openSecond
+import io.github.thibaultbee.streampack.core.elements.endpoints.startStreamSecond
 import com.dimadesu.lifestreamer.services.CameraStreamerService
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoRotation
 import com.dimadesu.lifestreamer.models.StreamStatus
@@ -2423,6 +2427,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // Just update our local _streamStatus to match
         service?.setStreamStatus(StreamStatus.CONNECTING)
 
+        val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
+        val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+
         // Stop current stream cleanly before reconnecting
         viewModelScope.launch {
             try {
@@ -2431,11 +2438,38 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 rtmpRetryJob?.cancel()
                 rtmpRetryJob = null
                 Log.d(TAG, "Cancelled RTMP retry job before reconnection")
+
+                val isLocalRecordingEnabled = storageRepository.isLocalRecordingEnabledFlow.first()
+
+                // If DualEndpoint is active, local recording is enabled, and the pipeline is actively streaming,
+                // do NOT stop the entire streamer! Close only secondEndpoint (remote live publishing).
+                if (dualEndpoint != null && isLocalRecordingEnabled && isCurrentlyStreaming) {
+                    Log.i(TAG, "Local recording active with DualEndpoint - isolating disconnect to secondEndpoint")
+                    try {
+                        withTimeout(3000) {
+                            (dualEndpoint.endpoints.firstOrNull() as? IEndpointInternal)?.close()
+                        }
+                        Log.i(TAG, "secondEndpoint closed for network reconnection")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to close secondEndpoint cleanly: ${e.message}")
+                    }
+
+                    reconnectTimer.startSingleShot(timeoutSeconds = 5) {
+                        val userStoppedNow = service?.userStoppedManually?.value ?: false
+                        if (userStoppedNow) {
+                            Log.d(TAG, "User stopped streaming during delay, cancelling reconnection")
+                            service?.cancelReconnection()
+                            return@startSingleShot
+                        }
+                        Log.i(TAG, "Attempting to reconnect secondEndpoint after disconnection...")
+                        attemptReconnection()
+                    }
+                    return@launch
+                }
                 
-                // Clean up current connection
+                // Clean up current connection for single endpoint / non-dual stream
                 // Only call stopStream() if stream was actually started
                 // If open() failed, the stream is not running and stopStream() will hang
-                val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
                 if (isCurrentlyStreaming) {
                     Log.d(TAG, "Stopping failed stream before reconnection...")
                     currentStreamer.stopStream()
@@ -2486,8 +2520,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // Schedule reconnection after 5 seconds
                 reconnectTimer.startSingleShot(timeoutSeconds = 5) {
                     // Double-check if user manually stopped during the delay (using service state)
-                    val userStopped = service?.userStoppedManually?.value ?: false
-                    if (userStopped) {
+                    val userStoppedNow = service?.userStoppedManually?.value ?: false
+                    if (userStoppedNow) {
                         Log.d(TAG, "User stopped streaming during delay, cancelling reconnection")
                         service?.cancelReconnection()
                         return@startSingleShot
@@ -2548,6 +2582,47 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // Set status to CONNECTING so UI shows stop button and it actually works
                 service?.setStreamStatus(StreamStatus.CONNECTING)
 
+                val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+                val isLocalRecordingEnabled = storageRepository.isLocalRecordingEnabledFlow.first()
+                val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
+
+                // Isolated secondEndpoint reconnection when DualEndpoint and local recording are active
+                if (dualEndpoint != null && isLocalRecordingEnabled && isCurrentlyStreaming) {
+                    Log.i(TAG, "Executing secondEndpoint reconnection attempt...")
+                    service?.setReconnectionMessage("Reconnecting live stream...")
+
+                    val remoteDescriptor = storageRepository.endpointDescriptorFlow.first()
+                    try {
+                        withTimeout(5000) {
+                            dualEndpoint.openSecond(remoteDescriptor)
+                        }
+                        dualEndpoint.startStreamSecond()
+
+                        // Request keyframe on video encoder so subscribers receive immediate IDR frame
+                        (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder?.requestKeyFrame()
+
+                        Log.i(TAG, "secondEndpoint reconnection successful!")
+                        service?.completeReconnection()
+                        service?.setStreamStatus(StreamStatus.STREAMING)
+                        rotationIgnoredDuringReconnection = null
+                        ensureRtmpRetryRunning(currentStreamer)
+                        return@launch
+                    } catch (e: Exception) {
+                        Log.w(TAG, "secondEndpoint reconnection failed: ${e.message}")
+                        val userStoppedNow = service?.userStoppedManually?.value ?: false
+                        if (userStoppedNow) {
+                            service?.cancelReconnection()
+                            return@launch
+                        }
+                        service?.setReconnectionMessage("Reconnection failed. Retrying in 5 seconds")
+                        ensureRtmpRetryRunning(currentStreamer)
+                        reconnectTimer.startSingleShot(timeoutSeconds = 5) {
+                            attemptReconnection()
+                        }
+                        return@launch
+                    }
+                }
+
                 // Validate that both sources exist before attempting reconnection
                 val (sourcesValid, sourceError) = validateSourcesConfigured(currentStreamer)
                 if (!sourcesValid) {
@@ -2587,8 +2662,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     ensureRtmpRetryRunning(currentStreamer)
                 } else {
                     // Check if user stopped before showing failure message (using service state)
-                    val userStopped = service?.userStoppedManually?.value ?: false
-                    if (userStopped) {
+                    val userStoppedNow = service?.userStoppedManually?.value ?: false
+                    if (userStoppedNow) {
                         Log.d(TAG, "User stopped during reconnection failure handling, skipping retry")
                         service?.cancelReconnection()
                         return@launch

@@ -318,6 +318,14 @@ class DataStoreRepository(
     }.distinctUntilChanged()
 
     /**
+     * Flow emitting whether local video recording alongside live streaming is enabled.
+     */
+    val isLocalRecordingEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[booleanPreferencesKey(context.getString(R.string.local_recording_enabled_key))]
+            ?: false
+    }.distinctUntilChanged()
+
+    /**
      * Get the DataStore key for an RTMP source URL at the given 1-based index.
      * Index 1 uses the original key for backward compatibility.
      */
@@ -605,8 +613,30 @@ class DataStoreRepository(
             ),
             fileName = FileExtension.stripKnownExtension(
                 text(R.string.file_name_key, R.string.default_file_name)
-            )
+            ),
+            isLocalRecordingEnabled = flag(R.string.local_recording_enabled_key, false),
+            localRecordingType = EndpointType.fromId(
+                text(R.string.local_recording_format_key).toIntOrNull() ?: EndpointType.MP4_FILE.id
+            ),
+            localRecordingFileName = text(R.string.local_recording_file_name_key)
         )
+    }.distinctUntilChanged()
+
+    /**
+     * Flow emitting a UriMediaDescriptor for local video recording based on stored endpoint settings.
+     */
+    val localRecordingDescriptorFlow: Flow<UriMediaDescriptor> = storedEndpointSettingsFlow.map { settings ->
+        val rawFilename = settings.localRecordingFileName
+            .let { FileExtension.stripKnownExtension(it) }
+            .takeIf { it.isNotBlank() }
+            ?: "Recording_${System.currentTimeMillis()}"
+        val extension = try {
+            FileExtension.fromEndpointType(settings.localRecordingType).extension
+        } catch (_: Exception) {
+            ".mp4"
+        }
+        val fullFilename = rawFilename.appendIfNotEndsWith(extension)
+        context.createVideoContentUri(fullFilename)
     }.distinctUntilChanged()
 
     // Save methods for audio settings
@@ -712,6 +742,22 @@ class DataStoreRepository(
             put(R.string.rtmp_server_video_target_bitrate_key, settings.rtmpTargetBitrateKbps)
             put(R.string.rtmp_server_video_min_bitrate_key, settings.rtmpMinBitrateKbps)
             put(R.string.file_name_key, settings.fileName)
+            put(R.string.local_recording_enabled_key, settings.isLocalRecordingEnabled)
+            put(R.string.local_recording_format_key, settings.localRecordingType.id.toString())
+            put(R.string.local_recording_file_name_key, settings.localRecordingFileName)
+        }
+    }
+
+    suspend fun saveLocalRecordingEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[booleanPreferencesKey(context.getString(R.string.local_recording_enabled_key))] = enabled
+        }
+    }
+
+    suspend fun saveLocalRecordingSettings(filename: String, format: String = "mp4") {
+        dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(context.getString(R.string.local_recording_file_name_key))] = filename
+            preferences[stringPreferencesKey(context.getString(R.string.local_recording_format_key))] = format
         }
     }
 
