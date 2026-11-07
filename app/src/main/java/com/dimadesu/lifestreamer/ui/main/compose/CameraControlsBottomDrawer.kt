@@ -410,13 +410,16 @@ fun CameraControlsBottomDrawer(
                 }
 
                 // Manual Focus Slider (appears when Manual focus mode is chosen)
-                val isManualFocus = currentAutoFocusMode == CaptureResult.CONTROL_AF_MODE_OFF
+                val isManualFocus = isAutoFocusModeAvailable &&
+                        currentAutoFocusMode == CaptureResult.CONTROL_AF_MODE_OFF &&
+                        lensDistanceRange != null &&
+                        lensDistanceRange.lower < lensDistanceRange.upper
                 AnimatedVisibility(
-                    visible = isManualFocus && lensDistanceRange != null,
+                    visible = isManualFocus,
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
-                    if (lensDistanceRange != null) {
+                    if (lensDistanceRange != null && lensDistanceRange.lower < lensDistanceRange.upper) {
                         ManualFocusSliderBlock(
                             lensDistance = lensDistance,
                             range = lensDistanceRange,
