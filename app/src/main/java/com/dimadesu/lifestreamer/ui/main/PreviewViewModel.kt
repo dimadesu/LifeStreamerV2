@@ -4581,7 +4581,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
     fun getAutoFocusModeName(mode: Int): String = Companion.getAutoFocusModeName(mode)
 
-    val lensDistanceRange = MutableLiveData<Range<Float>>()
+    val lensDistanceRange = MutableLiveData<Range<Float>?>()
     private val _lensDistance = MutableStateFlow(0f)
     val lensDistance: StateFlow<Float> = _lensDistance.asStateFlow()
 
@@ -4652,6 +4652,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             isZoomAvailable.postValue(false)
             isAutoFocusModeAvailable.postValue(false)
             availableAutoFocusModes.postValue(emptyList())
+            lensDistanceRange.postValue(null)
             stabilizationController.onSourceReset()
             noiseReductionController.onSourceReset()
         }
@@ -4675,7 +4676,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val awbModes = settings.whiteBalance.availableAutoModes
         isAutoWhiteBalanceAvailable.postValue(awbModes.size > 1)
         availableWhiteBalanceModes.postValue(awbModes)
-        val awbMode = try { settings.whiteBalance.autoMode } catch (e: Exception) { CaptureResult.CONTROL_AWB_MODE_AUTO }
+        val defaultAwbMode = when {
+            awbModes.contains(CaptureResult.CONTROL_AWB_MODE_AUTO) -> CaptureResult.CONTROL_AWB_MODE_AUTO
+            awbModes.isNotEmpty() -> awbModes.first()
+            else -> CaptureResult.CONTROL_AWB_MODE_OFF
+        }
+        val awbMode = try { settings.whiteBalance.autoMode } catch (e: Exception) { defaultAwbMode }
         currentWhiteBalanceMode.postValue(awbMode)
 
         // Exposure
@@ -4702,12 +4708,39 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val afModes = settings.focus.availableAutoModes
         isAutoFocusModeAvailable.postValue(afModes.size > 1)
         availableAutoFocusModes.postValue(afModes)
-        val afMode = try { settings.focus.autoMode } catch (e: Exception) { CaptureResult.CONTROL_AF_MODE_AUTO }
+        val defaultAfMode = when {
+            afModes.contains(CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO) -> CaptureResult.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+            afModes.contains(CaptureResult.CONTROL_AF_MODE_AUTO) -> CaptureResult.CONTROL_AF_MODE_AUTO
+            afModes.isNotEmpty() -> afModes.first()
+            else -> CaptureResult.CONTROL_AF_MODE_OFF
+        }
+        val afMode = try { settings.focus.autoMode } catch (e: Exception) { defaultAfMode }
         currentAutoFocusMode.postValue(afMode)
 
         // Lens distance
-        lensDistanceRange.postValue(settings.focus.availableLensDistanceRange)
+        val distanceRange = settings.focus.availableLensDistanceRange
+        lensDistanceRange.postValue(
+            if (!distanceRange.isEmpty) distanceRange else null
+        )
         setLensDistance(0f)
+
+        // Sync active session state once the camera session finishes opening
+        viewModelScope.launch {
+            try {
+                if (!settings.isActiveFlow.value) {
+                    withTimeoutOrNull(2000) {
+                        settings.isActiveFlow.first { it }
+                    }
+                }
+                if (settings.isActiveFlow.value) {
+                    isTorchOn.postValue(try { settings.flash.isEnable } catch (e: Exception) { false })
+                    currentWhiteBalanceMode.postValue(try { settings.whiteBalance.autoMode } catch (e: Exception) { defaultAwbMode })
+                    currentAutoFocusMode.postValue(try { settings.focus.autoMode } catch (e: Exception) { defaultAfMode })
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to sync initial camera state: ${t.message}")
+            }
+        }
     }
 
     /**
