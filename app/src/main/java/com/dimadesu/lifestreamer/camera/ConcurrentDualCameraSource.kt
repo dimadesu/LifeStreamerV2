@@ -27,6 +27,7 @@ import io.github.thibaultbee.streampack.core.elements.utils.extensions.displayRo
 import io.github.thibaultbee.streampack.core.elements.utils.extensions.rotate
 import io.github.thibaultbee.streampack.core.logger.Logger
 import io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider
+import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +42,7 @@ import kotlin.math.roundToInt
  * A video source that captures video from two cameras concurrently (e.g. front and rear)
  * and composites them into a single frame using OpenGL.
  */
+@OptIn(InternalStreamPackApi::class)
 class ConcurrentDualCameraSource internal constructor(
     private val context: Context,
     internal val primaryCameraSource: AbstractPreviewableSource,
@@ -401,6 +403,7 @@ class ConcurrentDualCameraSource internal constructor(
  * @param secondaryCameraId the secondary camera ID (e.g. front)
  * @param compositionMode the initial composition layout mode
  */
+@OptIn(InternalStreamPackApi::class)
 class ConcurrentDualCameraSourceFactory(
     val primaryCameraId: String,
     val secondaryCameraId: String,

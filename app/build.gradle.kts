@@ -5,9 +5,8 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("kotlin-kapt")
+    alias(libs.plugins.legacy.kapt)
 }
 
 android {
@@ -18,7 +17,7 @@ android {
 
         minSdk = 24
         targetSdk = 36
-        compileSdk = 36
+        compileSdk = 37
 
         versionCode = 45
         versionName = "2.9.0"
@@ -57,19 +56,9 @@ android {
         }
     }
     
-    applicationVariants.all {
-        outputs.all {
-            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "LifeStreamer-v${versionName}-${name}.apk"
-        }
-    }
-    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
     buildFeatures {
         viewBinding = true
@@ -93,6 +82,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.runtime.livedata)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -134,8 +124,18 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 }
 
-// Custom AAB output names - create copy so Android Studio can still locate original
+// Custom APK and AAB output names - create copy so Android Studio can still locate original
 afterEvaluate {
+    tasks.named("assembleRelease").configure {
+        doLast {
+            val originalApk = file("${layout.buildDirectory.get()}/outputs/apk/release/app-release.apk")
+            if (originalApk.exists()) {
+                val newName = "LifeStreamer-v${android.defaultConfig.versionName}-release.apk"
+                val newFile = File(originalApk.parent, newName)
+                Files.copy(originalApk.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
     tasks.named("bundleRelease").configure {
         doLast {
             val originalBundle = file("${projectDir}/release/app-release.aab")
