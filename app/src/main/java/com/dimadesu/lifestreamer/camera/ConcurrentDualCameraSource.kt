@@ -369,14 +369,8 @@ class ConcurrentDualCameraSource internal constructor(
         isStreamRequested = false
         isPreviewRequested = false
         areCamerasActive = false
-        try {
-            primaryCameraSource.stopStream()
-        } catch (_: Throwable) {}
-        try {
-            secondaryCameraSource.stopStream()
-        } catch (_: Throwable) {}
-
-        resetOutputImpl()
+        _isStreamingFlow.value = false
+        _isPreviewingFlow.value = false
 
         try {
             primaryCameraSource.release()
@@ -384,6 +378,8 @@ class ConcurrentDualCameraSource internal constructor(
         try {
             secondaryCameraSource.release()
         } catch (_: Throwable) {}
+
+        resetOutputImpl()
 
         // Give the camera HAL time to free both devices before the next camera source opens.
         delay(CAMERA_RELEASE_DELAY_MS)
