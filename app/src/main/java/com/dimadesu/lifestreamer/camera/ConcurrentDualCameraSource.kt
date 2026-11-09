@@ -363,6 +363,10 @@ class ConcurrentDualCameraSource internal constructor(
         previewSurface = null
     }
 
+    override suspend fun setOnFirstFrameListener(listener: () -> Unit) {
+        primaryCameraSource.setOnFirstFrameListener(listener)
+    }
+
     override suspend fun release() {
         if (isReleased) return
         isReleased = true
