@@ -791,7 +791,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     
     /**
      * Re-add bitrate regulator to streamer if streaming with SRT.
-     * Waits briefly for encoder to initialize before attaching.
+     * Encoder remains active across video source switches, so regulator can attach immediately.
      */
     private suspend fun readdBitrateRegulatorIfNeeded() {
         val currentStreamer = serviceStreamer ?: return
@@ -803,8 +803,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         try {
             if (storageRepository.bitrateRegulatorConfigFlow.first() != null) {
-                // Small delay to let the new encoder initialize
-                delay(200)
                 streamConfigurationHelper.attachBitrateRegulator(
                     currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
                     sinkType,
