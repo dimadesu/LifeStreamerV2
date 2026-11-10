@@ -66,3 +66,12 @@ Switching video camera sources (e.g., front <-> back camera, single camera <-> d
    - When the new video source delivers its first frame to `DefaultSurfaceProcessor` (`onFrameAvailable` sets `hasFirstFrame = true`):
      - Automatically stop the temporary switch CFR loop (unless the new source explicitly configured persistent `cfrFps > 0`, such as `MediaProjectionVideoSource`) and resume normal event-driven camera frame rendering.
 
+---
+
+## Status Summary
+
+- [x] **Step 1: Clean & Immediate Old Camera Teardown** (Completed)
+- [x] **Step 2: Single `CameraCaptureSession` Creation on Camera Switch** (Completed)
+- [x] **Step 3: Clean Black Preview Transition** (Completed)
+- [x] **Step 4: On-Demand Black Frame CFR Loop During Source Switch** (Completed)
+
