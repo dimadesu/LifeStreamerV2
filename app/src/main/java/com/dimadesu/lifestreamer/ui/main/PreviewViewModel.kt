@@ -791,7 +791,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     
     /**
      * Re-add bitrate regulator to streamer if streaming with SRT.
-     * Waits briefly for encoder to initialize before attaching.
+     * Encoder remains active across video source switches, so regulator can attach immediately.
      */
     private suspend fun readdBitrateRegulatorIfNeeded() {
         val currentStreamer = serviceStreamer ?: return
@@ -803,8 +803,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         
         try {
             if (storageRepository.bitrateRegulatorConfigFlow.first() != null) {
-                // Small delay to let the new encoder initialize
-                delay(200)
                 streamConfigurationHelper.attachBitrateRegulator(
                     currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
                     sinkType,
@@ -1161,9 +1159,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      */
     private suspend fun switchToUvcBitmapFallback(streamer: SingleStreamer, bitmap: Bitmap) {
         try {
-            // Add delay before switching sources to allow previous sources to fully release
-            kotlinx.coroutines.delay(300)
-            
             // Set video to bitmap - audio stays unchanged (already on microphone for UVC)
             streamer.setVideoSource(BitmapSourceFactory(bitmap))
             Log.i(TAG, "Switched to UVC bitmap fallback (audio unchanged)")
@@ -3336,9 +3331,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             readdBitrateRegulatorIfNeeded()
         }
         
-        // Small delay to let the video source release complete and surface processor cleanup
-        delay(100)
-        
         // Now release the old ExoPlayer to prevent multiple instances playing simultaneously
         // (which causes audio echo when captured by MediaProjection)
         currentRtmpPlayer?.let { player ->
@@ -3606,6 +3598,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         }
                     }
                     rtmpDisconnectListener = null
+                    currentRtmpPlayer?.let { player ->
+                        try {
+                            player.stop()
+                            player.release()
+                            Log.i(TAG, "Released RTMP player when switching back to camera")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to release RTMP player: ${e.message}")
+                        }
+                    }
                     currentRtmpPlayer = null
 
                     // Don't release streaming MediaProjection here - it's managed by stream lifecycle.
@@ -3614,10 +3615,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         mediaProjectionHelper.release()
                     }
 
-                    // Add delay before switching sources to allow RTMP/ExoPlayer to fully release
-                    // This prevents resource conflicts when hot-swapping sources
-                    kotlinx.coroutines.delay(300)
-                    
                     // Remove bitrate regulator if streaming with SRT
                     removeBitrateRegulatorIfNeeded()
                     
@@ -3748,7 +3745,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         removeBitrateRegulatorIfNeeded()
                         
                         // Switch back to camera (audio unchanged)
-                        delay(300)
                         currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
                         
                         // Now explicitly release the CameraHelper since user toggled UVC OFF
@@ -3839,7 +3835,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                                 removeBitrateRegulatorIfNeeded()
                                                 
                                                 // Switch back to UVC source
-                                                delay(300)
                                                 currentStreamer.setVideoSource(UvcVideoSource.Factory(this@apply))
                                                 
                                                 // Re-add bitrate regulator if streaming with SRT
@@ -3875,7 +3870,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                                 removeBitrateRegulatorIfNeeded()
                                                 
                                                 // Switch to UVC source (audio source unchanged - Android handles USB audio routing)
-                                                delay(300)
                                                 currentStreamer.setVideoSource(UvcVideoSource.Factory(this@apply))
                                                 
                                                 // Re-add bitrate regulator if streaming with SRT
@@ -4009,7 +4003,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         removeBitrateRegulatorIfNeeded()
                         
                         // Switch to UVC source first
-                        delay(300)
                         currentStreamer.setVideoSource(UvcVideoSource.Factory(helper))
                         
                         // Re-add bitrate regulator if streaming with SRT
@@ -4036,7 +4029,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         // Remove bitrate regulator if streaming with SRT
                         removeBitrateRegulatorIfNeeded()
                         
-                        delay(300)
                         currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
                         
                         // Re-add bitrate regulator if streaming with SRT
@@ -4161,7 +4153,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     mediaProjectionHelper.release()
                 }
 
-                kotlinx.coroutines.delay(300)
                 removeBitrateRegulatorIfNeeded()
                 
                 val cameraId = lastUsedCameraId
