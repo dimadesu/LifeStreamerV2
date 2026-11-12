@@ -2,7 +2,6 @@ package com.dimadesu.lifestreamer.ui.main
 
 import android.app.Dialog
 import android.os.Bundle
-import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.setFragmentResult
 import com.dimadesu.lifestreamer.R
@@ -27,11 +26,11 @@ class ExplanationDialogFragment : DialogFragment() {
 
         fun newInstance(titleRes: Int, messageRes: Int, requestKey: String) =
             ExplanationDialogFragment().apply {
-                arguments = bundleOf(
-                    ARG_TITLE to titleRes,
-                    ARG_MESSAGE to messageRes,
-                    ARG_REQUEST_KEY to requestKey
-                )
+                arguments = Bundle(3).apply {
+                    putInt(ARG_TITLE, titleRes)
+                    putInt(ARG_MESSAGE, messageRes)
+                    putString(ARG_REQUEST_KEY, requestKey)
+                }
             }
     }
 
@@ -44,10 +43,10 @@ class ExplanationDialogFragment : DialogFragment() {
             .setTitle(titleRes)
             .setMessage(messageRes)
             .setPositiveButton(R.string.continue_button) { _, _ ->
-                setFragmentResult(requestKey, bundleOf(RESULT_CONFIRMED to true))
+                setFragmentResult(requestKey, Bundle(1).apply { putBoolean(RESULT_CONFIRMED, true) })
             }
             .setNegativeButton(android.R.string.cancel) { _, _ ->
-                setFragmentResult(requestKey, bundleOf(RESULT_CONFIRMED to false))
+                setFragmentResult(requestKey, Bundle(1).apply { putBoolean(RESULT_CONFIRMED, false) })
             }
             .create()
     }
