@@ -16,6 +16,8 @@ LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy
 - Extra options for Android camera video source:
   - Stabilisation: OIS/EIS/OFF.
   - Noise reduction.
+- Switching improvements:
+  - Android camera to Android camera - reduce stuttering and frame freezes during transition, render black frames.
 
 ## The vision for V1
 
@@ -40,14 +42,20 @@ For LS V2 I want to take apart V1 and reimagine UI and make room for more featur
 I want to add and remove features and try things without breaking anything in version 1.
 
 LS V2 ideas:
-- Process video:
-  - Video filters
-  - Overlays
-  - Video composition (combining multiple video sources): split-screen, picture-in-picture
+- Take things apart, make them modular and reassamble in new ways.
+  - Cleanup code by building a solid core.
+  - Write tests.
+  - Reduce complexity where possible.
+  - Break down the code into pieces that have minimal dependcies.
+- Try some risky improvement ideas that are usually not worth the added complexity. Contradicts previous items about cleanup. Experiements often make code more messy, but it's good to experiment.
 - Reimagine UI and settings
-  - Web server UI (kinda like Belabox has)
-  - Try multiple alternative UIs (layouts)
-- Don't be scared to take things apart, make them modular and reassamble in new ways.
+  - Try multiple alternative UIs (layouts).
+  - Web server UI (kinda like Belabox has).
+- Process video:
+  - Video composition (combining multiple video sources in one screen). Picture-in-picture (PIP), split screen.
+  - Extend image (bitmap) source.
+  - Overlays.
+  - Video filters.
 - Etc.
 
 ## GitHub releases
