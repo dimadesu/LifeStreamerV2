@@ -207,7 +207,7 @@ class AudioDrawerController(
                 // Also check the live audio source: _activeRtmpIndex is posted asynchronously and the
                 // RTMP bitmap fallback keeps MediaProjection audio, so the flag alone can lag behind.
                 val rtmpActive = host.isRtmpSourceActive ||
-                    currentStreamer.audioInput?.sourceFlow?.value is IMediaProjectionSource
+                    currentStreamer.audioInput.sourceFlow.value is IMediaProjectionSource
                 if (btActive || sysAudioActive || rtmpActive) {
                     Log.i(
                         TAG,

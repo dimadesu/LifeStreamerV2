@@ -31,7 +31,7 @@ class AudioDebugInfoReader(private val application: Application) {
         }
 
         // Determine audio source type using type checking instead of class names
-        val audioSource = streamer.audioInput?.sourceFlow?.value
+        val audioSource = streamer.audioInput.sourceFlow.value
         val audioSourceType = when {
             audioSource is BluetoothAudioSource -> "BLUETOOTH"
             audioSource is IMediaProjectionSource -> "MEDIA PROJECTION"

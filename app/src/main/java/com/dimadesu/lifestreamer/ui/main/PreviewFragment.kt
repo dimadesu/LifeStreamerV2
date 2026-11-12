@@ -469,7 +469,7 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         val rotation = if (fixedRotation != null) {
             fixedRotation
         } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            requireContext().display?.rotation ?: android.view.Surface.ROTATION_0
+            requireActivity().display?.rotation ?: android.view.Surface.ROTATION_0
         } else {
             @Suppress("DEPRECATION")
             requireActivity().windowManager.defaultDisplay.rotation
@@ -607,11 +607,10 @@ class PreviewFragment : Fragment(R.layout.main_fragment) {
         // the Activity from rotating when returning from background during streaming.
         // Use the Service's saved orientation as the source of truth, since Fragment member
         // variables can be reset during lifecycle transitions.
-        val isInStreamingProcess = previewViewModel.streamStatus.value?.let { status ->
-            status == com.dimadesu.lifestreamer.models.StreamStatus.STARTING ||
+        val status = previewViewModel.streamStatus.value
+        val isInStreamingProcess = status == com.dimadesu.lifestreamer.models.StreamStatus.STARTING ||
             status == com.dimadesu.lifestreamer.models.StreamStatus.CONNECTING ||
             status == com.dimadesu.lifestreamer.models.StreamStatus.STREAMING
-        } ?: false
         
         if (isInStreamingProcess) {
             // Get saved orientation from Service (source of truth)
