@@ -16,9 +16,8 @@ LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy
 - Extra options for Android camera video source:
   - Stabilisation: OIS/EIS/OFF.
   - Noise reduction.
-- Switching improvements:
-  - Android camera to Android camera - reduce stuttering and frame freezes during transition, render black frames.
-  - No more video/audio stuttering or interruptions on stream when app goes to/from background with Android camera as a video source.
+- Switching from Android camera to Android camera improvements: reduce stuttering and frame freezes during transition, render black frames.
+- Android camera video source: no more video/audio stuttering or interruptions on published stream when app goes to/from background.
 
 ## The vision for V1
 
