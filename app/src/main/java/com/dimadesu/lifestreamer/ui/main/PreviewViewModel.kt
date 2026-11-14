@@ -76,7 +76,10 @@ import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.isFpsSupported
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
+import com.dimadesu.lifestreamer.rtmp.audio.ExoPlayerAudioSource
+import com.dimadesu.lifestreamer.rtmp.audio.ExoPlayerAudioSourceFactory
 import com.dimadesu.lifestreamer.rtmp.audio.MediaProjectionAudioSourceFactory
+import com.dimadesu.lifestreamer.rtmp.audio.RtmpAudioBridge
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 import io.github.thibaultbee.streampack.core.streamers.single.withAudio
 import io.github.thibaultbee.streampack.core.streamers.single.withVideo
@@ -401,19 +404,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
 
     /**
-     * Determines if MediaProjection is required for the current streaming setup.
-     * MediaProjection is needed when streaming from RTMP source for audio capture.
-     * UVC → bitmap fallback uses mic audio, not MediaProjection — same as a camera source.
+     * Determines if MediaProjection is required for starting the stream.
+     * RTMP sources use ExoPlayerAudioSource (direct PCM capture) and UVC uses mic audio,
+     * so MediaProjection is only required for Screen Recording.
      */
     fun requiresMediaProjection(): Boolean {
-        val currentVideoSource = serviceStreamer?.videoInput?.sourceFlow?.value
-        val isScreenSourceActive = _isScreenSource.value == true
-        if (isScreenSourceActive) return true
-        
-        // UVC bitmap fallback does NOT need MediaProjection — it uses mic audio just like camera.
-        // Only RTMP (live or its bitmap fallback) needs MediaProjection for audio.
-        val isUvcBitmapFallback = currentVideoSource is IBitmapSource && (_userToggledUvc.value == true)
-        return (currentVideoSource is RTMPVideoSource || currentVideoSource is IBitmapSource) && !isUvcBitmapFallback
+        return _isScreenSource.value == true
     }
 
     // Streamer errors (nullable to support single-event pattern - cleared after observation)
@@ -1017,16 +1013,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             
             Log.i(TAG, "doStartStream: Stream started successfully")
             
-            // Trigger BT mic activation if using mic-based audio (not MediaProjection)
+            // Trigger BT mic activation if using mic-based audio (not MediaProjection/ExoPlayer)
             // This covers Camera, UVC, and any fallback to mic scenarios
             // Use type checking instead of class name to avoid R8 obfuscation
             val currentAudioSource = currentStreamer.audioInput.sourceFlow.value
-            val isMicBasedAudio = currentAudioSource != null && currentAudioSource !is IMediaProjectionSource
+            val isMicBasedAudio = currentAudioSource != null &&
+                currentAudioSource !is IMediaProjectionSource &&
+                currentAudioSource !is ExoPlayerAudioSource
             if (isMicBasedAudio) {
                 Log.i(TAG, "doStartStream: Mic-based audio detected (${currentAudioSource.javaClass.simpleName}), triggering BT activation")
                 service?.triggerBluetoothMicActivation()
             } else {
-                Log.i(TAG, "doStartStream: MediaProjection audio detected, skipping BT activation")
+                Log.i(TAG, "doStartStream: Non-mic audio detected, skipping BT activation")
             }
             
             return true
@@ -1116,19 +1114,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         val isRtmpOrBitmap = currentVideoSource is RTMPVideoSource || (currentVideoSource is IBitmapSource && !isUvcBitmapFallback)
 
         if (isRtmpOrBitmap) {
-            // RTMP source (live or bitmap fallback) - try MediaProjection, fallback to microphone
-            // Note: BT mic toggle is ignored here - RTMP always uses MediaProjection or system mic
-            val projection = streamingMediaProjection ?: mediaProjectionHelper.getMediaProjection()
-            if (projection != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                try {
-                    currentStreamer.setAudioSource(MediaProjectionAudioSourceFactory(projection))
-                    Log.i(TAG, "Set MediaProjection audio for RTMP/Bitmap video")
-                } catch (e: Exception) {
-                    Log.w(TAG, "MediaProjection audio failed, using conditional source: ${e.message}")
-                    currentStreamer.setAudioSource(com.dimadesu.lifestreamer.audio.ConditionalAudioSourceFactory())
-                }
-            } else {
-                Log.i(TAG, "No MediaProjection available for RTMP/Bitmap, using conditional source")
+            // RTMP source (live or bitmap fallback) - use ExoPlayerAudioSource
+            // Note: BT mic toggle is ignored here - RTMP always uses ExoPlayer audio
+            try {
+                currentStreamer.setAudioSource(ExoPlayerAudioSourceFactory())
+                Log.i(TAG, "Set ExoPlayerAudioSource for RTMP/Bitmap video")
+            } catch (e: Exception) {
+                Log.w(TAG, "ExoPlayerAudioSource failed, using conditional source: ${e.message}")
                 currentStreamer.setAudioSource(com.dimadesu.lifestreamer.audio.ConditionalAudioSourceFactory())
             }
         } else if (_useSystemAudioForCamera && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -2654,8 +2646,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 testBitmap = testBitmap,
                 videoSourceUrl = rtmpUrl,
                 storageRepository = storageRepository,
-                mediaProjectionHelper = mediaProjectionHelper,
-                streamingMediaProjection = streamingMediaProjection,
                 postError = { msg -> _streamerErrorLiveData.postValue(msg) },
                 postRtmpStatus = { msg -> _rtmpStatusLiveData.postValue(msg) },
                 onRtmpConnected = { player ->
@@ -2958,7 +2948,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             
             // Camera/UVC/Bitmap with microphone - monitor default audio input
             // Use type checking instead of class name to avoid R8 obfuscation issues
-            audioSource != null && audioSource !is IMediaProjectionSource -> {
+            audioSource != null && audioSource !is IMediaProjectionSource && audioSource !is ExoPlayerAudioSource -> {
                 currentRtmpPlayer?.let { player ->
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         try {
@@ -3175,6 +3165,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }
         currentRtmpPlayer = null
+        RtmpAudioBridge.clear()
         
         // Stop the SRT stream
         Log.i(TAG, "Stopping SRT stream...")
@@ -3188,23 +3179,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // Small delay
         delay(500)
         
-        // Switch to bitmap source, but keep MediaProjection audio
-        Log.i(TAG, "Switching to bitmap source with MediaProjection audio...")
+        // Switch to bitmap source, keeping ExoPlayerAudioSource
+        Log.i(TAG, "Switching to bitmap source with ExoPlayerAudioSource...")
         currentStreamer.setVideoSource(BitmapSourceFactory(testBitmap))
         
-        // Keep MediaProjection audio to avoid audio source switch
-        val projection = streamingMediaProjection ?: mediaProjectionHelper.getMediaProjection()
-        if (projection != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            try {
-                currentStreamer.setAudioSource(com.dimadesu.lifestreamer.rtmp.audio.MediaProjectionAudioSourceFactory(projection))
-                Log.i(TAG, "Kept MediaProjection audio source")
-            } catch (e: Exception) {
-                Log.w(TAG, "MediaProjection audio failed, falling back to mic: ${e.message}")
-                currentStreamer.setAudioSource(com.dimadesu.lifestreamer.audio.ConditionalAudioSourceFactory())
-            }
-        } else {
-            currentStreamer.setAudioSource(com.dimadesu.lifestreamer.audio.ConditionalAudioSourceFactory())
-            Log.i(TAG, "No MediaProjection available, using mic")
+        try {
+            currentStreamer.setAudioSource(ExoPlayerAudioSourceFactory())
+            Log.i(TAG, "Kept ExoPlayerAudioSource for RTMP restart")
+        } catch (e: Exception) {
+            Log.w(TAG, "ExoPlayerAudioSource failed during restart: ${e.message}")
         }
         
         // Apply rotation BEFORE restarting stream to maintain consistent orientation
@@ -3269,8 +3252,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             testBitmap = testBitmap,
             videoSourceUrl = rtmpUrlRestart,
             storageRepository = storageRepository,
-            mediaProjectionHelper = mediaProjectionHelper,
-            streamingMediaProjection = streamingMediaProjection,
             postError = { msg -> _streamerErrorLiveData.postValue(msg) },
             postRtmpStatus = { msg -> _rtmpStatusLiveData.postValue(msg) },
             onRtmpConnected = { player -> 
@@ -3340,6 +3321,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }
         currentRtmpPlayer = null
+        RtmpAudioBridge.clear()
         
         // Start retry loop
         val activeIndexHotSwap = _activeRtmpIndex.value ?: 1
@@ -3350,8 +3332,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             testBitmap = testBitmap,
             videoSourceUrl = rtmpUrlHotSwap,
             storageRepository = storageRepository,
-            mediaProjectionHelper = mediaProjectionHelper,
-            streamingMediaProjection = streamingMediaProjection,
             postError = { msg -> _streamerErrorLiveData.postValue(msg) },
             postRtmpStatus = { msg -> _rtmpStatusLiveData.postValue(msg) },
             onRtmpConnected = { player -> 
@@ -3466,95 +3446,52 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // Switch from camera (or bitmap fallback) to RTMP source
                 currentActiveIndex != rtmpIndex -> {
                     Log.i(TAG, "Switching to RTMP source $rtmpIndex: $rtmpUrl (streaming: $isCurrentlyStreaming)")
-                    
-                    // Always require MediaProjection when switching to RTMP, regardless of streaming
-                    // state. If startup MP was already acquired, reuse it without prompting.
-                    val needProjection = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
-                            && startupMediaProjection == null
-                            && streamingMediaProjection == null
-                            && mediaProjectionHelper.getMediaProjection() == null
 
-                    val doRtmpSwitch: suspend () -> Unit = {
-                        // Mark that user toggled RTMP ON with this index
-                        _activeRtmpIndex.postValue(rtmpIndex)
-                        _userToggledUvc.postValue(false)
-                        _isScreenSource.postValue(false)
+                    // Mark that user toggled RTMP ON with this index
+                    _activeRtmpIndex.postValue(rtmpIndex)
+                    _userToggledUvc.postValue(false)
+                    _isScreenSource.postValue(false)
 
-                        // Suppress passthrough observer updates during source switch
-                        // to prevent monitor toggle from resetting to OFF
-                        suppressPassthroughObserver = true
-                        
-                        // Stop mic passthrough when switching to RTMP (RTMP uses ExoPlayer for audio monitoring)
-                        // Keep monitor toggle state - it will control ExoPlayer volume instead
-                        if (_isMonitorAudioOn.value == true) {
-                            service?.stopAudioPassthrough()
-                            Log.i(TAG, "Stopped mic passthrough when switching to RTMP (will use ExoPlayer volume instead)")
-                        }
-                        
-                        // Remember current camera ID before switching away
-                        if (videoSource is ICameraSource) {
-                            lastUsedCameraId = videoSource.cameraId
-                            Log.d(TAG, "Saved camera ID for later: $lastUsedCameraId")
-                        }
+                    // Suppress passthrough observer updates during source switch
+                    // to prevent monitor toggle from resetting to OFF
+                    suppressPassthroughObserver = true
 
-                        // Hide BT toggle - RTMP uses MediaProjection audio, not microphone
-                        _showBluetoothToggle.postValue(false)
-
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
-                        // Cancel any existing retry job first
-                        rtmpRetryJob?.cancel()
-                        rtmpRetryJob = RtmpSourceSwitchHelper.switchToRtmpSource(
-                            application = application,
-                            currentStreamer = currentStreamer,
-                            testBitmap = testBitmap,
-                            videoSourceUrl = rtmpUrl,
-                            storageRepository = storageRepository,
-                            mediaProjectionHelper = mediaProjectionHelper,
-                            streamingMediaProjection = streamingMediaProjection,
-                            postError = { msg -> _streamerErrorLiveData.postValue(msg) },
-                            postRtmpStatus = { msg -> _rtmpStatusLiveData.postValue(msg) },
-                            onRtmpConnected = { player -> 
-                                monitorRtmpConnection(player)
-                                viewModelScope.launch {
-                                    readdBitrateRegulatorIfNeeded()
-                                }
-                            }
-                        )
-                        // MediaProjectionService (ID 1001) may have overwritten the
-                        // CameraStreamerService notification — restore it.
-                        try { serviceBinder?.refreshNotification() } catch (_: Throwable) {}
+                    // Stop mic passthrough when switching to RTMP (RTMP uses ExoPlayer for audio monitoring)
+                    // Keep monitor toggle state - it will control ExoPlayer volume instead
+                    if (_isMonitorAudioOn.value == true) {
+                        service?.stopAudioPassthrough()
+                        Log.i(TAG, "Stopped mic passthrough when switching to RTMP (will use ExoPlayer volume instead)")
                     }
 
-                    if (needProjection) {
-                        if (mediaProjectionLauncher != null) {
-                            Log.i(TAG, "Requesting MediaProjection permission for RTMP source switch")
-                            mediaProjectionHelper.requestProjection(mediaProjectionLauncher) { projection ->
-                                Log.i(TAG, "MediaProjection callback received during RTMP switch: ${projection != null}")
-                                viewModelScope.launch {
-                                    if (projection == null) {
-                                        // Permission denied - don't toggle UI on
-                                        _streamerErrorLiveData.postValue("MediaProjection permission denied - staying on camera source")
-                                        return@launch
-                                    }
-                                    // Store as startup MP (not streaming MP — stream hasn't started yet)
-                                    startupMediaProjection = projection
-                                    if (isCurrentlyStreaming) streamingMediaProjection = projection
-                                    
-                                    doRtmpSwitch()
-                                }
-                            }
-                            // Return early; the actual switch will happen in the projection callback
-                            return@launch
-                        } else {
-                            Log.w(TAG, "MediaProjection required but no launcher available to request it")
-                            _streamerErrorLiveData.postValue("MediaProjection permission required to use RTMP audio")
-                            return@launch
-                        }
-                    } else {
-                        doRtmpSwitch()
+                    // Remember current camera ID before switching away
+                    if (videoSource is ICameraSource) {
+                        lastUsedCameraId = videoSource.cameraId
+                        Log.d(TAG, "Saved camera ID for later: $lastUsedCameraId")
                     }
+
+                    // Hide BT toggle - RTMP uses ExoPlayer audio, not microphone
+                    _showBluetoothToggle.postValue(false)
+
+                    // Remove bitrate regulator if streaming with SRT
+                    removeBitrateRegulatorIfNeeded()
+
+                    // Cancel any existing retry job first
+                    rtmpRetryJob?.cancel()
+                    rtmpRetryJob = RtmpSourceSwitchHelper.switchToRtmpSource(
+                        application = application,
+                        currentStreamer = currentStreamer,
+                        testBitmap = testBitmap,
+                        videoSourceUrl = rtmpUrl,
+                        storageRepository = storageRepository,
+                        postError = { msg -> _streamerErrorLiveData.postValue(msg) },
+                        postRtmpStatus = { msg -> _rtmpStatusLiveData.postValue(msg) },
+                        onRtmpConnected = { player ->
+                            monitorRtmpConnection(player)
+                            viewModelScope.launch {
+                                readdBitrateRegulatorIfNeeded()
+                            }
+                        }
+                    )
                 }
                 // If this exact RTMP index is active, switch back to camera
                 else -> {
@@ -3605,6 +3542,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         }
                     }
                     currentRtmpPlayer = null
+                    RtmpAudioBridge.clear()
 
                     // Don't release streaming MediaProjection here - it's managed by stream lifecycle.
                     // Also keep the service alive if startupMediaProjection is still in use.
@@ -4743,7 +4681,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private fun getAudioSourceLabel(audioSource: Any?): String {
         return when {
             audioSource == null -> application.getString(R.string.audio_source_none)
-            audioSource is IMediaProjectionSource ->
+            audioSource is IMediaProjectionSource || audioSource is ExoPlayerAudioSource ->
                 application.getString(R.string.audio_source_rtmp)
             audioSource is com.dimadesu.lifestreamer.audio.BluetoothAudioSource ->
                 application.getString(R.string.audio_source_bluetooth)
