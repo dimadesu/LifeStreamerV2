@@ -287,7 +287,7 @@ internal object RtmpSourceSwitchHelper {
                             // Switch audio source immediately after video.
                             try {
                                 currentStreamer.setAudioSource(ExoPlayerAudioSourceFactory())
-                                RtmpAudioBridge.flushRingBuffer()
+                                RtmpAudioBridge.trimToTargetBuffer()
                                 Log.i(TAG, "Set ExoPlayerAudioSource for RTMP")
                             } catch (ae: Exception) {
                                 Log.w(TAG, "Failed to set ExoPlayerAudioSource for RTMP: ${ae.message}")
