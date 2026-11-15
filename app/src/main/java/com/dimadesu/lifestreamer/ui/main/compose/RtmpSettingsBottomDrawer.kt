@@ -321,13 +321,15 @@ fun RtmpSettingsBottomDrawer(
 
                     HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 
-                    // 3. Restart SRT stream on disconnect toggle
-                    RtmpToggleRow(
-                        title = stringResource(R.string.rtmp_source_restart_on_disconnect_title),
-                        summary = stringResource(R.string.rtmp_source_restart_on_disconnect_summary),
-                        checked = restartOnDisconnect,
-                        onCheckedChange = onSetRestartOnDisconnect
-                    )
+                    // 3. Restart SRT stream on disconnect toggle - hidden from UI since hot-swap fallback +
+                    // direct ExoPlayer audio capture no longer require restarting SRT on RTMP disconnect.
+                    // Kept commented out in case we need to re-enable this option later.
+                    // RtmpToggleRow(
+                    //     title = stringResource(R.string.rtmp_source_restart_on_disconnect_title),
+                    //     summary = stringResource(R.string.rtmp_source_restart_on_disconnect_summary),
+                    //     checked = restartOnDisconnect,
+                    //     onCheckedChange = onSetRestartOnDisconnect
+                    // )
 
                     // 4. Require audio track toggle
                     RtmpToggleRow(
