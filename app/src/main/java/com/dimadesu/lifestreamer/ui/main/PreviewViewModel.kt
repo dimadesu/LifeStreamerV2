@@ -3099,11 +3099,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     // Not streaming - use hot-swap behavior (no bitrate regulator to manage)
                     handleRtmpDisconnectionWithHotSwap(currentStreamer, isStreaming = false)
                 } else {
-                    // Forced false: with direct ExoPlayer audio capture + hot-swap bitmap fallback,
-                    // RTMP disconnections keep smooth audio/video timestamps without tearing down SRT.
-                    // Previously read from `storageRepository.rtmpSourceRestartOnDisconnectFlow.first()`;
-                    // keep handleRtmpDisconnectionWithRestart() intact in case full SRT restart is needed again.
-                    val shouldRestartStream = false // storageRepository.rtmpSourceRestartOnDisconnectFlow.first()
+                    // Streaming - check if we should restart the stream (recommended) or use original hot-swap behavior
+                    val shouldRestartStream = storageRepository.rtmpSourceRestartOnDisconnectFlow.first()
                     
                     if (shouldRestartStream) {
                         handleRtmpDisconnectionWithRestart(currentStreamer)
