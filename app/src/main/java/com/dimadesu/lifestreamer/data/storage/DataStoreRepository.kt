@@ -413,11 +413,10 @@ class DataStoreRepository(
         }
     }
 
-    // Flow for RTMP source restart on disconnect setting (hidden from UI / unused while
-    // PreviewViewModel forces false in favor of hot-swap fallback; kept in case needed later).
+    // Flow for RTMP source restart on disconnect setting
     val rtmpSourceRestartOnDisconnectFlow: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[booleanPreferencesKey(context.getString(R.string.rtmp_source_restart_on_disconnect_key))]
-            ?: false // Default to false: hot-swap fallback handles RTMP disconnects without restarting SRT
+            ?: true // Default to true (recommended)
     }.distinctUntilChanged()
 
     suspend fun setRtmpSourceRestartOnDisconnect(enabled: Boolean) {
