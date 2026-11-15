@@ -7,6 +7,8 @@ import android.media.audiofx.AudioEffect
 import android.util.Log
 import com.dimadesu.lifestreamer.audio.BluetoothAudioSource
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
+import com.dimadesu.lifestreamer.rtmp.audio.ExoPlayerAudioSource
+import com.dimadesu.lifestreamer.rtmp.audio.RtmpAudioBridge
 import io.github.thibaultbee.streampack.core.elements.sources.IMediaProjectionSource
 import io.github.thibaultbee.streampack.core.streamers.single.SingleStreamer
 
@@ -32,6 +34,32 @@ class AudioDebugInfoReader(private val application: Application) {
 
         // Determine audio source type using type checking instead of class names
         val audioSource = streamer.audioInput.sourceFlow.value
+        if (audioSource is ExoPlayerAudioSource) {
+            val cfg = audioSource.configuredConfig
+            val inRate = RtmpAudioBridge.inputSampleRate
+            val inCh = RtmpAudioBridge.inputChannelCount
+            val systemDesc = if (RtmpAudioBridge.hasActiveInput && inRate > 0 && inCh > 0) {
+                val chLabel = when (inCh) {
+                    1 -> "Mono"
+                    2 -> "Stereo"
+                    else -> "${inCh}ch"
+                }
+                "ExoPlayer (${inRate}Hz $chLabel)"
+            } else {
+                "ExoPlayer (Waiting for stream)"
+            }
+            return AudioDebugInfo(
+                audioSource = "EXOPLAYER",
+                actualSystemSource = systemDesc,
+                sampleRate = cfg?.sampleRate,
+                bitFormat = cfg?.byteFormat,
+                channelConfig = cfg?.channelConfig,
+                noiseSuppression = false,
+                acousticEchoCanceler = false,
+                automaticGainControl = false,
+                hasActiveRecording = true
+            )
+        }
         val audioSourceType = when {
             audioSource is BluetoothAudioSource -> "BLUETOOTH"
             audioSource is IMediaProjectionSource -> "MEDIA PROJECTION"
