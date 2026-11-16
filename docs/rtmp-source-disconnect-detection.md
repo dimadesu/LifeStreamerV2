@@ -80,3 +80,62 @@ In [`DefaultSurfaceProcessor.kt`](file:///Users/dmytroantonov/git/LifeStreamerV2
 ### Questions Before We Plan the Changes
 1. **Fallback frame content during a short stall (before BitmapSource takes over)**: When frames stop arriving for > ~200 ms, do you prefer rendering **black frames** during that window until the disconnect threshold (~1s) switches to `BitmapSource`, or repeating the **last good video frame** briefly before switching to black/bitmap?
 2. **Disruption threshold for switching to BitmapSource**: Does **~1,000 ms** without any rendered video frames (down from 2,000 ms of `STATE_BUFFERING` + internal retries) sound like the right threshold to declare the stream disrupted and switch to `BitmapSource` / restart?
+
+---
+---
+---
+---
+---
+
+Ran find branch base and commit history
+Ran inspect full branch diff against main
+Analyzed output.txt:L1-800
+Analyzed output.txt:L801-1249
+Ran check all RTMP player lifecycle sites in PreviewViewModel
+Analyzed PreviewViewModel.kt:L2415-2470
+Analyzed PreviewViewModel.kt:L2630-2675
+Analyzed PreviewViewModel.kt:L4800-4865
+Analyzed PreviewViewModel.kt:L3570-3665
+Analyzed PreviewViewModel.kt:L3530-3575
+Ran check activeRtmpIndex and bitrate regulator helpers
+Analyzed PreviewViewModel.kt:L775-825
+Analyzed PreviewViewModel.kt:L3870-3925
+Analyzed PreviewViewModel.kt:L4030-4240
+Ran check service rebind sync in PreviewViewModel
+Analyzed PreviewViewModel.kt:L1185-1315
+Analyzed PreviewViewModel.kt:L1316-1390
+
+**Mostly good to ship once you run an on-device pass**, with a few known gaps worth checking before merging `better-rtmp-src-disconnect-detection` (`e25da0da`) into `main`.
+
+### What's Solid
+- **ExoPlayer lifecycle in background & stop/start** ([RTMPVideoSource.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/rtmp/video/RTMPVideoSource.kt#L178-L185), [#L429-L446](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/rtmp/video/RTMPVideoSource.kt#L429-L446)): removing delayed `exoPlayer.stop()` from `stopPreview()`/`stopStream()` keeps the source hot for background Start/Stop and eliminates spurious `STATE_IDLE` disconnects.
+- **Unified 1s frame watchdog** ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L3027-L3128)): catches silent video freezes in `STATE_READY` as well as stalled `STATE_BUFFERING`, while pausing when `playWhenReady == false`.
+- **Manual-stop & stop-race guards + regulator restore + clean cancellation** ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L3150-L3410), [#L3595-L3653](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L3595-L3653); [RtmpSourceSwitchHelper.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/RtmpSourceSwitchHelper.kt#L117-L230)): prevents `handleRtmpDisconnectionWithRestart()` from restarting a manually stopped broadcast and restores the bitrate regulator on first-attempt bitmap fallback.
+- **Buffer & fail-fast IO alignment** ([RtmpSourceSwitchHelper.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/RtmpSourceSwitchHelper.kt#L54-L133), [RtmpSourceSwitchHelperTest.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/test/java/com/dimadesu/lifestreamer/rtmp/RtmpSourceSwitchHelperTest.kt)): honors `bufferForPlaybackMs` on rebuffer and disables slow internal Media3 IO retries (`19/19` JVM unit tests passing).
+
+---
+
+### Real Gaps & Trade-offs in `main..HEAD`
+
+1. **No on-device verification yet (biggest gap before shipping)**
+   - Everything past `662b378e` is verified only by JVM unit tests (`19` tests) and `assembleDebug`, not on a real device/emulator through backgrounding + notification controls + RTMP kill/restart.
+
+2. **Switching away from RTMP via UVC / Screen / another RTMP index leaves the old monitor/player active**
+   - Toggling **UVC** ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L3910), [#L4043](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L4043)) or **Screen** ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L4150)) clears `_activeRtmpIndex` **without** cancelling `rtmpRetryJob`, calling `stopRtmpConnectionMonitoring()`, or stopping `currentRtmpPlayer`. With the 1s watchdog + `RTMPVideoSource.release()` stopping the old player, the old player's listener/watchdog can still trigger `handleRtmpDisconnection()` after switching to UVC or Screen.
+   - Switching directly from **RTMP 1 → RTMP 2** in `toggleVideoSource()` ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L3595)) likewise cancels `rtmpRetryJob` without calling `stopRtmpConnectionMonitoring()` first before preparing RTMP 2.
+   - *(This is the main code fix I'd consider adding before merging to `main` if users switch between RTMP and UVC/Screen/RTMP-2.)*
+
+3. **If the OS/user destroys the UI (`onCleared()`) while `CameraStreamerService` stays alive**
+   - `onCleared()` stops `currentRtmpPlayer` and detaches `monitorRtmpConnection()` ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L4825-L4836)).
+   - Normal backgrounding (`Home` button) keeps `PreviewViewModel` alive, so background notification Start/Stop works fine there. **However**, if the Activity itself is killed and the user taps **Start** from the notification afterward, `RTMPVideoSource.startStream()` re-prepares ExoPlayer unmonitored (no disconnect detection), and `onServiceConnected()` ([PreviewViewModel.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/PreviewViewModel.kt#L1185-L1366)) does not re-attach `monitorRtmpConnection()` if the Activity is later recreated while streaming.
+
+4. **Known intentional/deferred limitations (fine to ship as follow-up if expected)**
+   - **~1s zero-video-frame window on stall:** `RTMPVideoSource` still uses `DefaultSurfaceProcessorFactory()` with `cfrFps = 0` ([RTMPVideoSource.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/rtmp/video/RTMPVideoSource.kt#L493)), so no GL keepalive frames are sent during the ~1s before watchdog failover.
+   - **Initial switch wait on silent server:** If an RTMP/SRT server accepts the socket without sending frames (no `IOException`), `switchToRtmpSource()` waits up to `bufferForPlaybackMs + 5000 ms` ([RtmpSourceSwitchHelper.kt](file:///Users/dmytroantonov/git/LifeStreamerV2/app/src/main/java/com/dimadesu/lifestreamer/ui/main/RtmpSourceSwitchHelper.kt#L273)) before switching to bitmap fallback (`ECONNREFUSED`/socket errors fail immediately).
+   - **`1 fps` floor assumption:** `frameWatchdogTimeoutMs = 1_000L` assumes incoming video delivers at least 1 frame/sec (even when `requireAudioTrack = false`).
+   - **Docs stale:** [rtmp-source-disconnect-detection.md](file:///Users/dmytroantonov/git/LifeStreamerV2/docs/rtmp-source-disconnect-detection.md) still reflects the pre-implementation proposal (mentions `500 ms` rebuffer, unimplemented `DefaultSurfaceProcessor` changes, and unresolved questions at the bottom).
+
+### Recommendation before merging to `main`
+1. **Run your device test pass** (foreground RTMP → background → notification Start → kill RTMP source → verify bitmap fallback + bitrate → restore RTMP source → notification Stop → foreground resume).
+2. *(Optional, small fix)* Call `stopRtmpConnectionMonitoring()` + `rtmpRetryJob?.cancelAndJoin()` + release `currentRtmpPlayer` when switching from RTMP to **UVC**, **Screen**, or a **different RTMP index**.
+3. *(Optional)* Update or remove [rtmp-source-disconnect-detection.md](file:///Users/dmytroantonov/git/LifeStreamerV2/docs/rtmp-source-disconnect-detection.md) so the docs match what was actually built.
