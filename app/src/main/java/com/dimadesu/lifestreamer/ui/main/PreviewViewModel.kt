@@ -220,9 +220,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     
     fun onUiResumed() {
         isUiInForeground = true
-        if (currentRtmpPlayer != null) {
-            lastRtmpVideoFrameTimeMs = SystemClock.elapsedRealtime()
-        }
         
         // Restart audio level monitoring (if already streaming, it will just re-attach the effect)
         setupAudioLevelMonitoring()
@@ -3042,10 +3039,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
         
         val frameWatchdogTimeoutMs = 1_000L // 1 second without rendered video frames = disconnection
-        val reprepareTimeoutMs = 8_000L // Safety timeout if foreground preview resume stalls in STATE_BUFFERING
         val watchdogPollIntervalMs = 200L
-        var hasEnteredReady = player.playbackState == androidx.media3.common.Player.STATE_READY
-        var reprepareStartTimeMs = 0L
         lastRtmpVideoFrameTimeMs = SystemClock.elapsedRealtime()
 
         rtmpFrameMetadataListener = VideoFrameMetadataListener { _, _, _, _ ->
@@ -3069,37 +3063,18 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         handleRtmpDisconnection()
                     }
                     androidx.media3.common.Player.STATE_IDLE -> {
-                        val isStreaming = serviceStreamer?.isStreamingFlow?.value == true
-                        if (!isStreaming && !isUiInForeground) {
-                            Log.i(TAG, "RTMP player went idle while backgrounded and not streaming (preview stopped) - ignoring")
-                            hasEnteredReady = false
-                            reprepareStartTimeMs = 0L
-                            rtmpBufferingStartTime = 0L
-                        } else {
-                            Log.w(TAG, "RTMP stream went idle (unexpected stop)")
-                            bufferingCheckJob?.cancel()
-                            handleRtmpDisconnection()
-                        }
+                        Log.w(TAG, "RTMP stream went idle (unexpected stop)")
+                        bufferingCheckJob?.cancel()
+                        handleRtmpDisconnection()
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> {
-                        if (!hasEnteredReady) {
-                            if (reprepareStartTimeMs == 0L) {
-                                reprepareStartTimeMs = SystemClock.elapsedRealtime()
-                            }
-                            Log.d(TAG, "RTMP stream buffering during foreground preview resume")
-                        } else if (rtmpBufferingStartTime == 0L) {
+                        if (rtmpBufferingStartTime == 0L) {
                             rtmpBufferingStartTime = System.currentTimeMillis()
                             Log.d(TAG, "RTMP stream started buffering")
                         }
                     }
                     androidx.media3.common.Player.STATE_READY -> {
-                        if (!hasEnteredReady) {
-                            hasEnteredReady = true
-                            reprepareStartTimeMs = 0L
-                            lastRtmpVideoFrameTimeMs = SystemClock.elapsedRealtime()
-                            RtmpAudioBridge.trimToTargetBuffer()
-                            Log.i(TAG, "RTMP stream ready after foreground preview resume")
-                        } else if (rtmpBufferingStartTime > 0L) {
+                        if (rtmpBufferingStartTime > 0L) {
                             val bufferingDuration = System.currentTimeMillis() - rtmpBufferingStartTime
                             Log.d(TAG, "RTMP stream recovered from buffering after ${bufferingDuration}ms")
                             rtmpBufferingStartTime = 0L
@@ -3124,39 +3099,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             while (isActive) {
                 delay(watchdogPollIntervalMs)
                 if (currentRtmpPlayer !== player || isHandlingDisconnection) break
-
-                val isStreaming = serviceStreamer?.isStreamingFlow?.value == true
-                val shouldRenderFrames = isStreaming || isUiInForeground
-                if (!shouldRenderFrames || !player.playWhenReady) {
-                    // Playback is intentionally paused/stopped while backgrounded and not streaming
-                    lastRtmpVideoFrameTimeMs = SystemClock.elapsedRealtime()
-                    continue
-                }
-
                 val playbackState = player.playbackState
-                if (!hasEnteredReady) {
-                    // Player is re-preparing from STATE_IDLE after returning to foreground
-                    if (playbackState == androidx.media3.common.Player.STATE_BUFFERING) {
-                        val startMs = if (reprepareStartTimeMs > 0L) {
-                            reprepareStartTimeMs
-                        } else {
-                            reprepareStartTimeMs = SystemClock.elapsedRealtime()
-                            reprepareStartTimeMs
-                        }
-                        val bufferingElapsedMs = SystemClock.elapsedRealtime() - startMs
-                        if (bufferingElapsedMs >= reprepareTimeoutMs) {
-                            Log.w(
-                                TAG,
-                                "RTMP preview resume timed out after ${bufferingElapsedMs}ms in STATE_BUFFERING - treating as disconnection"
-                            )
-                            handleRtmpDisconnection()
-                            break
-                        }
-                    }
-                    lastRtmpVideoFrameTimeMs = SystemClock.elapsedRealtime()
-                    continue
-                }
-
                 if (playbackState == androidx.media3.common.Player.STATE_READY ||
                     playbackState == androidx.media3.common.Player.STATE_BUFFERING
                 ) {

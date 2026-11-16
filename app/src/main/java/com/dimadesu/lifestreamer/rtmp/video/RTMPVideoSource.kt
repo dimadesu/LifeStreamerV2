@@ -474,23 +474,6 @@ class RTMPVideoSource (
 
             Handler(Looper.getMainLooper()).post {
                 try {
-                    if (!isFormatListenerRegistered) {
-                        exoPlayer.addListener(formatListener)
-                        isFormatListenerRegistered = true
-                    }
-                    if (exoPlayer.videoFormat != null) {
-                        updateCachedFormat()
-                    }
-
-                    // Re-attach video surface in case delayed cleanup in stopPreview() cleared it
-                    if (surfaceProcessor != null && inputSurface != null) {
-                        Log.d(TAG, "Attaching ExoPlayer to surface processor input for preview: $inputSurface")
-                        exoPlayer.setVideoSurface(inputSurface)
-                    } else {
-                        Log.d(TAG, "Attaching preview surface directly to ExoPlayer: $surface")
-                        exoPlayer.setVideoSurface(surface)
-                    }
-
                     // Start ExoPlayer playback if not already running
                     // The surface processor will handle distributing frames to both surfaces
                     if (exoPlayer.mediaItemCount > 0) {
