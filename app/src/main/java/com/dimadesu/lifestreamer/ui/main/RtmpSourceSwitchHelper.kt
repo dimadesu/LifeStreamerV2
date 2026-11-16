@@ -3,6 +3,7 @@ package com.dimadesu.lifestreamer.ui.main
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
@@ -12,6 +13,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -32,6 +36,9 @@ import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
 import com.dimadesu.lifestreamer.player.SrtDataSourceFactory
 import com.dimadesu.lifestreamer.player.TsOnlyExtractorFactory
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.cancellation.CancellationException
 
 internal object RtmpSourceSwitchHelper {
@@ -44,17 +51,40 @@ internal object RtmpSourceSwitchHelper {
         return url.lowercase().startsWith("srt://")
     }
 
+    /**
+     * Build a [DefaultLoadControl] using [bufferForPlaybackMs] for both initial start
+     * and post-rebuffer resume so ExoPlayer honors the user's configured buffer cushion
+     * instead of forcing ExoPlayer's hardcoded 5,000 ms rebuffer threshold.
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    internal fun createLoadControl(bufferForPlaybackMs: Int): DefaultLoadControl {
+        val playbackBufferMs = bufferForPlaybackMs.coerceIn(0, DefaultLoadControl.DEFAULT_MIN_BUFFER_MS)
+        return DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, // 50 seconds
+                DefaultLoadControl.DEFAULT_MAX_BUFFER_MS, // 50 seconds
+                playbackBufferMs, // Start playback after buffering this many ms
+                playbackBufferMs  // Match user buffer on rebuffer instead of 5s default
+            )
+            .build()
+    }
+
+    /**
+     * Fail fast on transport/IO errors for live RTMP/SRT sources so ExoPlayer surfaces
+     * `onPlayerError` immediately instead of retrying internally across multiple seconds.
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    internal fun createFailFastLoadErrorHandlingPolicy(): LoadErrorHandlingPolicy =
+        object : DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount = */ 0) {
+            override fun getRetryDelayMsFor(
+                loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
+            ): Long = C.TIME_UNSET
+        }
+
     @androidx.annotation.OptIn(UnstableApi::class)
     suspend fun createExoPlayer(application: Application, url: String, bufferForPlaybackMs: Int): ExoPlayer =
         withContext(Dispatchers.Main) {
-            val loadControl = DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,      // 50 seconds
-                    DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,      // 50 seconds
-                    bufferForPlaybackMs, // Start playback after buffering this many ms
-                    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS  // 5 seconds
-                )
-                .build()
+            val loadControl = createLoadControl(bufferForPlaybackMs)
 
             val renderersFactory = object : DefaultRenderersFactory(application) {
                 override fun buildAudioSink(
@@ -82,21 +112,24 @@ internal object RtmpSourceSwitchHelper {
                 .build()
 
             val mediaItem = MediaItem.fromUri(url)
-            
+
             // Use SRT data source for srt:// URLs, otherwise use default (supports RTMP, etc.)
-            val mediaSource = if (isSrtUrl(url)) {
-                Log.i(TAG, "Creating SRT media source for: $url")
-                androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(
+            val isSrt = isSrtUrl(url)
+            Log.i(TAG, "Creating ${if (isSrt) "SRT" else "default"} media source for: $url")
+            val mediaSourceFactory = if (isSrt) {
+                ProgressiveMediaSource.Factory(
                     SrtDataSourceFactory(),
                     TsOnlyExtractorFactory()
-                ).createMediaSource(mediaItem)
+                )
             } else {
-                Log.i(TAG, "Creating default media source for: $url")
-                androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(
+                ProgressiveMediaSource.Factory(
                     DefaultDataSource.Factory(application),
                     DefaultExtractorsFactory()
-                ).createMediaSource(mediaItem)
+                )
             }
+            val mediaSource = mediaSourceFactory
+                .setLoadErrorHandlingPolicy(createFailFastLoadErrorHandlingPolicy())
+                .createMediaSource(mediaItem)
 
             exoPlayer.setMediaSource(mediaSource)
             exoPlayer.volume = 0f
@@ -141,8 +174,14 @@ internal object RtmpSourceSwitchHelper {
                     }
                 }
             }
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            Log.w(TAG, "awaitReady timed out after ${timeoutMs}ms")
+            false
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Log.w(TAG, "awaitReady failed or timed out: ${e.message}")
+            Log.w(TAG, "awaitReady failed: ${e.message}")
             false
         }
     }
@@ -154,23 +193,27 @@ internal object RtmpSourceSwitchHelper {
     suspend fun switchToBitmapFallback(
         streamer: SingleStreamer,
         bitmap: Bitmap
-    ) {
-        try {
+    ): Boolean {
+        return try {
             // Set video to bitmap first
             streamer.setVideoSource(BitmapSourceFactory(bitmap))
             streamer.setAudioSource(ExoPlayerAudioSourceFactory())
             Log.i(TAG, "Switched to bitmap fallback with ExoPlayerAudioSource")
+            true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set bitmap fallback source: ${e.message}", e)
+            false
         }
     }
 
     /**
      * Full flow to switch a streamer from camera to an RTMP source without
      * stopping or restarting the streamer service itself:
-     * - switch to bitmap fallback immediately (so UI doesn't freeze)
      * - prepare ExoPlayer for RTMP preview
      * - wait until ready (with timeout)
+     * - switch to bitmap fallback if the initial connection fails
      * - attach RTMP video and ExoPlayer audio source
      * - retry every 5 seconds if connection fails
      * - call onRtmpConnected with ExoPlayer instance when successfully connected
@@ -184,6 +227,7 @@ internal object RtmpSourceSwitchHelper {
         storageRepository: DataStoreRepository,
         postError: (String) -> Unit,
         postRtmpStatus: (String?) -> Unit,
+        onBitmapFallback: (suspend () -> Unit)? = null,
         onRtmpConnected: ((ExoPlayer) -> Unit)? = null
     ): kotlinx.coroutines.Job {
         var attemptCount = 0
@@ -192,6 +236,24 @@ internal object RtmpSourceSwitchHelper {
         // Start retry loop - use Main dispatcher for ExoPlayer thread safety
         // Return the Job so caller can cancel it when switching back to camera
         return CoroutineScope(Dispatchers.Main).launch {
+            suspend fun handleAttemptFailure(
+                statusMessage: String,
+                playerToRelease: ExoPlayer? = null
+            ) {
+                if (playerToRelease != null) {
+                    try { playerToRelease.release() } catch (_: Exception) {}
+                }
+                if (attemptCount == 1 && isActive) {
+                    if (switchToBitmapFallback(currentStreamer, testBitmap)) {
+                        onBitmapFallback?.invoke()
+                    }
+                }
+                if (isActive) {
+                    postRtmpStatus(statusMessage)
+                }
+                delay(5000)
+            }
+
             while (attemptCount < maxAttempts && isActive) {
                 attemptCount++
                 val isFirstAttempt = attemptCount == 1
@@ -229,14 +291,7 @@ internal object RtmpSourceSwitchHelper {
                     }
 
                     if (exoPlayerInstance == null) {
-                        // Set bitmap fallback on first attempt only
-                        if (isFirstAttempt) {
-                            switchToBitmapFallback(currentStreamer, testBitmap)
-                        }
-                        if (isActive) {
-                            postRtmpStatus("Couldn't play RTMP stream. Retrying in 5 seconds")
-                        }
-                        delay(5000)
+                        handleAttemptFailure("Couldn't play RTMP stream. Retrying in 5 seconds")
                         continue
                     }
 
@@ -267,14 +322,10 @@ internal object RtmpSourceSwitchHelper {
                             }
                             if (!hasAudioTrack) {
                                 Log.w(TAG, "ExoPlayer has no audio tracks — RTMP server likely not sending audio yet. Retrying.")
-                                try { exoPlayerInstance.release() } catch (_: Exception) {}
-                                if (isFirstAttempt) {
-                                    switchToBitmapFallback(currentStreamer, testBitmap)
-                                }
-                                if (isActive) {
-                                    postRtmpStatus("No audio track detected. Retrying in 5 seconds")
-                                }
-                                delay(5000)
+                                handleAttemptFailure(
+                                    statusMessage = "No audio track detected. Retrying in 5 seconds",
+                                    playerToRelease = exoPlayerInstance
+                                )
                                 continue
                             }
                         }
@@ -313,16 +364,10 @@ internal object RtmpSourceSwitchHelper {
                             throw e
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to attach RTMP exoplayer to streamer: ${e.message}", e)
-                            try { exoPlayerInstance.release() } catch (_: Exception) {}
-                            
-                            if (isFirstAttempt) {
-                                switchToBitmapFallback(currentStreamer, testBitmap)
-                            }
-                            // Wait and retry
-                            if (isActive) {
-                                postRtmpStatus("Couldn't play RTMP stream. Retrying in 5 seconds")
-                            }
-                            delay(5000)
+                            handleAttemptFailure(
+                                statusMessage = "Couldn't play RTMP stream. Retrying in 5 seconds",
+                                playerToRelease = exoPlayerInstance
+                            )
                             continue
                         }
                     } catch (e: CancellationException) {
@@ -331,16 +376,10 @@ internal object RtmpSourceSwitchHelper {
                         throw e
                     } catch (t: Throwable) {
                         Log.e(TAG, "RTMP playback failed or timed out: ${t.message}", t)
-                        try { exoPlayerInstance.release() } catch (_: Exception) {}
-                        
-                        if (isFirstAttempt) {
-                            switchToBitmapFallback(currentStreamer, testBitmap)
-                        }
-                        // Wait and retry
-                        if (isActive) {
-                            postRtmpStatus("Couldn't play RTMP stream. Retrying in 5 seconds")
-                        }
-                        delay(5000)
+                        handleAttemptFailure(
+                            statusMessage = "Couldn't play RTMP stream. Retrying in 5 seconds",
+                            playerToRelease = exoPlayerInstance
+                        )
                         continue
                     }
                 } catch (e: CancellationException) {
