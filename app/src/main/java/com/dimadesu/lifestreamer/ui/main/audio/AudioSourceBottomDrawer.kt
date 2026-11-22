@@ -52,11 +52,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.data.storage.StoredEndpointSettings
 import com.dimadesu.lifestreamer.models.AudioDebugInfo
 import com.dimadesu.lifestreamer.ui.main.compose.DrawerFontScale
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDropdownRow
 import com.dimadesu.lifestreamer.ui.main.compose.verticalScrollbar
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
+import com.dimadesu.lifestreamer.ui.main.endpoint.LocalRecordingCompatibilityWarningCard
+import com.dimadesu.lifestreamer.ui.main.endpoint.LocalRecordingWarningScope
+import com.dimadesu.lifestreamer.ui.main.endpoint.computeLocalRecordingCompatibilityWarning
+import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsState
 import java.util.Locale
 
 /**
@@ -89,6 +94,17 @@ fun AudioSourceBottomDrawer(
         initial = android.media.MediaRecorder.AudioSource.CAMCORDER
     )
     val audioDebugInfo by audio.debugInfo.observeAsState(initial = null)
+    val endpointSettings by viewModel.endpointDrawer.settings.observeAsState(initial = StoredEndpointSettings())
+    val videoState by viewModel.videoDrawer.settingsState.observeAsState(initial = VideoSettingsState())
+
+    val localRecordingWarning = computeLocalRecordingCompatibilityWarning(
+        endpointType = endpointSettings.type,
+        recordToDiskEnabled = endpointSettings.recordToDiskEnabled,
+        recordToDiskFormatPref = endpointSettings.recordToDiskFormat,
+        videoMimeType = videoState.encoder,
+        audioMimeType = audioSettingsState.encoder,
+        scope = LocalRecordingWarningScope.AUDIO_ONLY
+    )
 
     val context = LocalContext.current
     val options = remember(context) {
@@ -103,6 +119,7 @@ fun AudioSourceBottomDrawer(
         isOpen = isOpen,
         audioSettingsState = audioSettingsState,
         isStreaming = isStreaming,
+        localRecordingWarning = localRecordingWarning,
         onSelectEncoder = { audio.setEncoder(it) },
         onSelectChannelConfig = { audio.setChannelConfig(it) },
         onSelectBitrate = { audio.setBitrate(it) },
@@ -135,6 +152,7 @@ fun AudioSourceBottomDrawer(
     isOpen: Boolean,
     audioSettingsState: AudioSettingsState,
     isStreaming: Boolean = false,
+    localRecordingWarning: String? = null,
     onSelectEncoder: (String) -> Unit,
     onSelectChannelConfig: (Int) -> Unit,
     onSelectBitrate: (Int) -> Unit,
@@ -272,6 +290,10 @@ fun AudioSourceBottomDrawer(
                             options = audioSettingsState.availableEncoders,
                             onSelectOption = onSelectEncoder
                         )
+
+                        localRecordingWarning?.let {
+                            LocalRecordingCompatibilityWarningCard(message = it)
+                        }
 
                         // Channels Dropdown
                         val currentChannelName = audioSettingsState.availableChannelConfigs

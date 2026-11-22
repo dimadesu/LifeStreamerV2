@@ -1,6 +1,7 @@
 package com.dimadesu.lifestreamer.data.storage
 
 import com.dimadesu.lifestreamer.models.EndpointType
+import com.dimadesu.lifestreamer.models.LocalRecordingFormat
 
 /**
  * Endpoint settings exactly as stored, with defaults applied for values the user has never chosen.
@@ -8,7 +9,9 @@ import com.dimadesu.lifestreamer.models.EndpointType
  * Ports and latencies are kept as text because that is how they are stored. Only the settings of
  * the selected [type] are used when streaming, the rest are remembered for when it is selected again.
  *
- * @property fileName file name without extension. The extension follows the endpoint type.
+ * @property recordToDiskEnabled whether streaming endpoints also record locally to disk.
+ * @property recordToDiskFormat stored preference value for [LocalRecordingFormat] (e.g. "ts", "mp4", "flv").
+ * @property fileName sanitized file name prefix without timestamp or extension.
  * @property srtRegulatorMode one of the `srt_server_moblin_regulator_mode_value_*` strings
  */
 data class StoredEndpointSettings(
@@ -41,5 +44,7 @@ data class StoredEndpointSettings(
     val rtmpTargetBitrateKbps: Int = 0,
     val rtmpMinBitrateKbps: Int = 0,
 
+    val recordToDiskEnabled: Boolean = false,
+    val recordToDiskFormat: String = LocalRecordingFormat.DEFAULT.prefValue,
     val fileName: String = ""
 )

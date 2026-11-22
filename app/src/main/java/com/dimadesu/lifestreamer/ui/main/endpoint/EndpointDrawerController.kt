@@ -6,6 +6,8 @@ import androidx.lifecycle.MutableLiveData
 import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
 import com.dimadesu.lifestreamer.data.storage.StoredEndpointSettings
 import com.dimadesu.lifestreamer.models.EndpointType
+import com.dimadesu.lifestreamer.models.LocalRecordingFormat
+import com.dimadesu.lifestreamer.utils.RecordingFileNameFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -156,7 +158,13 @@ class EndpointDrawerController(
     fun setRtmpMinBitrate(kbps: Int) =
         update { it.copy(rtmpMinBitrateKbps = kbps, rtmpTargetBitrateKbps = maxOf(it.rtmpTargetBitrateKbps, kbps)) }
 
-    fun setFileName(value: String) = update { it.copy(fileName = value.trim()) }
+    fun setRecordToDiskEnabled(enabled: Boolean) = update { it.copy(recordToDiskEnabled = enabled) }
+
+    fun setRecordToDiskFormat(format: LocalRecordingFormat) =
+        update { it.copy(recordToDiskFormat = format.prefValue) }
+
+    fun setFileName(value: String) =
+        update { it.copy(fileName = RecordingFileNameFormatter.sanitizePrefix(value)) }
 
     private companion object {
         const val TAG = "EndpointDrawerController"

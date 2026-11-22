@@ -20,12 +20,14 @@ import com.dimadesu.lifestreamer.data.storage.StoredEndpointSettings
 import com.dimadesu.lifestreamer.models.EndpointFactory
 import com.dimadesu.lifestreamer.models.EndpointType
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
+import com.dimadesu.lifestreamer.ui.main.audio.AudioSettingsState
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDrawerPanel
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDropdownRow
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsSectionTitle
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsSwitchRow
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsTextFieldRow
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsWarningText
+import com.dimadesu.lifestreamer.ui.main.video.VideoSettingsState
 
 /**
  * Stateful Composable for the Endpoint Settings drawer/panel:
@@ -43,6 +45,8 @@ fun EndpointSettingsBottomDrawer(
     val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
     val settings by endpoint.settings.observeAsState(initial = StoredEndpointSettings())
     val openForType by endpoint.openForType.observeAsState(initial = null)
+    val videoState by viewModel.videoDrawer.settingsState.observeAsState(initial = VideoSettingsState())
+    val audioState by viewModel.audioDrawer.settingsState.observeAsState(initial = AudioSettingsState())
 
     // Title reflects which type's settings are shown when opened via a cog icon
     val title = if (openForType != null) {
@@ -90,7 +94,15 @@ fun EndpointSettingsBottomDrawer(
                 SrtlaSection(settings, endpoint)
             }
             if (capabilities.hasFileCapabilities) {
-                FileSection(settings, endpoint)
+                LocalRecordingSection(
+                    endpointType = displayType,
+                    settings = settings,
+                    videoMimeType = videoState.encoder,
+                    audioMimeType = audioState.encoder,
+                    onSetRecordToDiskEnabled = endpoint::setRecordToDiskEnabled,
+                    onSetRecordToDiskFormat = endpoint::setRecordToDiskFormat,
+                    onSetFileName = endpoint::setFileName
+                )
             }
 
             if (capabilities.hasSrtCapabilities || capabilities.hasSrtlaCapabilities) {
@@ -100,6 +112,19 @@ fun EndpointSettingsBottomDrawer(
             if (capabilities.hasRtmpCapabilities) {
                 Divider()
                 RtmpAdaptiveBitrateSection(settings, endpoint)
+            }
+
+            if (displayType.isStreaming) {
+                Divider()
+                LocalRecordingSection(
+                    endpointType = displayType,
+                    settings = settings,
+                    videoMimeType = videoState.encoder,
+                    audioMimeType = audioState.encoder,
+                    onSetRecordToDiskEnabled = endpoint::setRecordToDiskEnabled,
+                    onSetRecordToDiskFormat = endpoint::setRecordToDiskFormat,
+                    onSetFileName = endpoint::setFileName
+                )
             }
 
             if (isStreaming) {
@@ -314,23 +339,6 @@ private fun BitrateRows(
         currentValueName = "$minKbps Kbps",
         options = bitrateOptions(MIN_BITRATES_KBPS, minKbps),
         onSelectOption = onSelectMin
-    )
-}
-
-@Composable
-private fun FileSection(settings: StoredEndpointSettings, endpoint: EndpointDrawerController) {
-    SettingsSectionTitle(stringResource(R.string.file))
-    SettingsTextFieldRow(
-        title = stringResource(R.string.file_name),
-        value = settings.fileName,
-        onCommit = endpoint::setFileName,
-        isValid = ::isNotBlankText
-    )
-    Text(
-        text = stringResource(R.string.file_name_extension_note),
-        fontSize = 12.sp,
-        color = Color(0x99FFFFFF),
-        lineHeight = 15.sp
     )
 }
 

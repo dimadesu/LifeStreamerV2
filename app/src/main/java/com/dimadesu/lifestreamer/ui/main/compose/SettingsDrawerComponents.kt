@@ -317,6 +317,8 @@ fun SettingsSectionTitle(text: String) {
  *
  * Typing does not save anything. The text is passed to [onCommit] when the user taps Done, leaves the
  * field or closes the drawer. Text that fails [isValid] is dropped and the field shows [value] again.
+ * When [sanitize] is provided, committed text is normalized and reflected back in the field even if
+ * the normalized value matches [value].
  */
 @Composable
 fun SettingsTextFieldRow(
@@ -326,14 +328,24 @@ fun SettingsTextFieldRow(
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     maxLength: Int? = null,
-    isValid: (String) -> Boolean = { true }
+    isValid: (String) -> Boolean = { true },
+    sanitize: (String) -> String = { it },
+    summaryProvider: ((String) -> String)? = null
 ) {
     val focusManager = LocalFocusManager.current
     var text by remember(value) { mutableStateOf(value) }
 
     val commit = rememberUpdatedState {
         if (text != value) {
-            if (isValid(text)) onCommit(text) else text = value
+            if (isValid(text)) {
+                val normalized = sanitize(text)
+                text = normalized
+                if (normalized != value) {
+                    onCommit(normalized)
+                }
+            } else {
+                text = value
+            }
         }
     }
     DisposableEffect(Unit) {
@@ -391,6 +403,14 @@ fun SettingsTextFieldRow(
                     }
                 }
         )
+        if (summaryProvider != null) {
+            Text(
+                text = summaryProvider(text),
+                fontSize = 12.sp,
+                color = Color(0x99FFFFFF),
+                lineHeight = 15.sp
+            )
+        }
     }
 }
 

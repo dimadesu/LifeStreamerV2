@@ -670,9 +670,11 @@ class DataStoreRepository(
                 R.string.rtmp_server_video_min_bitrate_key,
                 ApplicationConstants.Endpoint.defaultMinBitrateKbps
             ),
-            fileName = FileExtension.stripKnownExtension(
-                text(R.string.file_name_key, R.string.default_file_name)
-            )
+            recordToDiskEnabled = flag(R.string.record_to_disk_enable_key, false),
+            recordToDiskFormat = text(R.string.record_to_disk_format_key).ifEmpty {
+                LocalRecordingFormat.DEFAULT.prefValue
+            },
+            fileName = readFileNamePrefix(preferences)
         )
     }.distinctUntilChanged()
 
@@ -778,7 +780,12 @@ class DataStoreRepository(
             put(R.string.rtmp_server_enable_bitrate_regulation_key, settings.rtmpAdaptiveBitrate)
             put(R.string.rtmp_server_video_target_bitrate_key, settings.rtmpTargetBitrateKbps)
             put(R.string.rtmp_server_video_min_bitrate_key, settings.rtmpMinBitrateKbps)
-            put(R.string.file_name_key, settings.fileName)
+            put(R.string.record_to_disk_enable_key, settings.recordToDiskEnabled)
+            put(
+                R.string.record_to_disk_format_key,
+                settings.recordToDiskFormat.ifEmpty { LocalRecordingFormat.DEFAULT.prefValue }
+            )
+            put(R.string.file_name_key, RecordingFileNameFormatter.sanitizePrefix(settings.fileName))
         }
     }
 

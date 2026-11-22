@@ -16,12 +16,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dimadesu.lifestreamer.R
+import com.dimadesu.lifestreamer.data.storage.StoredEndpointSettings
 import com.dimadesu.lifestreamer.models.StreamOrientation
 import com.dimadesu.lifestreamer.ui.main.PreviewViewModel
+import com.dimadesu.lifestreamer.ui.main.audio.AudioSettingsState
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDrawerPanel
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsDropdownRow
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsSwitchRow
 import com.dimadesu.lifestreamer.ui.main.compose.SettingsWarningText
+import com.dimadesu.lifestreamer.ui.main.endpoint.LocalRecordingCompatibilityWarningCard
+import com.dimadesu.lifestreamer.ui.main.endpoint.LocalRecordingWarningScope
+import com.dimadesu.lifestreamer.ui.main.endpoint.computeLocalRecordingCompatibilityWarning
 
 /**
  * Stateful Composable for the Video Settings drawer/panel:
@@ -37,11 +42,23 @@ fun VideoSettingsBottomDrawer(
     val isOpen by video.isOpen.observeAsState(initial = false)
     val isStreaming by viewModel.isStreamingLiveData.observeAsState(initial = false)
     val state by video.settingsState.observeAsState(initial = VideoSettingsState())
+    val endpointSettings by viewModel.endpointDrawer.settings.observeAsState(initial = StoredEndpointSettings())
+    val audioState by viewModel.audioDrawer.settingsState.observeAsState(initial = AudioSettingsState())
+
+    val localRecordingWarning = computeLocalRecordingCompatibilityWarning(
+        endpointType = endpointSettings.type,
+        recordToDiskEnabled = endpointSettings.recordToDiskEnabled,
+        recordToDiskFormatPref = endpointSettings.recordToDiskFormat,
+        videoMimeType = state.encoder,
+        audioMimeType = audioState.encoder,
+        scope = LocalRecordingWarningScope.VIDEO_ONLY
+    )
 
     VideoSettingsBottomDrawer(
         isOpen = isOpen,
         state = state,
         isStreaming = isStreaming,
+        localRecordingWarning = localRecordingWarning,
         onSelectOrientation = { video.setOrientation(it) },
         onSelectEncoder = { video.setEncoder(it) },
         onSelectResolution = { video.setResolution(it) },
@@ -65,6 +82,7 @@ fun VideoSettingsBottomDrawer(
     isOpen: Boolean,
     state: VideoSettingsState,
     isStreaming: Boolean = false,
+    localRecordingWarning: String? = null,
     onSelectOrientation: (StreamOrientation) -> Unit,
     onSelectEncoder: (String) -> Unit,
     onSelectResolution: (Size) -> Unit,
@@ -106,6 +124,10 @@ fun VideoSettingsBottomDrawer(
                 options = state.availableEncoders,
                 onSelectOption = onSelectEncoder
             )
+
+            localRecordingWarning?.let {
+                LocalRecordingCompatibilityWarningCard(message = it)
+            }
 
             SettingsDropdownRow(
                 title = stringResource(R.string.video_resolution),
