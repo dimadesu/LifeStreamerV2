@@ -71,7 +71,11 @@ import com.dimadesu.lifestreamer.utils.StreamConfigurationHelper
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.cameras
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.extensions.cameraManager
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.UriMediaDescriptor
+import io.github.thibaultbee.streampack.core.elements.endpoints.DualEndpoint
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
+import io.github.thibaultbee.streampack.core.elements.endpoints.isLocal
+import io.github.thibaultbee.streampack.core.elements.endpoints.openSecond
+import io.github.thibaultbee.streampack.core.elements.endpoints.startStreamSecond
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.IAudioRecordSource
 import io.github.thibaultbee.streampack.core.elements.sources.audio.audiorecord.MicrophoneSourceFactory
 import io.github.thibaultbee.streampack.core.elements.sources.video.camera.CameraSourceFactory
@@ -97,6 +101,7 @@ import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.IBitm
 import io.github.thibaultbee.streampack.core.elements.sources.video.bitmap.BitmapSourceFactory
 import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
 import io.github.thibaultbee.streampack.core.streamers.single.AudioConfig
+import io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer
 import com.dimadesu.lifestreamer.services.CameraStreamerService
 import io.github.thibaultbee.streampack.core.interfaces.IWithVideoRotation
 import com.dimadesu.lifestreamer.models.StreamStatus
@@ -137,6 +142,11 @@ import androidx.media3.exoplayer.video.VideoFrameMetadataListener
 
 class PreviewViewModel(private val application: Application) : ObservableViewModel() {
     private val storageRepository = DataStoreRepository(application, application.dataStore)
+    private val localRecordingConfigStateFlow = storageRepository.localRecordingConfigFlow.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        null
+    )
     private val streamConfigurationHelper = StreamConfigurationHelper(storageRepository)
     private val rotationRepository = RotationRepository.getInstance(application)
     val mediaProjectionHelper = MediaProjectionHelper(application)
@@ -398,10 +408,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             if (currentStreamer?.audioInput?.sourceFlow?.value is IAudioRecordSource) {
                 permissions.add(Manifest.permission.RECORD_AUDIO)
             }
-            storageRepository.endpointDescriptorFlow.asLiveData().value?.let {
-                if (it is UriMediaDescriptor) {
-                    permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && localRecordingConfigStateFlow.value != null) {
+                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
 
             return permissions
@@ -773,52 +781,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     /**
-     * Remove bitrate regulator from streamer if streaming with SRT.
-     * Safe to call even if regulator is not attached.
-     */
-    private suspend fun removeBitrateRegulatorIfNeeded() {
-        val currentStreamer = serviceStreamer ?: return
-        val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
-        if (!isCurrentlyStreaming) return
-        
-        val sinkType = storageRepository.endpointDescriptorFlow.first().type.sinkType
-        if (sinkType != MediaSinkType.SRT && sinkType != MediaSinkType.RTMP) return
-        
-        try {
-            Log.i(TAG, "Removing bitrate regulator before video source switch")
-            currentStreamer.bitrateRegulatorControllerFactory = null
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not remove bitrate regulator: ${e.message}")
-        }
-    }
-    
-    /**
-     * Re-add bitrate regulator to streamer if streaming with SRT.
-     * Encoder remains active across video source switches, so regulator can attach immediately.
-     */
-    private suspend fun readdBitrateRegulatorIfNeeded() {
-        val currentStreamer = serviceStreamer ?: return
-        val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
-        if (!isCurrentlyStreaming) return
-        
-        val sinkType = storageRepository.endpointDescriptorFlow.first().type.sinkType
-        if (sinkType != MediaSinkType.SRT && sinkType != MediaSinkType.RTMP) return
-        
-        try {
-            if (storageRepository.bitrateRegulatorConfigFlow.first() != null) {
-                streamConfigurationHelper.attachBitrateRegulator(
-                    currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
-                    sinkType,
-                    TAG
-                )
-                Log.i(TAG, "Re-added bitrate regulator after video source switch")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not re-add bitrate regulator: ${e.message}")
-        }
-    }
-
-    /**
      * Helper functions to interact with streamer directly (service compatibility layer)
      * 
      * @param shouldSuppressErrors If true, errors won't be posted to streamerErrorLiveData (for auto-retry)
@@ -863,6 +825,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
             Log.i(TAG, "startServiceStreaming: serviceStreamer available, calling open()...")
 
+            val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+            val isRemoteDualEndpoint = dualEndpoint != null && !descriptor.type.sinkType.isLocal
+            val isPipelineAlreadyStreaming = currentStreamer.isStreamingFlow.value == true
+
             // If SRTLA mode, start the embedded SRTLA proxy before opening the SRT connection.
             // SrtlaManager.start() is a suspend function — it returns only after the native
             // listen port is bound (~300 ms), so no extra delay is needed here.
@@ -873,11 +839,199 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 SrtlaManager.start(getApplication(), srtlaConfig.receiverHost, srtlaConfig.receiverPort, srtlaConfig.listenPort)
             }
 
+            if (isRemoteDualEndpoint && isPipelineAlreadyStreaming) {
+                Log.i(TAG, "startServiceStreaming: Pipeline already running, reconnecting secondEndpoint...")
+                withTimeout(10000) {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        dualEndpoint.openSecond(descriptor)
+                    }
+                }
+
+                if (service?.userStoppedManually?.value == true) {
+                    Log.i(TAG, "startServiceStreaming: User stopped manually before startStreamSecond(), aborting")
+                    withContext(NonCancellable) {
+                        try { dualEndpoint.closeSecond() } catch (_: Throwable) {}
+                    }
+                    return false
+                }
+
+                try {
+                    withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        dualEndpoint.startStreamSecond()
+                    }
+                } catch (e: Exception) {
+                    withContext(NonCancellable) {
+                        try { dualEndpoint.closeSecond() } catch (_: Throwable) {}
+                    }
+                    throw e
+                }
+
+                (currentStreamer as? IVideoSingleStreamer)?.videoEncoder?.requestKeyFrame()
+
+                streamConfigurationHelper.applySafeInitialBitrate(
+                    currentStreamer as? IVideoSingleStreamer,
+                    TAG
+                )
+                streamConfigurationHelper.attachBitrateRegulator(
+                    currentStreamer as? IVideoSingleStreamer,
+                    descriptor.type.sinkType,
+                    TAG
+                )
+                Log.i(TAG, "startServiceStreaming: secondEndpoint reconnected while keeping pipeline running")
+                return true
+            }
+
+            // Offline-first simultaneous local recording: open & start mainEndpoint immediately
+            // so recording begins at t=0s even if the remote endpoint cannot connect yet.
+            val localRecordingConfig = if (isRemoteDualEndpoint) {
+                storageRepository.localRecordingConfigFlow.first()
+            } else null
+
+            if (isRemoteDualEndpoint && localRecordingConfig != null) {
+                service?.setConnectingRemote(true)
+                var openedLocalUri: android.net.Uri? = null
+                var localOpened = false
+                try {
+                    val localDescriptor = storageRepository.createLocalRecordingDescriptor(localRecordingConfig)
+                    openedLocalUri = localDescriptor.uri
+                    withContext(Dispatchers.IO) {
+                        currentStreamer.open(localDescriptor)
+                    }
+                    localOpened = true
+                    Log.i(TAG, "startServiceStreaming: Opened local recording on mainEndpoint: ${localDescriptor.uri}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "startServiceStreaming: Failed to open local recording: ${e.message}", e)
+                    openedLocalUri?.let { uri ->
+                        if (uri.scheme == "content") {
+                            try { application.contentResolver.delete(uri, null, null) } catch (_: Throwable) {}
+                        }
+                    }
+                    service?.setConnectingRemote(false)
+                    _streamerErrorLiveData.postValue("Could not start local recording: ${e.message}. Continuing live stream without recording.")
+                }
+
+                if (localOpened) {
+                    val encodersReady = kotlinx.coroutines.withTimeoutOrNull(5000) {
+                        while ((currentStreamer as? IVideoSingleStreamer)?.videoEncoder == null
+                            || (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder == null) {
+                            kotlinx.coroutines.delay(200)
+                        }
+                        true
+                    } ?: false
+
+                    if (!encodersReady) {
+                        service?.setConnectingRemote(false)
+                        val videoEncoderExists = (currentStreamer as? IVideoSingleStreamer)?.videoEncoder != null
+                        val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
+                        val errorMsg = "Encoders not ready (video=$videoEncoderExists, audio=$audioEncoderExists)"
+                        Log.e(TAG, "startServiceStreaming: $errorMsg")
+                        withContext(NonCancellable) {
+                            try { currentStreamer.close() } catch (_: Throwable) {}
+                            openedLocalUri?.let { uri ->
+                                if (uri.scheme == "content") {
+                                    try { application.contentResolver.delete(uri, null, null) } catch (_: Throwable) {}
+                                }
+                            }
+                        }
+                        if (!shouldSuppressErrors) {
+                            _streamerErrorLiveData.postValue(errorMsg)
+                        }
+                        return false
+                    }
+
+                    service?.getSavedStreamingOrientation()?.let { savedRotation ->
+                        try {
+                            currentStreamer.setTargetRotation(savedRotation)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "startServiceStreaming: Failed to apply saved rotation: ${e.message}")
+                        }
+                    }
+
+                    if (service?.userStoppedManually?.value == true) {
+                        service?.setConnectingRemote(false)
+                        Log.i(TAG, "startServiceStreaming: User stopped manually before local startStream(), aborting")
+                        withContext(NonCancellable) {
+                            try { currentStreamer.close() } catch (_: Throwable) {}
+                            openedLocalUri?.let { uri ->
+                                if (uri.scheme == "content") {
+                                    try { application.contentResolver.delete(uri, null, null) } catch (_: Throwable) {}
+                                }
+                            }
+                        }
+                        return false
+                    }
+
+                    withContext(Dispatchers.IO) {
+                        currentStreamer.startStream()
+                        streamConfigurationHelper.applyConfiguredVideoBitrate(
+                            currentStreamer as? IVideoSingleStreamer,
+                            TAG
+                        )
+                    }
+                    Log.i(TAG, "startServiceStreaming: Local recording started on mainEndpoint; connecting secondEndpoint...")
+
+                    try {
+                        withTimeout(10000) {
+                            withContext(Dispatchers.IO) {
+                                dualEndpoint.openSecond(descriptor)
+                            }
+                        }
+
+                        if (service?.userStoppedManually?.value == true) {
+                            service?.setConnectingRemote(false)
+                            withContext(NonCancellable) {
+                                try { dualEndpoint.closeSecond() } catch (_: Throwable) {}
+                            }
+                            return false
+                        }
+
+                        try {
+                            withContext(Dispatchers.IO) {
+                                dualEndpoint.startStreamSecond()
+                            }
+                        } catch (e: Exception) {
+                            withContext(NonCancellable) {
+                                try { dualEndpoint.closeSecond() } catch (_: Throwable) {}
+                            }
+                            throw e
+                        }
+
+                        (currentStreamer as? IVideoSingleStreamer)?.videoEncoder?.requestKeyFrame()
+                        streamConfigurationHelper.applySafeInitialBitrate(
+                            currentStreamer as? IVideoSingleStreamer,
+                            TAG
+                        )
+                        streamConfigurationHelper.attachBitrateRegulator(
+                            currentStreamer as? IVideoSingleStreamer,
+                            descriptor.type.sinkType,
+                            TAG
+                        )
+                        service?.setConnectingRemote(false)
+                        Log.i(TAG, "startServiceStreaming: Simultaneous local recording + remote stream active")
+                        return true
+                    } catch (e: Exception) {
+                        // Keep mainEndpoint recording and keep isConnectingRemote=true until
+                        // handleDisconnection() atomically sets isReconnecting=true (or clear if no retry).
+                        withContext(NonCancellable) {
+                            try { dualEndpoint.closeSecond() } catch (_: Throwable) {}
+                        }
+                        if (!shouldSuppressErrors) {
+                            service?.setConnectingRemote(false)
+                        }
+                        throw e
+                    }
+                }
+            }
+
             // Add timeout to prevent hanging
             // Run on IO dispatcher to prevent blocking UI thread
             withTimeout(10000) { // 10 second timeout
                 withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    currentStreamer.open(descriptor)
+                    if (isRemoteDualEndpoint) {
+                        dualEndpoint.openSecond(descriptor)
+                    } else {
+                        currentStreamer.open(descriptor)
+                    }
                 }
             }
             Log.i(TAG, "startServiceStreaming: open() completed, calling startStream()...")
@@ -886,7 +1040,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             // This prevents the race condition where video encoder isn't ready after rapid stop/start
             Log.d(TAG, "startServiceStreaming: Waiting for encoders to initialize...")
             val encodersReady = kotlinx.coroutines.withTimeoutOrNull(5000) {
-                while ((currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder == null 
+                while ((currentStreamer as? IVideoSingleStreamer)?.videoEncoder == null 
                        || (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder == null) {
                     kotlinx.coroutines.delay(200)
                 }
@@ -894,16 +1048,21 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             } ?: false
             
             if (!encodersReady) {
-                val videoEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder != null
+                val videoEncoderExists = (currentStreamer as? IVideoSingleStreamer)?.videoEncoder != null
                 val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
                 val errorMsg = "Encoders not ready (video=$videoEncoderExists, audio=$audioEncoderExists)"
                 Log.e(TAG, "startServiceStreaming: $errorMsg")
+                withContext(NonCancellable) {
+                    try {
+                        if (isRemoteDualEndpoint) dualEndpoint.closeSecond() else currentStreamer.close()
+                    } catch (_: Throwable) {}
+                }
                 if (!shouldSuppressErrors) {
                     _streamerErrorLiveData.postValue(errorMsg)
                 }
                 return false
             }
-            val videoEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer)?.videoEncoder != null
+            val videoEncoderExists = (currentStreamer as? IVideoSingleStreamer)?.videoEncoder != null
             val audioEncoderExists = (currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IAudioSingleStreamer)?.audioEncoder != null
             Log.i(TAG, "startServiceStreaming: Encoders ready - video=$videoEncoderExists, audio=$audioEncoderExists")
             
@@ -922,6 +1081,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             // Check if user stopped before calling the blocking startStream()
             if (service?.userStoppedManually?.value == true) {
                 Log.i(TAG, "startServiceStreaming: User stopped manually before startStream(), aborting")
+                withContext(NonCancellable) {
+                    try {
+                        if (isRemoteDualEndpoint) dualEndpoint.closeSecond() else currentStreamer.close()
+                    } catch (_: Throwable) {}
+                }
                 return false
             }
 
@@ -934,7 +1098,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 // We do this directly on the encoder AFTER startStream() so the codec is in a valid state
                 // to receive parameter updates, avoiding StreamPack skipping identical configurations.
                 streamConfigurationHelper.applySafeInitialBitrate(
-                    currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
+                    currentStreamer as? IVideoSingleStreamer,
                     TAG
                 )
             }
@@ -942,7 +1106,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             
             // Add bitrate regulator for SRT and RTMP streams
             streamConfigurationHelper.attachBitrateRegulator(
-                currentStreamer as? io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer,
+                currentStreamer as? IVideoSingleStreamer,
                 descriptor.type.sinkType,
                 TAG
             )
@@ -990,7 +1154,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         Log.i(TAG, "doStartStream: Sources validated successfully")
 
         try {
-            val descriptor = storageRepository.endpointDescriptorFlow.first()
+            val descriptor = storageRepository.createEndpointDescriptor()
             Log.i(TAG, "doStartStream: Starting stream with descriptor: $descriptor")
             
             val success = startServiceStreaming(descriptor, shouldSuppressErrors = shouldAutoRetry)
@@ -1063,7 +1227,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     private suspend fun stopServiceStreaming(): Boolean {
         return try {
             Log.i(TAG, "stopServiceStreaming: Stopping stream...")
-            serviceStreamer?.stopStream()
+            withContext(Dispatchers.IO) {
+                serviceStreamer?.stopStream()
+            }
             Log.i(TAG, "stopServiceStreaming: Stream stopped successfully")
 
             // Stop embedded SRTLA proxy if it was running
@@ -1491,6 +1657,26 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     }
                 }
         }
+        (currentStreamer.endpoint as? DualEndpoint)?.let { dualEndpoint ->
+            viewModelScope.launch {
+                dualEndpoint.mainThrowableFlow.filterNotNull().collect { throwable ->
+                    val errorMessage = throwable.message ?: throwable.javaClass.simpleName
+                    Log.e(TAG, "Local recording error on mainEndpoint: $errorMessage", throwable)
+                    val endpointType = storageRepository.endpointTypeFlow.first()
+                    if (endpointType.isStreaming) {
+                        // Close only mainEndpoint so the live remote stream continues uninterrupted
+                        withContext(Dispatchers.IO) {
+                            try { dualEndpoint.stopStreamMain() } catch (_: Throwable) {}
+                            try { dualEndpoint.closeMain() } catch (_: Throwable) {}
+                        }
+                        _streamerErrorLiveData.postValue("Local recording stopped: $errorMessage")
+                    } else {
+                        _streamerErrorLiveData.postValue("Recording error: $errorMessage")
+                        stopStream()
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             serviceReadyFlow.collect { isReady ->
                 if (isReady) {
@@ -1515,12 +1701,12 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         
                         if (isStreaming) {
                             previouslyStreaming = true
-                            // Don't change to STREAMING during reconnection - keep CONNECTING status
-                            // This ensures stop button works during reconnection attempts
-                            if (service?.isReconnecting?.value != true) {
+                            // Don't change to STREAMING during reconnection or initial remote handshake
+                            // while offline-first local recording is running
+                            if (service?.isReconnecting?.value != true && service?.isConnectingRemote?.value != true) {
                                 service?.setStreamStatus(StreamStatus.STREAMING)
                             } else {
-                                Log.d(TAG, "Stream started during reconnection - keeping CONNECTING status for stop button")
+                                Log.d(TAG, "Stream started while connecting/reconnecting remote - keeping CONNECTING status for stop button")
                             }
                         } else {
                             // Stream stopped - check if this was unexpected (should trigger reconnection).
@@ -1654,6 +1840,21 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             }
         }
         
+        // Observe non-retryable configuration / local-recording errors from service
+        viewModelScope.launch {
+            _serviceReady.first { it }
+            service?.let { svc ->
+                try {
+                    svc.configurationErrors.collect { errorMessage ->
+                        Log.w(TAG, "Configuration error from service: $errorMessage")
+                        _streamerErrorLiveData.postValue(errorMessage)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to collect configuration errors from service: ${e.message}")
+                }
+            }
+        }
+
         // Observe critical errors from service (e.g., start from notification failures)
         // Trigger reconnection for these errors
         viewModelScope.launch {
@@ -1807,7 +2008,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 Log.d(TAG, "startStream() - Pre-flight check failed, aborting")
                 return@launch
             }
-            
+
+            // Pre-flight check: block start if simultaneous local recording format is incompatible with encoders
+            val compatibilityError = streamConfigurationHelper.validateLocalRecordingCompatibility()
+            if (compatibilityError != null) {
+                val errorMsg = "Cannot start: $compatibilityError"
+                Log.e(TAG, "startStream() blocked by incompatible local recording settings: $errorMsg")
+                service?.setStreamStatus(StreamStatus.NOT_STREAMING)
+                _streamerErrorLiveData.postValue(errorMsg)
+                return@launch
+            }
+
             service?.setStreamStatus(StreamStatus.STARTING)
             Log.i(TAG, "startStream() called")
             
@@ -2045,7 +2256,19 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         Log.i(TAG, "startStreamInternal called - beginning setup...")
         viewModelScope.launch {
             try {
-                val descriptor = storageRepository.endpointDescriptorFlow.first()
+                // Pre-flight check: block start if simultaneous local recording format is incompatible with encoders
+                val compatibilityError = streamConfigurationHelper.validateLocalRecordingCompatibility()
+                if (compatibilityError != null) {
+                    val errorMsg = "Cannot start: $compatibilityError"
+                    Log.e(TAG, "startStreamInternal blocked by incompatible local recording settings: $errorMsg")
+                    service?.unlockStreamRotation()
+                    service?.setStreamStatus(StreamStatus.NOT_STREAMING)
+                    _streamerErrorLiveData.postValue(errorMsg)
+                    onError(errorMsg)
+                    return@launch
+                }
+
+                val descriptor = storageRepository.createEndpointDescriptor()
                 Log.i(TAG, "Starting stream with descriptor: $descriptor")
                 Log.i(TAG, "About to call startServiceStreaming()...")
                 val success = startServiceStreaming(descriptor, shouldSuppressErrors = true)
@@ -2135,50 +2358,32 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     val isCurrentlyReconnecting = service?.isReconnecting?.value ?: false
                     Log.i(TAG, "stopStream() called - Streaming state: $currentStreamingState, Status: $currentStatus, isReconnecting: $isCurrentlyReconnecting")
 
-                    // If reconnecting, always cancel reconnection regardless of streaming state
+                    // If reconnecting, cancel reconnection state/timer.
+                    // If pipeline is NOT streaming (e.g., failed initial connect), abort quickly here;
+                    // if pipeline IS streaming (kept alive during reconnect), fall through to standard stop teardown.
                     if (isCurrentlyReconnecting) {
                         Log.i(TAG, "Cancelling active reconnection...")
-                        
+
                         // userStoppedManually already marked via service before acquiring mutex
-                        
+
                         // Cancel reconnection timer and clear service flags
                         reconnectTimer.stop()
                         service?.cancelReconnection()
-                        
+
                         // Update UI state so user gets instant feedback
                         service?.setStreamStatus(StreamStatus.NOT_STREAMING)
                         Log.i(TAG, "UI updated immediately - reconnection cancelled by user")
-                        
-                        // Unlock stream rotation since we're truly stopped
-                        service?.unlockStreamRotation()
-                        
-                        // Stop SRTLA proxy since we're aborting the session entirely
-                        if (SrtlaManager.isRunning) {
-                            Log.i(TAG, "stopStream() - Stopping SRTLA during reconnection cancel")
-                            SrtlaManager.stop()
-                        }
 
-                        // If we were actually streaming, do slow cleanup in background with flag
-                        // If just reconnecting/connecting, close quickly without the flag
-                        if (currentStreamingState == true) {
-                            // Was actually streaming, need slow cleanup
-                            service?.isCleanupInProgress = true
-                            Log.i(TAG, "stopStream() - Set service.isCleanupInProgress=true for reconnection cancel cleanup (was streaming)")
-                            viewModelScope.launch {
-                                try {
-                                    Log.d(TAG, "Closing endpoint in background (was streaming, may take time)...")
-                                    withTimeout(3000) {
-                                        currentStreamer.close()
-                                    }
-                                    Log.i(TAG, "Reconnection cancelled - endpoint closed")
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Error closing endpoint during reconnection cancel: ${e.message}")
-                                } finally {
-                                    service?.isCleanupInProgress = false
-                                    Log.i(TAG, "stopStream() - Cleared service.isCleanupInProgress after reconnection cancel cleanup")
-                                }
+                        if (currentStreamingState != true) {
+                            // Unlock stream rotation since we're truly stopped
+                            service?.unlockStreamRotation()
+
+                            // Stop SRTLA proxy since we're aborting the session entirely
+                            if (SrtlaManager.isRunning) {
+                                Log.i(TAG, "stopStream() - Stopping SRTLA during reconnection cancel")
+                                SrtlaManager.stop()
                             }
-                        } else {
+
                             // Was just connecting/reconnecting, close quickly
                             try {
                                 Log.d(TAG, "Closing endpoint (was just connecting, should be fast)...")
@@ -2191,10 +2396,10 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             } catch (e: Exception) {
                                 Log.w(TAG, "Error closing endpoint during reconnection cancel: ${e.message}")
                             }
+
+                            tookEarlyExit = true
+                            return@launch
                         }
-                        
-                        tookEarlyExit = true
-                        return@launch
                     }
 
                     // If already stopped and not in CONNECTING state, don't do anything
@@ -2321,25 +2526,13 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 return@launch
             }
             
-            // Move cleanup to IO dispatcher to avoid blocking main thread for up to 8+ seconds
-            // Wait for stream to stop and close endpoint OUTSIDE the mutex
-            // Protected by isCleanupInProgress flag to prevent start() racing with cleanup
+            // Move cleanup to IO dispatcher to avoid blocking main thread
+            // Close endpoint OUTSIDE the mutex, protected by isCleanupInProgress flag
+            // to prevent start() racing with cleanup
             withContext(Dispatchers.IO) {
                 try {
                     val currentStreamer = serviceStreamer
                     if (currentStreamer != null) {
-                        // Wait for stream to actually stop before closing endpoint
-                        // This prevents calling close() while stopStream() is still executing
-                        var retries = 0
-                        while (currentStreamer.isStreamingFlow.value == true && retries < 50) {
-                            kotlinx.coroutines.delay(100)
-                            retries++
-                        }
-                        
-                        if (retries >= 50) {
-                            Log.w(TAG, "Timeout waiting for stream to stop - forcing close anyway")
-                        }
-                        
                         // Close the endpoint connection to allow fresh connection on next start
                         // Without this, the endpoint stays open and cannot be reopened on next start
                         try {
@@ -2354,10 +2547,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         // Do not clear MediaProjection from the service on stream stop — the token
                         // is transferred to startupMediaProjection and can be reused for SYS AUDIO
                         // or the next stream without a new permission dialog.
-                        
-                        if (currentStreamer.isStreamingFlow.value == true) {
-                            Log.w(TAG, "Stream did not stop cleanly after 5 seconds - forcing cleanup")
-                        }
                         
                         // Restart VU meter after stream stops — audio source remains valid regardless
                         // of video source since startupMediaProjection is always available.
@@ -2423,71 +2612,80 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // Just update our local _streamStatus to match
         service?.setStreamStatus(StreamStatus.CONNECTING)
 
-        // Stop current stream cleanly before reconnecting
+        // Close remote endpoint cleanly before reconnecting while keeping pipeline & encoders running
         viewModelScope.launch {
             try {
-                // Cancel any RTMP retry/upgrade tasks before reconnecting
-                // This prevents stale MediaProjection token from being used
-                rtmpRetryJob?.cancel()
-                rtmpRetryJob = null
-                Log.d(TAG, "Cancelled RTMP retry job before reconnection")
-                
-                // Clean up current connection
-                // Only call stopStream() if stream was actually started
-                // If open() failed, the stream is not running and stopStream() will hang
-                val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
-                if (isCurrentlyStreaming) {
-                    Log.d(TAG, "Stopping failed stream before reconnection...")
-                    currentStreamer.stopStream()
-                    Log.d(TAG, "Stream stopped")
-                } else {
-                    Log.d(TAG, "Stream was never started - skipping stopStream()")
-                }
-                
-                // Remove any bitrate regulator
+                // Remove bitrate regulator while disconnected so it stops polling stale metrics
                 try {
                     currentStreamer.bitrateRegulatorControllerFactory = null
                     Log.d(TAG, "Bitrate regulator removed")
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not remove bitrate regulator: ${e.message}")
                 }
-                
-                // Close the endpoint connection before reconnecting
-                // This ensures clean state for reconnection attempt
-                try {
-                    withTimeout(3000) {
-                        currentStreamer.close()
+
+                val isCurrentlyStreaming = currentStreamer.isStreamingFlow.value == true
+                val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+
+                if (dualEndpoint != null) {
+                    // Isolate disconnection to secondEndpoint so pipeline, encoders, and any local
+                    // file recording keep running uninterrupted. Closing secondEndpoint directly also
+                    // avoids sending RTMP deleteStream() on an unexpected disconnect.
+                    if (!isCurrentlyStreaming) {
+                        rtmpRetryJob?.cancel()
+                        rtmpRetryJob = null
+                        Log.d(TAG, "Cancelled RTMP retry job before initial reconnection")
                     }
-                    Log.i(TAG, "Endpoint closed before reconnection - clean slate established")
-                } catch (e: Exception) {
-                    Log.e(TAG, "CRITICAL: Failed to close endpoint before reconnection!", e)
-                }
+                    try {
+                        withTimeout(3000) {
+                            dualEndpoint.closeSecond()
+                        }
+                        Log.i(TAG, "secondEndpoint closed before reconnection (isStreaming=$isCurrentlyStreaming)")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to close secondEndpoint before reconnection: ${e.message}")
+                    }
 
-                // Wait for stream to actually stop before reconnecting
-                // This ensures clean state for the reconnection attempt
-                var retries = 0
-                while (currentStreamer.isStreamingFlow.value == true && retries < 50) {
-                    kotlinx.coroutines.delay(100)
-                    retries++
-                }
-                
-                if (currentStreamer.isStreamingFlow.value == true) {
-                    Log.w(TAG, "Stream did not stop cleanly after 5 seconds during reconnection cleanup")
-                }
-                
-                Log.d(TAG, "Stream confirmed stopped - ready for reconnection (keeping existing audio/video sources)")
+                    // If local recording is running while offline, restore configured Video bitrate
+                    // instead of leaving the encoder at whatever low ABR bitrate preceded the disconnect.
+                    if (isCurrentlyStreaming && dualEndpoint.mainEndpoint.isOpenFlow.value) {
+                        streamConfigurationHelper.applyConfiguredVideoBitrate(
+                            currentStreamer as? IVideoSingleStreamer,
+                            TAG
+                        )
+                    }
+                } else {
+                    rtmpRetryJob?.cancel()
+                    rtmpRetryJob = null
+                    Log.d(TAG, "Cancelled RTMP retry job before reconnection")
 
-                // NOTE: We do NOT reset audio/video sources during reconnection because:
-                // - RTMP source needs to keep MediaProjection audio
-                // - Camera source already has microphone audio
-                // - Changing sources mid-reconnection can cause initialization issues
-                // Sources are only reset during manual stopStream() to prepare for new configuration
+                    if (isCurrentlyStreaming) {
+                        Log.d(TAG, "Stopping failed stream before reconnection...")
+                        currentStreamer.stopStream()
+                        Log.d(TAG, "Stream stopped")
+                    } else {
+                        Log.d(TAG, "Stream was never started - skipping stopStream()")
+                    }
+
+                    try {
+                        withTimeout(3000) {
+                            currentStreamer.close()
+                        }
+                        Log.i(TAG, "Endpoint closed before reconnection - clean slate established")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "CRITICAL: Failed to close endpoint before reconnection!", e)
+                    }
+
+                    var retries = 0
+                    while (currentStreamer.isStreamingFlow.value == true && retries < 50) {
+                        kotlinx.coroutines.delay(100)
+                        retries++
+                    }
+                }
 
                 // Schedule reconnection after 5 seconds
                 reconnectTimer.startSingleShot(timeoutSeconds = 5) {
                     // Double-check if user manually stopped during the delay (using service state)
-                    val userStopped = service?.userStoppedManually?.value ?: false
-                    if (userStopped) {
+                    val userStoppedNow = service?.userStoppedManually?.value ?: false
+                    if (userStoppedNow) {
                         Log.d(TAG, "User stopped streaming during delay, cancelling reconnection")
                         service?.cancelReconnection()
                         return@startSingleShot
@@ -2658,9 +2856,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 onRtmpConnected = { player ->
                     monitorRtmpConnection(player)
                     isHandlingDisconnection = false
-                    viewModelScope.launch {
-                        readdBitrateRegulatorIfNeeded()
-                    }
                 }
             )
         }
@@ -3157,8 +3352,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     Log.i(TAG, "RTMP disconnect while user stopped stream manually - falling back without restarting")
                     fallbackRtmpWithoutStreamRestart(currentStreamer)
                 } else {
-                    // Streaming - check if we should restart the stream (recommended) or use original hot-swap behavior
-                    val shouldRestartStream = storageRepository.rtmpSourceRestartOnDisconnectFlow.first()
+                    // Never restart the outbound RTMP stream on an inbound RTMP source disconnect
+                    // (doing so would signal end-of-transmission to the RTMP ingest server).
+                    val sinkType = storageRepository.endpointTypeFlow.first().sinkType
+                    val shouldRestartStream = sinkType != MediaSinkType.RTMP &&
+                        storageRepository.rtmpSourceRestartOnDisconnectFlow.first()
                     
                     if (shouldRestartStream) {
                         handleRtmpDisconnectionWithRestart(currentStreamer)
@@ -3194,8 +3392,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
     }
 
     private suspend fun switchToBitmapSourceAndRetryRtmp(
-        currentStreamer: SingleStreamer,
-        readdRegulatorOnConnect: Boolean
+        currentStreamer: SingleStreamer
     ) {
         Log.i(TAG, "Switching to bitmap source with ExoPlayerAudioSource...")
         currentStreamer.setVideoSource(BitmapSourceFactory(testBitmap))
@@ -3207,12 +3404,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.w(TAG, "ExoPlayerAudioSource failed during fallback: ${e.message}")
         }
 
-        startRtmpSourceRetry(currentStreamer, readdRegulatorOnConnect = readdRegulatorOnConnect)
+        startRtmpSourceRetry(currentStreamer)
     }
 
     private suspend fun startRtmpSourceRetry(
-        currentStreamer: SingleStreamer,
-        readdRegulatorOnConnect: Boolean
+        currentStreamer: SingleStreamer
     ) {
         val activeIndex = _activeRtmpIndex.value ?: 1
         val rtmpUrl = storageRepository.rtmpSourceUrlFlow(activeIndex).first()
@@ -3227,11 +3423,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             onRtmpConnected = { player ->
                 monitorRtmpConnection(player)
                 isHandlingDisconnection = false
-                if (readdRegulatorOnConnect) {
-                    viewModelScope.launch {
-                        readdBitrateRegulatorIfNeeded()
-                    }
-                }
             }
         )
     }
@@ -3302,35 +3493,51 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             return
         }
         
-        // Stop the published stream
-        Log.i(TAG, "Stopping published stream...")
+        // Bounce the remote publishing endpoint without stopping the pipeline or encoders
+        val dualEndpoint = currentStreamer.endpoint as? DualEndpoint
+        Log.i(TAG, "Closing remote publishing endpoint before bitmap switch...")
         try {
-            currentStreamer.stopStream()
             try {
                 currentStreamer.bitrateRegulatorControllerFactory = null
             } catch (e: Exception) {
                 Log.w(TAG, "Could not remove bitrate regulator before restart: ${e.message}")
             }
-            withTimeout(3000) {
-                currentStreamer.close()
+            if (dualEndpoint != null) {
+                withTimeout(3000) {
+                    dualEndpoint.closeSecond()
+                }
+            } else {
+                currentStreamer.stopStream()
+                withTimeout(3000) {
+                    currentStreamer.close()
+                }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error stopping stream: ${e.message}")
+            Log.w(TAG, "Error closing remote endpoint before RTMP restart: ${e.message}")
         }
         
-        // Small delay
-        delay(500)
+        if (dualEndpoint == null) {
+            // Small delay only when full pipeline stopped
+            delay(500)
+        }
 
         if (service?.userStoppedManually?.value == true) {
             Log.i(TAG, "User stopped stream manually during RTMP restart cleanup - keeping stream stopped")
             service?.cancelReconnection()
-            withTimeoutOrNull(4000) {
-                while (currentStreamer.isStreamingFlow.value || service?.isCleanupInProgress == true) {
-                    delay(100)
+            if (dualEndpoint != null && currentStreamer.isStreamingFlow.value) {
+                try {
+                    currentStreamer.stopStream()
+                    withTimeout(3000) { currentStreamer.close() }
+                } catch (_: Exception) {}
+            } else {
+                withTimeoutOrNull(4000) {
+                    while (currentStreamer.isStreamingFlow.value || service?.isCleanupInProgress == true) {
+                        delay(100)
+                    }
                 }
             }
             if (_activeRtmpIndex.value != null) {
-                switchToBitmapSourceAndRetryRtmp(currentStreamer, readdRegulatorOnConnect = false)
+                switchToBitmapSourceAndRetryRtmp(currentStreamer)
             } else {
                 isHandlingDisconnection = false
             }
@@ -3348,28 +3555,30 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.w(TAG, "ExoPlayerAudioSource failed during restart: ${e.message}")
         }
         
-        // Apply rotation BEFORE restarting stream to maintain consistent orientation
-        val fixedRotation = streamOrientationFlow.value.toSurfaceRotation()
-        val rotationToApply = if (fixedRotation != null) {
-            Log.i(TAG, "Applying fixed orientation setting $fixedRotation before RTMP restart")
-            fixedRotation
-        } else {
-            val savedRotation = service?.getSavedStreamingOrientation()
-            if (savedRotation != null) {
-                Log.i(TAG, "Applying saved rotation $savedRotation before RTMP restart")
-                savedRotation
+        if (dualEndpoint == null) {
+            // Apply rotation BEFORE restarting stream to maintain consistent orientation
+            val fixedRotation = streamOrientationFlow.value.toSurfaceRotation()
+            val rotationToApply = if (fixedRotation != null) {
+                Log.i(TAG, "Applying fixed orientation setting $fixedRotation before RTMP restart")
+                fixedRotation
             } else {
-                val windowManager = application.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-                @Suppress("DEPRECATION")
-                windowManager.defaultDisplay.rotation
+                val savedRotation = service?.getSavedStreamingOrientation()
+                if (savedRotation != null) {
+                    Log.i(TAG, "Applying saved rotation $savedRotation before RTMP restart")
+                    savedRotation
+                } else {
+                    val windowManager = application.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+                    @Suppress("DEPRECATION")
+                    windowManager.defaultDisplay.rotation
+                }
             }
-        }
-        
-        try {
-            currentStreamer.setTargetRotation(rotationToApply)
-            service?.lockStreamRotation(rotationToApply)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to apply rotation before RTMP restart: ${e.message}")
+            
+            try {
+                currentStreamer.setTargetRotation(rotationToApply)
+                service?.lockStreamRotation(rotationToApply)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to apply rotation before RTMP restart: ${e.message}")
+            }
         }
         
         // Restart the published stream (SRT, SRTLA, or RTMP) using shared start logic
@@ -3379,7 +3588,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.i(TAG, "User stopped stream manually during RTMP restart - aborting restart completion")
             service?.cancelReconnection()
             if (_activeRtmpIndex.value != null) {
-                startRtmpSourceRetry(currentStreamer, readdRegulatorOnConnect = false)
+                startRtmpSourceRetry(currentStreamer)
             } else {
                 isHandlingDisconnection = false
             }
@@ -3406,7 +3615,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         }
         
         // Start retry loop to reconnect RTMP
-        startRtmpSourceRetry(currentStreamer, readdRegulatorOnConnect = true)
+        startRtmpSourceRetry(currentStreamer)
     }
     
     /**
@@ -3414,7 +3623,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
      * Switches only video source to bitmap without restarting the stream.
      * May cause audio sync issues in OBS when streaming.
      * 
-     * @param isStreaming If true, handles bitrate regulator; if false, skips it
+     * @param isStreaming Whether the streamer is currently publishing
      */
     private suspend fun handleRtmpDisconnectionWithHotSwap(currentStreamer: SingleStreamer, isStreaming: Boolean) {
         Log.i(TAG, "Handling RTMP disconnection - falling back to bitmap and retrying (hot-swap, streaming=$isStreaming)")
@@ -3431,19 +3640,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         // STATE_IDLE or watchdog callbacks from re-triggering handleRtmpDisconnection()
         stopRtmpConnectionMonitoring()
         
-        // Remove bitrate regulator if streaming with SRT
-        if (isStreaming) {
-            removeBitrateRegulatorIfNeeded()
-        }
-        
         // Switch only VIDEO to bitmap - keep existing audio source to avoid glitches
         currentStreamer.setVideoSource(BitmapSourceFactory(testBitmap))
         Log.i(TAG, "Switched to bitmap fallback (video only, keeping current audio source)")
-        
-        // Re-add bitrate regulator if streaming with SRT
-        if (isStreaming) {
-            readdBitrateRegulatorIfNeeded()
-        }
         
         // Now release the old ExoPlayer to prevent multiple instances playing simultaneously
         // (which causes audio echo when captured by MediaProjection)
@@ -3460,7 +3659,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         RtmpAudioBridge.clear()
         
         // Start retry loop
-        startRtmpSourceRetry(currentStreamer, readdRegulatorOnConnect = isStreaming)
+        startRtmpSourceRetry(currentStreamer)
     }
 
     /**
@@ -3588,9 +3787,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     // Hide BT toggle - RTMP uses ExoPlayer audio, not microphone
                     _showBluetoothToggle.postValue(false)
 
-                    // Remove bitrate regulator if streaming with SRT
-                    removeBitrateRegulatorIfNeeded()
-
                     // Cancel any existing retry job first
                     rtmpRetryJob?.cancelAndJoin()
                     rtmpRetryJob = RtmpSourceSwitchHelper.switchToRtmpSource(
@@ -3601,15 +3797,9 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         storageRepository = storageRepository,
                         postError = { msg -> _streamerErrorLiveData.postValue(msg) },
                         postRtmpStatus = { msg -> _rtmpStatusLiveData.postValue(msg) },
-                        onBitmapFallback = {
-                            readdBitrateRegulatorIfNeeded()
-                        },
                         onRtmpConnected = { player ->
                             monitorRtmpConnection(player)
                             isHandlingDisconnection = false
-                            viewModelScope.launch {
-                                readdBitrateRegulatorIfNeeded()
-                            }
                         }
                     )
                 }
@@ -3658,9 +3848,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         mediaProjectionHelper.release()
                     }
 
-                    // Remove bitrate regulator if streaming with SRT
-                    removeBitrateRegulatorIfNeeded()
-                    
                     // Switch to camera sources - restore last used camera if available
                     val cameraId = lastUsedCameraId
                     if (cameraId != null) {
@@ -3680,9 +3867,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     // Resume VU meter now that the audio source is restored
                     setupAudioLevelMonitoring()
 
-                    // Re-add bitrate regulator if streaming with SRT
-                    readdBitrateRegulatorIfNeeded()
-                    
                     // Reapply audio monitoring if toggle is ON
                     if (_isMonitorAudioOn.value == true) {
                         applyMonitorAudioState()
@@ -3784,9 +3968,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         _userToggledUvc.postValue(false)
                         _isScreenSource.postValue(false)
                         
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
                         // Switch back to camera (audio unchanged)
                         currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
                         
@@ -3802,9 +3983,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                             }
                         }
                         uvcCameraHelper = null
-                        
-                        // Re-add bitrate regulator if streaming with SRT
-                        readdBitrateRegulatorIfNeeded()
                         
                         // Reapply audio monitoring if toggle is ON
                         if (_isMonitorAudioOn.value == true) {
@@ -3874,14 +4052,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                         Log.i(TAG, "UVC device reopened while on bitmap fallback - switching back to UVC source")
                                         viewModelScope.launch {
                                             try {
-                                                // Remove bitrate regulator if streaming with SRT
-                                                removeBitrateRegulatorIfNeeded()
-                                                
                                                 // Switch back to UVC source
                                                 currentStreamer.setVideoSource(UvcVideoSource.Factory(this@apply))
-                                                
-                                                // Re-add bitrate regulator if streaming with SRT
-                                                readdBitrateRegulatorIfNeeded()
                                                 
                                                 // Reapply audio monitoring if toggle is ON
                                                 if (_isMonitorAudioOn.value == true) {
@@ -3909,14 +4081,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                                 _isScreenSource.postValue(false)
                                                 _activeRtmpIndex.postValue(null)
                                                 
-                                                // Remove bitrate regulator if streaming with SRT
-                                                removeBitrateRegulatorIfNeeded()
-                                                
                                                 // Switch to UVC source (audio source unchanged - Android handles USB audio routing)
                                                 currentStreamer.setVideoSource(UvcVideoSource.Factory(this@apply))
-                                                
-                                                // Re-add bitrate regulator if streaming with SRT
-                                                readdBitrateRegulatorIfNeeded()
                                                 
                                                 // Reapply audio monitoring if toggle is ON
                                                 if (_isMonitorAudioOn.value == true) {
@@ -4042,14 +4208,8 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         _isScreenSource.postValue(false)
                         _activeRtmpIndex.postValue(null)
                         
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
                         // Switch to UVC source first
                         currentStreamer.setVideoSource(UvcVideoSource.Factory(helper))
-                        
-                        // Re-add bitrate regulator if streaming with SRT
-                        readdBitrateRegulatorIfNeeded()
                         
                         // Reapply audio monitoring if toggle is ON
                         if (_isMonitorAudioOn.value == true) {
@@ -4069,13 +4229,7 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         // Clear UVC toggle flag (user wants camera now)
                         _userToggledUvc.postValue(false)
                         
-                        // Remove bitrate regulator if streaming with SRT
-                        removeBitrateRegulatorIfNeeded()
-                        
                         currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
-                        
-                        // Re-add bitrate regulator if streaming with SRT
-                        readdBitrateRegulatorIfNeeded()
                         
                         // Reapply audio monitoring if toggle is ON
                         if (_isMonitorAudioOn.value == true) {
@@ -4195,8 +4349,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                 if (streamingMediaProjection == null && startupMediaProjection == null) {
                     mediaProjectionHelper.release()
                 }
-
-                removeBitrateRegulatorIfNeeded()
                 
                 val cameraId = lastUsedCameraId
                 if (cameraId != null) {
@@ -4206,14 +4358,11 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                     currentStreamer.setVideoSource(CameraSourceFactory(application))
                     Log.i(TAG, "Switched to camera video (default camera)")
                 }
-                
-                readdBitrateRegulatorIfNeeded()
             }
         }
     }
     
     private suspend fun switchToMediaProjectionVideoSource(currentStreamer: SingleStreamer, projection: MediaProjection) {
-        removeBitrateRegulatorIfNeeded()
         val videoSource = currentStreamer.videoInput.sourceFlow.value
         if (videoSource is ICameraSource) {
             lastUsedCameraId = videoSource.cameraId
@@ -4228,8 +4377,6 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to default MediaProjection source")
             currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection))
         }
-        
-        readdBitrateRegulatorIfNeeded()
     }
 
     /**

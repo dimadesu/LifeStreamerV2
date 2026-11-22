@@ -15,7 +15,9 @@ import com.dimadesu.lifestreamer.ApplicationConstants
 import com.dimadesu.lifestreamer.R
 import com.dimadesu.lifestreamer.models.EndpointType
 import com.dimadesu.lifestreamer.models.FileExtension
-import com.dimadesu.lifestreamer.utils.appendIfNotEndsWith
+import com.dimadesu.lifestreamer.models.LocalRecordingConfig
+import com.dimadesu.lifestreamer.models.LocalRecordingFormat
+import com.dimadesu.lifestreamer.utils.RecordingFileNameFormatter
 import com.dimadesu.lifestreamer.utils.createVideoContentUri
 import io.github.thibaultbee.streampack.core.configuration.BitrateRegulatorConfig
 import io.github.thibaultbee.streampack.core.configuration.mediadescriptor.MediaDescriptor
@@ -25,6 +27,7 @@ import io.github.thibaultbee.streampack.core.streamers.single.VideoConfig
 import io.github.thibaultbee.streampack.ext.srt.configuration.mediadescriptor.SrtMediaDescriptor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -173,25 +176,100 @@ class DataStoreRepository(
         )
     }.distinctUntilChanged()
 
-    val endpointDescriptorFlow: Flow<MediaDescriptor> = dataStore.data.map { preferences ->
+    /**
+     * Pure, side-effect-free flow of the currently selected [EndpointType].
+     * Use this instead of creating a [MediaDescriptor] when only checking endpoint/sink type.
+     */
+    val endpointTypeFlow: Flow<EndpointType> = dataStore.data.map { preferences ->
         val endpointTypeId =
             preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
                 ?: EndpointType.SRT.id
-        when (val endpointType = EndpointType.fromId(endpointTypeId)) {
+        EndpointType.fromId(endpointTypeId)
+    }.distinctUntilChanged()
+
+    /**
+     * Pure, side-effect-free flow describing the active local disk recording target, or `null`
+     * when a streaming endpoint is selected with simultaneous recording disabled.
+     */
+    val localRecordingConfigFlow: Flow<LocalRecordingConfig?> = dataStore.data.map { preferences ->
+        readLocalRecordingConfig(preferences)
+    }.distinctUntilChanged()
+
+    private fun readEndpointType(preferences: Preferences): EndpointType {
+        val endpointTypeId =
+            preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
+                ?: EndpointType.SRT.id
+        return EndpointType.fromId(endpointTypeId)
+    }
+
+    private fun readFileNamePrefix(preferences: Preferences): String {
+        val raw = preferences[stringPreferencesKey(context.getString(R.string.file_name_key))]
+            ?: context.getString(R.string.default_file_name)
+        return RecordingFileNameFormatter.sanitizePrefix(raw)
+    }
+
+    private fun readLocalRecordingConfig(preferences: Preferences): LocalRecordingConfig? {
+        val endpointType = readEndpointType(preferences)
+        return when {
+            endpointType.isLocalFile -> LocalRecordingConfig(
+                fileNamePrefix = readFileNamePrefix(preferences),
+                extension = FileExtension.fromEndpointType(endpointType)
+            )
+            endpointType.isStreaming -> {
+                val enabled = preferences[booleanPreferencesKey(
+                    context.getString(R.string.record_to_disk_enable_key)
+                )] ?: false
+                if (!enabled) return null
+                val formatPref = preferences[stringPreferencesKey(
+                    context.getString(R.string.record_to_disk_format_key)
+                )]
+                val format = LocalRecordingFormat.fromPrefValue(formatPref, endpointType)
+                LocalRecordingConfig(
+                    fileNamePrefix = readFileNamePrefix(preferences),
+                    extension = format.extension
+                )
+            }
+            else -> null
+        }
+    }
+
+    /**
+     * Creates a MediaStore / file [UriMediaDescriptor] on demand with the start-of-recording
+     * timestamp baked into the filename. Call only when actually opening a recording session.
+     */
+    fun createLocalRecordingDescriptor(
+        config: LocalRecordingConfig,
+        timestampMs: Long = System.currentTimeMillis()
+    ): UriMediaDescriptor {
+        val filename = RecordingFileNameFormatter.format(
+            rawPrefix = config.fileNamePrefix,
+            extension = config.extension,
+            timestampMs = timestampMs
+        )
+        return context.createVideoContentUri(filename, config.extension.mimeType)
+    }
+
+    /**
+     * Builds the primary [MediaDescriptor] for the currently configured endpoint on demand.
+     * For standalone file endpoints this inserts a new MediaStore row with [timestampMs];
+     * for streaming endpoints it returns the SRT/SRTLA/RTMP descriptor without touching MediaStore.
+     */
+    suspend fun createEndpointDescriptor(
+        timestampMs: Long = System.currentTimeMillis()
+    ): MediaDescriptor {
+        val preferences = dataStore.data.first()
+        return when (val endpointType = readEndpointType(preferences)) {
             EndpointType.TS_FILE,
             EndpointType.FLV_FILE,
             EndpointType.MP4_FILE,
             EndpointType.WEBM_FILE,
             EndpointType.OGG_FILE,
             EndpointType.THREEGP_FILE -> {
-                val filename =
-                    preferences[stringPreferencesKey(context.getString(R.string.file_name_key))]
-                        ?.let { FileExtension.stripKnownExtension(it) }
-                        ?.takeIf { it.isNotBlank() }
-                        ?: context.getString(R.string.default_file_name)
-                context.createVideoContentUri(
-                    filename.appendIfNotEndsWith(FileExtension.fromEndpointType(endpointType).extension)
+                val config = LocalRecordingConfig(
+                    fileNamePrefix = readFileNamePrefix(preferences),
+                    extension = FileExtension.fromEndpointType(endpointType)
                 )
+                createLocalRecordingDescriptor(config, timestampMs)
             }
 
             EndpointType.SRT -> {
@@ -222,7 +300,7 @@ class DataStoreRepository(
             EndpointType.RTMP -> {
                 val url =
                     preferences[stringPreferencesKey(context.getString(R.string.rtmp_server_url_key))]
-                    ?: context.getString(R.string.default_rtmp_url)
+                        ?: context.getString(R.string.default_rtmp_url)
                 UriMediaDescriptor(context, url)
             }
 
@@ -249,7 +327,7 @@ class DataStoreRepository(
                 )
             }
         }
-    }.distinctUntilChanged()
+    }
 
     /** Config needed to start Bond Bunny SRTLA service. Null when endpoint type is not SRTLA. */
     data class SrtlaConfig(val receiverHost: String, val receiverPort: String, val listenPort: String)
@@ -535,13 +613,6 @@ class DataStoreRepository(
         )
     }.distinctUntilChanged()
 
-    val endpointTypeFlow: Flow<com.dimadesu.lifestreamer.models.EndpointType> = dataStore.data.map { preferences ->
-        val endpointTypeId =
-            preferences[stringPreferencesKey(context.getString(R.string.endpoint_type_key))]?.toInt()
-                ?: com.dimadesu.lifestreamer.models.EndpointType.SRT.id
-        com.dimadesu.lifestreamer.models.EndpointType.fromId(endpointTypeId)
-    }.distinctUntilChanged()
-
     /**
      * Endpoint settings with the same defaults the stream configuration falls back to, so what is
      * shown is what is used.
@@ -599,9 +670,11 @@ class DataStoreRepository(
                 R.string.rtmp_server_video_min_bitrate_key,
                 ApplicationConstants.Endpoint.defaultMinBitrateKbps
             ),
-            fileName = FileExtension.stripKnownExtension(
-                text(R.string.file_name_key, R.string.default_file_name)
-            )
+            recordToDiskEnabled = flag(R.string.record_to_disk_enable_key, false),
+            recordToDiskFormat = text(R.string.record_to_disk_format_key).ifEmpty {
+                LocalRecordingFormat.DEFAULT.prefValue
+            },
+            fileName = readFileNamePrefix(preferences)
         )
     }.distinctUntilChanged()
 
@@ -707,7 +780,12 @@ class DataStoreRepository(
             put(R.string.rtmp_server_enable_bitrate_regulation_key, settings.rtmpAdaptiveBitrate)
             put(R.string.rtmp_server_video_target_bitrate_key, settings.rtmpTargetBitrateKbps)
             put(R.string.rtmp_server_video_min_bitrate_key, settings.rtmpMinBitrateKbps)
-            put(R.string.file_name_key, settings.fileName)
+            put(R.string.record_to_disk_enable_key, settings.recordToDiskEnabled)
+            put(
+                R.string.record_to_disk_format_key,
+                settings.recordToDiskFormat.ifEmpty { LocalRecordingFormat.DEFAULT.prefValue }
+            )
+            put(R.string.file_name_key, RecordingFileNameFormatter.sanitizePrefix(settings.fileName))
         }
     }
 
