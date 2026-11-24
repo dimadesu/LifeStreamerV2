@@ -227,7 +227,13 @@ class ConcurrentDualCameraSource internal constructor(
 
     @SuppressLint("MissingPermission")
     override suspend fun resetOutputImpl() {
-        previewHelper.detachOutput()
+        resetOutputInternal(keepPreviewOutputOnProcessor = false)
+    }
+
+    private suspend fun resetOutputInternal(keepPreviewOutputOnProcessor: Boolean) {
+        if (!keepPreviewOutputOnProcessor) {
+            previewHelper.detachOutput()
+        }
         primaryCameraSource.resetOutput()
         secondaryCameraSource.resetOutput()
         secondarySurface?.let {
@@ -311,6 +317,14 @@ class ConcurrentDualCameraSource internal constructor(
     }
 
     override suspend fun release() {
+        releaseInternal(keepPreviewOutputOnProcessor = false)
+    }
+
+    override suspend fun releaseKeepingPreviewOutput() {
+        releaseInternal(keepPreviewOutputOnProcessor = true)
+    }
+
+    private suspend fun releaseInternal(keepPreviewOutputOnProcessor: Boolean) {
         if (isReleased) return
         isReleased = true
         isStreamRequested = false
@@ -326,8 +340,8 @@ class ConcurrentDualCameraSource internal constructor(
             secondaryCameraSource.release()
         } catch (_: Throwable) {}
 
-        previewHelper.release()
-        resetOutputImpl()
+        previewHelper.release(keepOutputOnProcessor = keepPreviewOutputOnProcessor)
+        resetOutputInternal(keepPreviewOutputOnProcessor = keepPreviewOutputOnProcessor)
         surfaceProcessor = null
     }
 
