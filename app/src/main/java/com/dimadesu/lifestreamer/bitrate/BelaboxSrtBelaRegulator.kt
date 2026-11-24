@@ -33,6 +33,7 @@ class BelaboxSrtBelaRegulator(
 
         private const val ADAPTIVE_BITRATE_START: Long = 1_000_000L
         private const val ADAPTIVE_BITRATE_TRANSPORT_MINIMUM: Long = ADAPTIVE_BITRATE_START
+        internal const val SOURCE_SWITCH_GRACE_NS: Long = 2_000_000_000L // 2 seconds
     }
 
     // Settings mirror AdaptiveBitrateSettings from Swift
@@ -70,6 +71,15 @@ class BelaboxSrtBelaRegulator(
     private val transportBitrateEstimator = TransportBitrateEstimator(nanoTimeProvider)
     private val transportBitrateBps: Long
         get() = transportBitrateEstimator.bitrateBps
+
+    private var transitionGraceUntilNs: Long = Long.MIN_VALUE
+
+    override fun notifyVideoSourceTransition() {
+        transitionGraceUntilNs = nanoTimeProvider() + SOURCE_SWITCH_GRACE_NS
+    }
+
+    private fun isInSourceSwitchGrace(nowNs: Long = nanoTimeProvider()): Boolean =
+        nowNs < transitionGraceUntilNs
 
     private val defaultSrtLatencyMs: Int = 3000
 
@@ -190,7 +200,11 @@ class BelaboxSrtBelaRegulator(
      * updateSrtTransportBitrate() and the SrtFight port's approach.
      */
     private fun updateTransportBitrate(byteSentTotal: Long) {
-        if (transportBitrateEstimator.update(byteSentTotal)) {
+        if (transportBitrateEstimator.update(
+                byteSentTotal = byteSentTotal,
+                allowDecrease = !isInSourceSwitchGrace()
+            )
+        ) {
             // Feed it into the throughput EMA (expected in Kbps by the algorithm)
             val transportKbps = transportBitrateEstimator.bitrateBps / 1000.0
             throughput *= 0.97
@@ -225,11 +239,18 @@ class BelaboxSrtBelaRegulator(
         val nowNs = nanoTimeProvider()
         var bitrate = curBitrate
 
+        val inGrace = isInSourceSwitchGrace(nowNs)
         val sendBufferSizeTh3 = (sendBufferSizeAvg + sendBufferSizeJitter) * 4.0
         var sendBufferSizeTh2 = max(50.0, sendBufferSizeAvg + max(sendBufferSizeJitter * 3.0, sendBufferSizeAvg))
         sendBufferSizeTh2 = min(sendBufferSizeTh2, rttToSendBufferSize(srtLatency / 2.0, throughput))
-        // 'relaxed' flag not available on Stats in this build; default to false
-        val sendBufferSizeTh1 = max(50.0, sendBufferSizeAvg + sendBufferSizeJitter * 2.5)
+        // Matches Moblin's `if stats.relaxed ?? false { sendBufferSizeTh2 *= 2 }` after scene switches
+        if (inGrace) {
+            sendBufferSizeTh2 *= 2.0
+        }
+        var sendBufferSizeTh1 = max(50.0, sendBufferSizeAvg + sendBufferSizeJitter * 2.5)
+        if (inGrace) {
+            sendBufferSizeTh1 *= 1.5
+        }
         val rttThMax = rttAvg + max(rttJitter * 4.0, rttAvg * 15.0 / 100.0)
         val rttThMin = rttMin + max(1.0, rttJitter * 2.0)
 
@@ -252,7 +273,7 @@ class BelaboxSrtBelaRegulator(
         }
 
         // Cap against transport estimate (EMA over byte-sent deltas, matching iOS)
-        if (transportBitrateBps > 0L) {
+        if (!inGrace && transportBitrateBps > 0L) {
             val maximumBitrate = max(transportBitrateBps + ADAPTIVE_BITRATE_TRANSPORT_MINIMUM, (17 * transportBitrateBps) / 10)
             if (bitrate > maximumBitrate) {
                 bitrate = maximumBitrate

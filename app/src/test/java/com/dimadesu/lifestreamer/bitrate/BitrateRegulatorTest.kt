@@ -356,4 +356,109 @@ class BitrateRegulatorTest {
             encoderBitrate >= 2_000_000
         )
     }
+
+    @Test
+    fun moblinRegulator_videoSourceTransitionGrace_preventsTransportBitrateDropAndPostSwitchSpikeCut() {
+        var nowNs = 1_000_000_000L
+        var encoderBitrate = 1_000_000
+
+        val regulator = MoblinSrtFightBitrateRegulator(
+            metricsTracker = dummyMetricsTracker(),
+            initialVideoBitrateRange = BitrateRange(300_000, 6_000_000),
+            onVideoTargetBitrateChange = { encoderBitrate = it },
+            nanoTimeProvider = { nowNs }
+        )
+
+        // Train under healthy 6 Mbps network conditions until reaching 6 Mbps ceiling
+        var bytesSent = 0L
+        repeat(60) {
+            nowNs += 200_000_000L
+            bytesSent += 150_000L // 6 Mbps * 0.2s / 8
+            regulator.updateWithStats(rttMs = 30.0, packetsInFlight = 10.0, byteSentTotal = bytesSent)
+        }
+        assertEquals(6_000_000, regulator.getCurrentBitrate())
+        val trainedTransportBps = regulator.getTransportBitrateBps()
+        assertTrue("Expected trained transport bitrate > 4.5 Mbps, got $trainedTransportBps", trainedTransportBps > 4_500_000L)
+
+        // Start a 1.2s video source blur transition where the encoder only outputs ~200 kbps
+        regulator.notifyVideoSourceTransition()
+        repeat(6) {
+            nowNs += 200_000_000L
+            bytesSent += 5_000L // 200 kbps * 0.2s / 8
+            regulator.updateWithStats(rttMs = 30.0, packetsInFlight = 2.0, byteSentTotal = bytesSent)
+        }
+
+        // Transport bitrate estimator and regulator ceiling must NOT decay downward during transition
+        assertEquals(trainedTransportBps, regulator.getTransportBitrateBps())
+        assertEquals(6_000_000, regulator.getCurrentBitrate())
+
+        // Transition ends with an IDR keyframe burst (PIF jumps from ~2 to 90 within the 2s grace window)
+        nowNs += 200_000_000L
+        bytesSent += 180_000L
+        regulator.updateWithStats(rttMs = 32.0, packetsInFlight = 90.0, byteSentTotal = bytesSent)
+        assertEquals(
+            "Expected post-transition keyframe PIF burst within grace window to keep 6 Mbps target",
+            6_000_000,
+            regulator.getCurrentBitrate()
+        )
+    }
+
+    @Test
+    fun rtmpRegulator_videoSourceTransitionGrace_preservesCeilingDuringLowBitrateBlurAndKeyframeBurst() {
+        var nowNs = 1_000_000_000L
+        var encoderBitrate = 4_000_000
+
+        val regulator = RtmpSendDurationBitrateRegulator(
+            metricsTracker = dummyMetricsTracker(),
+            initialVideoBitrateRange = BitrateRange(300_000, 4_000_000),
+            onVideoTargetBitrateChange = { encoderBitrate = it },
+            nanoTimeProvider = { nowNs }
+        )
+
+        var sent = 0L
+        var sendDurNs = 0L
+        var bytesSent = 0L
+        regulator.updateWithMetrics(encoderBitrate, sent, 0L, sendDurNs, bytesSent)
+
+        // Warm up at 4 Mbps under clean 2% fill ratio so transportBitrateEstimator converges near 4 Mbps
+        repeat(15) {
+            nowNs += 500_000_000L
+            sent += 20L
+            sendDurNs += 10_000_000L // 2% fill ratio
+            bytesSent += 250_000L // 4 Mbps
+            regulator.updateWithMetrics(encoderBitrate, sent, 0L, sendDurNs, bytesSent)
+        }
+        val ceilingBeforeSwitch = regulator.getCurrentMaximumBitrate()
+        val transportBeforeSwitch = regulator.getTransportBitrateBps()
+        assertEquals(4_000_000, ceilingBeforeSwitch)
+        assertTrue("Expected transport bitrate > 3.5 Mbps, got $transportBeforeSwitch", transportBeforeSwitch > 3_500_000L)
+
+        // Start a 1.0s video source switch where blurred frames produce very few bytes (160 kbps)
+        regulator.notifyVideoSourceTransition()
+        repeat(5) {
+            nowNs += 200_000_000L
+            sent += 2L
+            sendDurNs += 1_000_000L
+            bytesSent += 4_000L // 160 kbps
+            regulator.updateWithMetrics(encoderBitrate, sent, 0L, sendDurNs, bytesSent)
+        }
+
+        // Neither transportBitrateBps nor currentMaximumBitrate should be pulled down by the quiet blur
+        assertEquals(transportBeforeSwitch, regulator.getTransportBitrateBps())
+        assertEquals(ceilingBeforeSwitch, regulator.getCurrentMaximumBitrate())
+
+        // Transition finishes and emits a clean keyframe (brief 25% write fill ratio spike)
+        nowNs += 200_000_000L
+        sent += 10L
+        sendDurNs += 50_000_000L // 25% fill ratio
+        bytesSent += 120_000L
+        regulator.updateWithMetrics(encoderBitrate, sent, 0L, sendDurNs, bytesSent)
+
+        assertEquals(
+            "Expected keyframe write burst during grace window not to cut ceiling",
+            ceilingBeforeSwitch,
+            regulator.getCurrentMaximumBitrate()
+        )
+        assertEquals(ceilingBeforeSwitch, regulator.getCurrentBitrate())
+    }
 }

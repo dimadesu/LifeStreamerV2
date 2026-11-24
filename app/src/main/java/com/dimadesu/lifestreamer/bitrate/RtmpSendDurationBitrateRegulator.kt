@@ -75,6 +75,8 @@ class RtmpSendDurationBitrateRegulator(
         // Allows a flat overshoot buffer when throughput is extremely low (< 143 kbps).
         // Reduced from Moblin's 1_000_000L (which works for SRT's large buffers but fatal for RTMP).
         private const val TRANSPORT_BITRATE_MINIMUM = 100_000L
+
+        internal const val SOURCE_SWITCH_GRACE_NS = 2_000_000_000L // 2 seconds
     }
 
     private data class Sample(
@@ -92,6 +94,15 @@ class RtmpSendDurationBitrateRegulator(
     private val transportBitrateEstimator = TransportBitrateEstimator(nanoTimeProvider)
     private val transportBitrateBps: Long
         get() = transportBitrateEstimator.bitrateBps
+
+    private var transitionGraceUntilNs: Long = Long.MIN_VALUE
+
+    override fun notifyVideoSourceTransition() {
+        transitionGraceUntilNs = nanoTimeProvider() + SOURCE_SWITCH_GRACE_NS
+    }
+
+    private fun isInSourceSwitchGrace(nowNs: Long = nanoTimeProvider()): Boolean =
+        nowNs < transitionGraceUntilNs
 
     // Two-stage bitrate state modeled on Moblin's AdaptiveBitrateSrtFight:
     // - currentMaximumBitrate tracks the sustained network capacity envelope (climbing when stable,
@@ -200,14 +211,20 @@ class RtmpSendDurationBitrateRegulator(
         // (and streaming has already started, i.e. messagesSent > 0), deltaSent and
         // deltaSendDurationNs will both be 0 even though the socket has been 100% blocked for the
         // entire interval. Treat a 0-completion poll on an active stream as full saturation (1.0).
-        val instantFillRatio = if (deltaSent == 0L && currentSample.messagesSent > 0L) {
+        val inGrace = isInSourceSwitchGrace(nowNs)
+        // During a video source transition grace window, blurred frames can temporarily reduce the
+        // packet rate; only treat 0 completed messages as a full stall outside the grace window.
+        val instantFillRatio = if (!inGrace && deltaSent == 0L && currentSample.messagesSent > 0L) {
             1.0
         } else {
             (deltaSendDurationNs.toDouble() / elapsedNs.toDouble()).coerceIn(0.0, 1.0)
         }
         calcFillRatios(instantFillRatio)
 
-        transportBitrateEstimator.update(totalBytesSent)
+        transportBitrateEstimator.update(
+            byteSentTotal = totalBytesSent,
+            allowDecrease = !inGrace
+        )
 
         // Escalation multiplier: consecutive decreases get progressively harder.
         val escalation = if (consecutiveDecreases > 1) {
@@ -264,7 +281,7 @@ class RtmpSendDurationBitrateRegulator(
                 BitrateRegulatorLog.i(TAG, "Write saturation: smoothFillRatio=$smoothFillRatio, esc=${"%.1f".format(escalation)}, reducing ceiling by $scaledPercentage% to $currentMaximumBitrate")
             }
 
-            fastFillRatio - smoothFillRatio >= FILL_RATIO_LAZY_DECREASE_DIFF_THRESHOLD -> {
+            !inGrace && fastFillRatio - smoothFillRatio >= FILL_RATIO_LAZY_DECREASE_DIFF_THRESHOLD -> {
                 // Fresh spike the smoothed average hasn't caught up with yet: trim the ceiling
                 // slightly while calculateCurrentBitrate() pulls the active bitrate down proportionally.
                 // Note: do not escalate consecutiveDecreases here, otherwise recovery ticks that
@@ -291,7 +308,7 @@ class RtmpSendDurationBitrateRegulator(
                     videoBitrateRange.upper
                 )
                 nextIncreaseAllowedNs = nowNs + INCREASE_COOLDOWN_NS
-                currentMaximumBitrate = capByTransportBitrate(newMaxBitrate)
+                currentMaximumBitrate = if (inGrace) newMaxBitrate else capByTransportBitrate(newMaxBitrate)
             }
 
             else -> {
@@ -322,7 +339,7 @@ class RtmpSendDurationBitrateRegulator(
         if (fastFillRatio >= FILL_RATIO_EMERGENCY_THRESHOLD) {
             return videoBitrateRange.lower
         }
-        if (deltaDropped > 0) {
+        if (deltaDropped > 0 || isInSourceSwitchGrace()) {
             return currentMaximumBitrate
         }
         val spikeDiff = (fastFillRatio - smoothFillRatio).coerceIn(0.0, 1.0)

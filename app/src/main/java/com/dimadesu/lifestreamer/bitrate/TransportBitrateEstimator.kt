@@ -38,7 +38,7 @@ class TransportBitrateEstimator(
         previousTransportUpdateTimeNs = snapshot.previousTransportUpdateTimeNs
     }
 
-    fun update(byteSentTotal: Long): Boolean {
+    fun update(byteSentTotal: Long, allowDecrease: Boolean = true): Boolean {
         var updated = false
         val nowNs = nanoTimeProvider()
         if (previousByteSentTotal >= 0 && previousTransportUpdateTimeNs > 0) {
@@ -50,8 +50,11 @@ class TransportBitrateEstimator(
                 // with EMA weights of 0.7 / 0.3. Since this runs at a variable interval,
                 // we mathematically scale the 1-second retention factor (0.7) to match the elapsed time.
                 val retention = Math.pow(0.7, deltaMs / 1000.0)
-                bitrateBps = (bitrateBps * retention + deltaBitsPerSecond * (1.0 - retention)).toLong()
-                updated = true
+                val newBitrateBps = (bitrateBps * retention + deltaBitsPerSecond * (1.0 - retention)).toLong()
+                if (allowDecrease || newBitrateBps >= bitrateBps) {
+                    bitrateBps = newBitrateBps
+                    updated = true
+                }
             }
         }
         previousByteSentTotal = byteSentTotal

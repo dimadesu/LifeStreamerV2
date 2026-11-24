@@ -42,7 +42,8 @@ class DynamicBitrateRegulatorController internal constructor(
     initialMode: RegulatorMode = RegulatorMode.MOBLIN_FAST,
     private val moblinConfig: MoblinSrtFightConfig = MoblinSrtFightConfig(),
     coroutineDispatcher: CoroutineDispatcher,
-    private val nanoTimeProvider: () -> Long = System::nanoTime
+    private val nanoTimeProvider: () -> Long = System::nanoTime,
+    private val isVideoTransitioningProvider: () -> Boolean = { false }
 ) : IBitrateRegulatorController {
 
     private val scope = CoroutineScope(SupervisorJob() + coroutineDispatcher)
@@ -164,9 +165,22 @@ class DynamicBitrateRegulatorController internal constructor(
         }
     }
 
+    /**
+     * Notifies the active regulator that a video source switch / blur transition has started
+     * or is currently in progress.
+     */
+    fun notifyVideoSourceTransition() {
+        synchronized(stateLock) {
+            activeRegulator.notifyVideoSourceTransition()
+        }
+    }
+
     private fun runTickLocked() {
         val videoEncoder = videoEncoderProvider() ?: return
         val audioBitrate = audioEncoderProvider()?.bitrate ?: 0
+        if (isVideoTransitioningProvider()) {
+            activeRegulator.notifyVideoSourceTransition()
+        }
         activeRegulator.update(videoEncoder.bitrate, audioBitrate)
     }
 
@@ -240,7 +254,8 @@ class DynamicBitrateRegulatorController internal constructor(
         val sinkType: MediaSinkType,
         private val bitrateRegulatorConfig: BitrateRegulatorConfig = BitrateRegulatorConfig(),
         private val initialMode: RegulatorMode = RegulatorMode.MOBLIN_FAST,
-        private val moblinConfig: MoblinSrtFightConfig = MoblinSrtFightConfig()
+        private val moblinConfig: MoblinSrtFightConfig = MoblinSrtFightConfig(),
+        private val isVideoTransitioningProvider: () -> Boolean = { false }
     ) : IBitrateRegulatorController.Factory {
 
         /**
@@ -274,7 +289,8 @@ class DynamicBitrateRegulatorController internal constructor(
                 initialRange = BitrateRange.from(bitrateRegulatorConfig),
                 initialMode = initialMode,
                 moblinConfig = moblinConfig,
-                coroutineDispatcher = coroutineDispatcher
+                coroutineDispatcher = coroutineDispatcher,
+                isVideoTransitioningProvider = isVideoTransitioningProvider
             ).also {
                 activeController = it
             }

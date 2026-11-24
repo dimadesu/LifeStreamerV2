@@ -8,47 +8,35 @@ import android.util.Size
 import android.view.Surface
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
+import io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal
 import io.github.thibaultbee.streampack.core.elements.processing.video.source.ISourceInfoProvider
-import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
+import io.github.thibaultbee.streampack.core.elements.sources.video.ISurfaceProcessorAwareSource
 import io.github.thibaultbee.streampack.core.elements.sources.video.IVideoSourceInternal
+import io.github.thibaultbee.streampack.core.elements.sources.video.SurfaceProcessorPreviewHelper
 import io.github.thibaultbee.streampack.core.elements.sources.video.VideoSourceConfig
+import io.github.thibaultbee.streampack.core.elements.utils.time.Timebase
 import io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-
-import io.github.thibaultbee.streampack.core.elements.sources.video.AbstractPreviewableSource
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
-import androidx.media3.common.VideoSize
-import io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal
-import io.github.thibaultbee.streampack.core.elements.processing.video.DefaultSurfaceProcessorFactory
-import io.github.thibaultbee.streampack.core.elements.processing.video.outputs.SurfaceOutput
-import io.github.thibaultbee.streampack.core.elements.utils.av.video.DynamicRangeProfile
-import io.github.thibaultbee.streampack.core.elements.utils.time.Timebase
 
 @OptIn(InternalStreamPackApi::class)
-class RTMPVideoSource (
+class RTMPVideoSource(
     private val context: Context,
     private val exoPlayer: ExoPlayer,
     private val dispatcherProvider: io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider
-) : AbstractPreviewableSource(), IVideoSourceInternal {
+) : AbstractPreviewableSource(), IVideoSourceInternal, ISurfaceProcessorAwareSource {
     companion object {
         private const val TAG = "RTMPVideoSource"
     }
 
     override val timebase = Timebase.UPTIME
 
-    /*
-     * ExoPlayer must be accessed from the main thread (see ExoPlayer docs).
-     * Reading `exoPlayer.videoFormat` from background coroutines/threads can
-     * throw "Player is accessed on the wrong thread". To avoid that, we
-     * register a small `Player.Listener` on the main thread that caches the
-     * current video width/height/rotation into atomic fields. Background
-     * callers (the pipeline and preview sizing) then read those cached values
-     * instead of touching ExoPlayer directly.
-     */
     private val cachedFormatWidth = AtomicInteger(0)
     private val cachedFormatHeight = AtomicInteger(0)
     private val cachedRotation = AtomicInteger(0)
@@ -56,19 +44,11 @@ class RTMPVideoSource (
     private fun makeInfoProvider(): ISourceInfoProvider {
         return object : ISourceInfoProvider {
             override fun getSurfaceSize(targetResolution: Size): Size {
-                // Return the true RTMP video dimensions so the outer pipeline's
-                // SurfaceProcessor can calculate the correct letterbox/pillarbox
-                // viewport to fit the source into the encoder target resolution.
-                // Our internal SurfaceProcessor does NOT do letterboxing — it's
-                // just a frame splitter (ExoPlayer → output + preview).
                 val w = cachedFormatWidth.get().takeIf { it > 0 } ?: targetResolution.width
                 val h = cachedFormatHeight.get().takeIf { it > 0 } ?: targetResolution.height
                 return Size(w, h)
             }
 
-            // RTMP video has no orientation — always tell StreamPack the relative rotation is 0.
-            // This means StreamPack will not rotate the GL quad, and the viewport rect is
-            // calculated using the un-rotated source size, giving correct letterboxing.
             override fun getRelativeRotationDegrees(targetRotation: Int, requiredMirroring: Boolean): Int = 0
 
             override val rotationDegrees: Int get() = 0
@@ -82,92 +62,90 @@ class RTMPVideoSource (
 
     private val _isStreamingFlow = MutableStateFlow(false)
     override val isStreamingFlow: StateFlow<Boolean> get() = _isStreamingFlow
-    override suspend fun startStream() {
-        // Emit streaming=true synchronously so listeners in the pipeline don't
-        // observe a transient 'not streaming' state when startStream is called.
-        _isStreamingFlow.value = true
 
+    private val _isPreviewingFlow = MutableStateFlow(false)
+    override val isPreviewingFlow: StateFlow<Boolean> get() = _isPreviewingFlow
+
+    private var outputSurface: Surface? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var playerListener: Player.Listener? = null
+    private var isFormatListenerRegistered = false
+
+    private val previewHelper = SurfaceProcessorPreviewHelper(
+        context = context,
+        infoProvider = { infoProviderFlow.value },
+        isStreaming = { _isPreviewingFlow.value },
+        needMirroring = { false },
+        configuredInputSize = {
+            val w = cachedFormatWidth.get()
+            val h = cachedFormatHeight.get()
+            if (w > 0 && h > 0) Size(w, h) else null
+        }
+    )
+
+    private val formatListener = object : Player.Listener {
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            updateCachedFormat()
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            updateCachedFormat()
+        }
+    }
+
+    override fun setSurfaceProcessor(processor: ISurfaceProcessorInternal) {
+        previewHelper.setSurfaceProcessor(processor)
+    }
+
+    private fun ensurePlayerStartedOnMain() {
+        try {
+            if (!isFormatListenerRegistered) {
+                exoPlayer.addListener(formatListener)
+                isFormatListenerRegistered = true
+            }
+            updateCachedFormat()
+        } catch (_: Exception) {
+        }
+
+        outputSurface?.let { surface ->
+            exoPlayer.setVideoSurface(surface)
+        }
+
+        try {
+            if (exoPlayer.mediaItemCount > 0) {
+                if (exoPlayer.playbackState == Player.STATE_IDLE) {
+                    exoPlayer.prepare()
+                }
+                exoPlayer.playWhenReady = true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "ExoPlayer preparation failed, but streaming can continue: ${e.message}")
+        }
+
+        if (playerListener == null) {
+            playerListener = object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    Log.d(TAG, "Playback state changed to: $playbackState")
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.e(TAG, "ExoPlayer error: ${error.message}", error)
+                }
+            }
+            exoPlayer.addListener(playerListener!!)
+        }
+    }
+
+    override suspend fun startStream() {
+        _isStreamingFlow.value = true
         mainHandler.post {
             try {
-                // Ensure format listener is registered early so cached values are populated
-                try {
-                    if (!isFormatListenerRegistered) {
-                        exoPlayer.addListener(formatListener)
-                        isFormatListenerRegistered = true
-                    }
-                    updateCachedFormat()
-                } catch (ignored: Exception) {
+                if (outputSurface == null) {
+                    Log.w(TAG, "No output surface set - cannot start streaming")
+                    _isStreamingFlow.value = false
+                    return@post
                 }
-                Log.d(TAG, "Starting stream - playbackState: ${exoPlayer.playbackState}")
-                Log.d(TAG, "MediaItem count: ${exoPlayer.mediaItemCount}")
-                Log.d(TAG, "Output surface: $outputSurface")
-                Log.d(TAG, "RTMPVideoSource.startStream invoked (thread=${Thread.currentThread().name})")
-                
-                // If a surface processor is initialized we must attach ExoPlayer to
-                // the processor input surface so frames are copied to both the
-                // encoder output and the preview output. Otherwise attach the
-                // provided output surface directly.
-                if (surfaceProcessor != null && inputSurface != null) {
-                    Log.d(TAG, "Attaching ExoPlayer to surface processor input: $inputSurface")
-                    exoPlayer.setVideoSurface(inputSurface)
-                } else {
-                    // Ensure we have an output surface before starting if no processor
-                    if (outputSurface == null) {
-                        Log.w(TAG, "No output surface set - cannot start streaming")
-                        _isStreamingFlow.value = false
-                        return@post
-                    }
-                    outputSurface?.let { surface ->
-                        Log.d(TAG, "Attaching output surface to ExoPlayer: $surface")
-                        exoPlayer.setVideoSurface(surface)
-                        Log.d(TAG, "Set video surface to output")
-                    }
-                }
-                
-                // Streaming already marked true; pipeline can proceed even if ExoPlayer playback fails
-                
-                // Try to prepare and start ExoPlayer playback, but don't fail streaming if it doesn't work
-                try {
-                    if (exoPlayer.mediaItemCount > 0) {
-                        Log.d(TAG, "ExoPlayer has media items - preparing for playback")
-                        if (exoPlayer.playbackState == Player.STATE_IDLE) {
-                            Log.d(TAG, "Preparing ExoPlayer")
-                            exoPlayer.prepare()
-                        }
-                        Log.d(TAG, "Setting playWhenReady = true")
-                        exoPlayer.playWhenReady = true
-                    } else {
-                        Log.d(TAG, "No media items - ExoPlayer will be used as surface target only")
-                    }
-                } catch (e: Exception) {
-                    Log.w("RTMPVideoSource", "ExoPlayer preparation failed, but streaming can continue: ${e.message}")
-                }
-                
-                // Add a listener to monitor playback state changes. Use a single stored
-                // listener instance to avoid adding multiple anonymous listeners on
-                // repeated start/stop calls.
-                if (playerListener == null) {
-                    playerListener = object : Player.Listener {
-                        override fun onPlaybackStateChanged(playbackState: Int) {
-                            Log.d(TAG, "Playback state changed to: $playbackState")
-                            when (playbackState) {
-                                Player.STATE_READY -> {
-                                    Log.i(TAG, "ExoPlayer is ready and playing")
-                                }
-                                Player.STATE_ENDED -> {
-                                    Log.w(TAG, "ExoPlayer playback ended")
-                                }
-                            }
-                        }
-
-                        override fun onPlayerError(error: PlaybackException) {
-                            Log.e(TAG, "ExoPlayer error: ${error.message}", error)
-                            // Don't stop streaming on ExoPlayer error - it might be used as surface target only
-                            Log.w(TAG, "Continuing streaming despite ExoPlayer error")
-                        }
-                    }
-                    exoPlayer.addListener(playerListener!!)
-                }
+                ensurePlayerStartedOnMain()
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting stream: ${e.message}", e)
                 _isStreamingFlow.value = false
@@ -176,116 +154,62 @@ class RTMPVideoSource (
     }
 
     override suspend fun stopStream() {
-    Log.d(TAG, "stopStream() called - streaming: ${_isStreamingFlow.value}")
+        Log.d(TAG, "stopStream() called - streaming: ${_isStreamingFlow.value}")
         _isStreamingFlow.value = false
-        // Keep ExoPlayer playing so the RTMP source stays hot for preview and for
-        // restarting the stream (including from the background). Full stop/cleanup
-        // happens in release() when this source is replaced.
-        Log.d(TAG, "Stream stopped - keeping ExoPlayer playback active")
     }
-
 
     override suspend fun configure(config: VideoSourceConfig) {
         Log.d(TAG, "configure: resolution=${config.resolution}")
-        // Register the format listener on the main thread (ExoPlayer must be touched
-        // from main thread only). Done here rather than in init{} to guarantee that
-        // all class properties (including formatListener itself) are fully initialized.
         withContext(Dispatchers.Main) {
             if (!isFormatListenerRegistered) {
                 try {
                     exoPlayer.addListener(formatListener)
                     isFormatListenerRegistered = true
-                    updateCachedFormat() // pick up format if already available
-                    Log.d(TAG, "Format listener registered in configure()")
+                    updateCachedFormat()
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to register format listener in configure(): ${e.message}")
                 }
             }
-            if (!exoPlayer.isCommandAvailable(Player.COMMAND_PREPARE)) {
-                return@withContext
-            }
-            // ExoPlayer will be prepared when startStream() or startPreview() is called
         }
+        previewHelper.refreshIfAttached()
     }
 
     override suspend fun release() {
-        Handler(Looper.getMainLooper()).post {
+        releaseInternal(keepPreviewOutputOnProcessor = false)
+    }
+
+    override suspend fun releaseKeepingPreviewOutput() {
+        resetOutputInternal(keepPreviewOutputOnProcessor = true)
+        releaseInternal(keepPreviewOutputOnProcessor = true)
+    }
+
+    private fun releaseInternal(keepPreviewOutputOnProcessor: Boolean) {
+        previewHelper.release(keepOutputOnProcessor = keepPreviewOutputOnProcessor)
+        mainHandler.post {
             try {
-                // Clear surfaces first
                 exoPlayer.setVideoSurface(null)
-                // Stop playback if still playing
                 if (exoPlayer.playbackState != Player.STATE_IDLE) {
                     exoPlayer.stop()
                 }
-                // Remove listener if present to avoid leaks
                 playerListener?.let { listener ->
                     try {
                         exoPlayer.removeListener(listener)
-                    } catch (ignored: Exception) {
+                    } catch (_: Exception) {
                     }
                     playerListener = null
                 }
-                // Remove format listener if present
                 if (isFormatListenerRegistered) {
                     try {
                         exoPlayer.removeListener(formatListener)
-                    } catch (ignored: Exception) {
+                    } catch (_: Exception) {
                     }
                     isFormatListenerRegistered = false
                 }
-                // Do NOT release the shared ExoPlayer here - caller owns the player.
-                // Only clear surfaces and listeners so the shared player can be reused.
-                // exoPlayer.release()
             } catch (e: Exception) {
                 Log.e(TAG, "Error releasing ExoPlayer: ${e.message}", e)
             }
         }
-
-        // Release surface processor resources
-        try {
-            inputSurface?.let { surface ->
-                surfaceProcessor?.removeInputSurface(surface)
-            }
-            surfaceProcessor?.release()
-            surfaceProcessor = null
-            outputSurfaceOutput = null
-            previewSurfaceOutput = null
-            Log.d(TAG, "Surface processor released")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing surface processor: ${e.message}", e)
-        }
     }
-
-    // AbstractPreviewableSource required members (stubbed for RTMP source)
-    private val _isPreviewingFlow = MutableStateFlow(false)
-    override val isPreviewingFlow: StateFlow<Boolean>
-        get() = _isPreviewingFlow
-
-    private var outputSurface: Surface? = null
-    private var previewSurface: Surface? = null
-
-    // Surface processor for dual output (streaming + preview)
-    private var surfaceProcessor: ISurfaceProcessorInternal? = null
-    private var inputSurface: Surface? = null
-    private var outputSurfaceOutput: SurfaceOutput? = null
-    private var previewSurfaceOutput: SurfaceOutput? = null
-    // Main thread handler for posting ExoPlayer operations
-    private val mainHandler = Handler(Looper.getMainLooper())
-    // Single listener instance to avoid leaks from multiple anonymous listeners
-    private var playerListener: Player.Listener? = null
-    // Listener to update cached format values on main thread.
-    private val formatListener = object : Player.Listener {
-        override fun onVideoSizeChanged(videoSize: VideoSize) {
-            updateCachedFormat()
-        }
-
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            // Format info may become available when playback starts/changes
-            updateCachedFormat()
-        }
-    }
-    // Track whether formatListener has been added to avoid duplicate registration
-    private var isFormatListenerRegistered = false
 
     private fun updateCachedFormat() {
         try {
@@ -303,121 +227,48 @@ class RTMPVideoSource (
                 cachedRotation.set(rot)
                 try {
                     _infoProviderFlow.value = makeInfoProvider()
-                } catch (ignored: Exception) {
+                } catch (_: Exception) {
                 }
-
-                // If we now have valid dimensions and we're active, reinitialize surface processor
-                // to ensure correct sizing
-                if (w > 0 && h > 0) {
-                    if (_isPreviewingFlow.value || _isStreamingFlow.value) {
-                        Log.d(TAG, "Format updated while active - reinitializing surface processor")
-                        // Execute entirely on main thread to avoid ExoPlayer crashing
-                        // when we release the surface it's actively rendering to.
-                        Handler(Looper.getMainLooper()).post {
-                            try {
-                                // 1. Detach ExoPlayer from the old surface
-                                exoPlayer.clearVideoSurface()
-
-                                // 2. Safely release old surface processor
-                                inputSurface?.let { input ->
-                                    surfaceProcessor?.removeInputSurface(input)
-                                }
-                                surfaceProcessor?.release()
-                                surfaceProcessor = null
-                                inputSurface = null
-                                outputSurfaceOutput = null
-                                previewSurfaceOutput = null
-
-                                // 3. Re-initialize processor with new dimensions
-                                initializeSurfaceProcessor()
-                                
-                                // 4. Re-attach ExoPlayer to the new input surface
-                                inputSurface?.let { input ->
-                                    exoPlayer.setVideoSurface(input)
-                                    Log.d(TAG, "Re-attached ExoPlayer to new input surface after format update")
-                                } ?: run {
-                                    // If no surface processor, attach directly to output/preview if available
-                                    if (_isStreamingFlow.value && outputSurface != null) {
-                                        exoPlayer.setVideoSurface(outputSurface)
-                                    } else if (_isPreviewingFlow.value && previewSurface != null) {
-                                        exoPlayer.setVideoSurface(previewSurface)
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to reinitialize surface processor after format update: ${e.message}")
-                            }
-                        }
-                    } else if (surfaceProcessor != null) {
-                        // Format arrived before streaming started but after surfaces were set up.
-                        // The existing outputSurfaceOutput was created with default dimensions (full-frame
-                        // viewport). Force-recreate it now with the real video dimensions so that when
-                        // streaming starts the correct letterbox/pillarbox viewport is already in place.
-                        Log.d(TAG, "Format updated while idle - updating viewport on existing surfaces")
-                        addSurfacesToProcessor(forceRecreate = true)
-                    }
-                }
-
+                previewHelper.refreshIfAttached()
             }
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
-    override suspend fun getOutput(): Surface? {
-        return outputSurface
-    }
+    override suspend fun getOutput(): Surface? = outputSurface
 
     override suspend fun setOutput(surface: Surface) {
         outputSurface = surface
-        initializeSurfaceProcessor()
-        Handler(Looper.getMainLooper()).post {
+        previewHelper.attachIfReady()
+        mainHandler.post {
             try {
-                // Set the input surface (from surface processor) to ExoPlayer
-                // The surface processor will copy frames to both output and preview surfaces
-                inputSurface?.let { input ->
-                    exoPlayer.setVideoSurface(input)
-                    Log.d(TAG, "Set ExoPlayer surface to surface processor input surface")
-                }
+                exoPlayer.setVideoSurface(surface)
+                Log.d(TAG, "Set ExoPlayer surface to main processor input surface")
             } catch (e: Exception) {
                 Log.e(TAG, "Error setting output surface: ${e.message}", e)
             }
         }
     }
 
-    override suspend fun hasPreview(): Boolean {
-        return previewSurface != null
-    }
+    override suspend fun hasPreview(): Boolean = previewHelper.hasPreview()
 
     override suspend fun setPreview(surface: Surface) {
-        previewSurface = surface
-        initializeSurfaceProcessor()
-        Log.d(TAG, "Preview surface set: $surface")
+        previewHelper.setPreview(surface) {
+            val w = cachedFormatWidth.get().takeIf { it > 0 } ?: 1920
+            val h = cachedFormatHeight.get().takeIf { it > 0 } ?: 1080
+            Size(w, h)
+        }
     }
 
     override suspend fun startPreview() {
-        previewSurface?.let { surface ->
-            _isPreviewingFlow.value = true
-            Log.d(TAG, "Starting preview with surface processor")
-
-            Handler(Looper.getMainLooper()).post {
-                try {
-                    // Start ExoPlayer playback if not already running
-                    // The surface processor will handle distributing frames to both surfaces
-                    if (exoPlayer.mediaItemCount > 0) {
-                        Log.d(TAG, "Starting preview with media items")
-                        if (exoPlayer.playbackState == Player.STATE_IDLE) {
-                            exoPlayer.prepare()
-                        }
-                        exoPlayer.playWhenReady = true
-                    } else {
-                        Log.d(TAG, "Starting preview without media items - surface target only")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error starting preview: ${e.message}", e)
-                    _isPreviewingFlow.value = false
-                }
+        _isPreviewingFlow.value = true
+        mainHandler.post {
+            try {
+                ensurePlayerStartedOnMain()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting preview: ${e.message}", e)
+                _isPreviewingFlow.value = false
             }
-        } ?: run {
-            _isPreviewingFlow.value = false
         }
     }
 
@@ -428,204 +279,48 @@ class RTMPVideoSource (
 
     override suspend fun stopPreview() {
         _isPreviewingFlow.value = false
-        Log.d(TAG, "Stopping preview")
-
-        // Remove preview surface from surface processor
-        previewSurfaceOutput?.let { surfaceOutput ->
-            surfaceProcessor?.removeOutputSurface(surfaceOutput)
-            previewSurfaceOutput = null
-        }
-
-        // Keep ExoPlayer playing (rendering into the offscreen surface processor input)
-        // even when preview stops (e.g. app backgrounded). This keeps the RTMP source hot
-        // so a stream can be started instantly from the background (notification) and
-        // avoids a spurious STATE_IDLE that PreviewViewModel would treat as a disconnect.
-        // ExoPlayer lifecycle is owned by PreviewViewModel/RtmpSourceSwitchHelper and
-        // release() when this source is replaced.
-        Log.d(TAG, "Preview stopped - keeping ExoPlayer playback active")
+        previewHelper.detachOutput()
     }
 
     override fun <T> getPreviewSize(targetSize: Size, targetClass: Class<T>): Size {
-        // Use cached format values to avoid accessing ExoPlayer from non-main threads.
-        val w = cachedFormatWidth.get().takeIf { it > 0 } ?: targetSize.width
-        val h = cachedFormatHeight.get().takeIf { it > 0 } ?: targetSize.height
-        val rotation = cachedRotation.get()
-
-        // If we don't have valid cached dimensions yet (common when first switching to RTMP),
-        // trigger format update on main thread and return a reasonable default size
         if (cachedFormatWidth.get() <= 0 || cachedFormatHeight.get() <= 0) {
-            Log.d(TAG, "getPreviewSize: No cached format available, using default size and triggering update")
-            Handler(Looper.getMainLooper()).post {
+            mainHandler.post {
                 updateCachedFormat()
             }
-            // Return a common RTMP video size as default to prevent preview sizing issues
-            // Most RTMP streams are landscape, so use 16:9 aspect ratio
-            val defaultWidth = 1920
-            val defaultHeight = 1080
-            return if (rotation == 90 || rotation == 270) Size(defaultHeight, defaultWidth) else Size(defaultWidth, defaultHeight)
         }
-
-        return if (rotation == 90 || rotation == 270) Size(h, w) else Size(w, h)
+        return if (targetSize.width > 0 && targetSize.height > 0) {
+            previewHelper.selectPreviewSize(targetSize)
+        } else {
+            val w = cachedFormatWidth.get().takeIf { it > 0 } ?: 1920
+            val h = cachedFormatHeight.get().takeIf { it > 0 } ?: 1080
+            previewHelper.selectPreviewSize(Size(w, h))
+        }
     }
 
     override suspend fun resetPreviewImpl() {
-        previewSurface = null
-        previewSurfaceOutput?.let { surfaceOutput ->
-            surfaceProcessor?.removeOutputSurface(surfaceOutput)
-        }
-        previewSurfaceOutput = null
+        previewHelper.resetPreview()
     }
 
     override suspend fun resetOutputImpl() {
+        resetOutputInternal(keepPreviewOutputOnProcessor = false)
+    }
+
+    private fun resetOutputInternal(keepPreviewOutputOnProcessor: Boolean) {
+        if (!keepPreviewOutputOnProcessor) {
+            previewHelper.detachOutput()
+        }
         outputSurface = null
-        outputSurfaceOutput?.let { surfaceOutput ->
-            surfaceProcessor?.removeOutputSurface(surfaceOutput)
-        }
-        outputSurfaceOutput = null
-    }
-
-    private fun initializeSurfaceProcessor() {
-        if (surfaceProcessor == null && (outputSurface != null || previewSurface != null)) {
-            try {
-                Log.d(TAG, "Initializing surface processor for dual output")
-
-                // Create surface processor with SDR profile (most RTMP streams are SDR)
-                val processorFactory = DefaultSurfaceProcessorFactory()
-                surfaceProcessor = processorFactory.create(context, DynamicRangeProfile.sdr, dispatcherProvider)
-
-                // Create input surface that ExoPlayer will render to
-                val width = cachedFormatWidth.get().takeIf { it > 0 } ?: 1920
-                val height = cachedFormatHeight.get().takeIf { it > 0 } ?: 1080
-                inputSurface = surfaceProcessor!!.createInputSurface(Size(width, height), timebase)
-
-                Log.d(TAG, "Created input surface: $inputSurface with size ${width}x${height}")
-
-                // Add output surfaces
-                addSurfacesToProcessor()
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize surface processor: ${e.message}", e)
-                surfaceProcessor?.release()
-                surfaceProcessor = null
-            }
-        } else if (surfaceProcessor != null) {
-            // Check if we need to recreate the input surface due to size changes
-            val currentWidth = cachedFormatWidth.get().takeIf { it > 0 } ?: 1920
-            val currentHeight = cachedFormatHeight.get().takeIf { it > 0 } ?: 1080
-
-            // For simplicity, we'll just update the surfaces. The surface processor should handle
-            // size changes internally. If there are issues, we might need to recreate the entire processor.
-            Log.d(TAG, "Updating surfaces on existing processor")
-            addSurfacesToProcessor()
-        }
-    }
-
-    private fun addSurfacesToProcessor(forceRecreate: Boolean = false) {
-        surfaceProcessor?.let { processor ->
-            // Add output surface for streaming if available
-            outputSurface?.let { surface ->
-                // If an output SurfaceOutput exists but the underlying Surface
-                // instance changed (e.g. due to orientation / view recreation),
-                // remove and recreate it so the processor uses the new Surface.
-                if (outputSurfaceOutput != null) {
-                    try {
-                        val existingSurface = outputSurfaceOutput?.targetSurface
-                        if (existingSurface != surface || forceRecreate) {
-                            processor.removeOutputSurface(outputSurfaceOutput!!)
-                            outputSurfaceOutput = null
-                            Log.d(TAG, "Recreated output surface output due to surface change or forceRecreate")
-                        }
-                    } catch (ignored: Exception) {
-                    }
-                }
-
-                if (outputSurfaceOutput == null) {
-                    val width = cachedFormatWidth.get().takeIf { it > 0 }
-                    val height = cachedFormatHeight.get().takeIf { it > 0 }
-
-                    if (width == null || height == null) {
-                        // Video dimensions not yet known — defer outputSurfaceOutput creation until
-                        // the format listener fires. Creating it now would bake in a wrong viewport
-                        // (full-frame fallback). updateCachedFormat() will call
-                        // addSurfacesToProcessor(forceRecreate=true) once dimensions arrive.
-                        Log.d(TAG, "Output surface deferred: video dimensions not yet known")
-                    } else {
-                        // Internal SurfaceProcessor does NOT letterbox.
-                        // It's a 1:1 frame copy. The outer pipeline handles letterboxing.
-                        val videoSize = Size(width, height)
-                        outputSurfaceOutput = SurfaceOutput(
-                            targetSurface = surface,
-                            targetResolution = videoSize,
-                            targetRotation = 0,
-                            isStreaming = { _isStreamingFlow.value },
-                            sourceResolution = videoSize,
-                            needMirroring = false,
-                            sourceInfoProvider = object : ISourceInfoProvider {
-                                override fun getSurfaceSize(targetResolution: Size): Size {
-                                    return targetResolution // source == target → full-frame
-                                }
-                                override val rotationDegrees: Int get() = 0
-                                override val isMirror: Boolean = false
-                            }
-                        )
-                        processor.addOutputSurface(outputSurfaceOutput!!)
-                        Log.d(TAG, "Added output surface to processor: $surface, videoSize=${width}x${height}, viewport=${outputSurfaceOutput!!.viewportRect}")
-                    }
-                }
-            }
-
-            // Add preview surface if available
-            previewSurface?.let { surface ->
-                // If preview output exists but the surface changed (view recreated),
-                // remove and recreate the preview output so the processor uses the
-                // new Surface instance.
-                if (previewSurfaceOutput != null) {
-                    try {
-                        val existingSurface = previewSurfaceOutput?.targetSurface
-                        if (existingSurface != surface) {
-                            processor.removeOutputSurface(previewSurfaceOutput!!)
-                            previewSurfaceOutput = null
-                            Log.d(TAG, "Recreated preview surface output due to surface change")
-                        }
-                    } catch (ignored: Exception) {
-                    }
-                }
-
-                if (previewSurfaceOutput == null) {
-                    val width = cachedFormatWidth.get().takeIf { it > 0 } ?: 1920
-                    val height = cachedFormatHeight.get().takeIf { it > 0 } ?: 1080
-                    previewSurfaceOutput = SurfaceOutput(
-                        targetSurface = surface,
-                        targetResolution = Size(width, height),
-                        targetRotation = 0,
-                        isStreaming = { _isPreviewingFlow.value },
-                        sourceResolution = Size(width, height),
-                        needMirroring = false,
-                        sourceInfoProvider = object : ISourceInfoProvider {
-                            override fun getSurfaceSize(targetResolution: Size): Size {
-                                return targetResolution // source == target → full-frame
-                            }
-                            override val rotationDegrees: Int get() = 0
-                            override val isMirror: Boolean = false
-                        }
-                    )
-                    processor.addOutputSurface(previewSurfaceOutput!!)
-                    Log.d(TAG, "Added preview surface to processor: $surface")
-                }
-            }
-        }
     }
 
     @OptIn(InternalStreamPackApi::class)
     class Factory(
         private val exoPlayer: ExoPlayer,
-    ) : IVideoSource.Factory {
+    ) : ISurfaceProcessorAwareSource.Factory {
         override suspend fun create(
             context: Context,
             dispatcherProvider: io.github.thibaultbee.streampack.core.pipelines.IVideoDispatcherProvider
         ): IVideoSourceInternal {
-            val customSrc = RTMPVideoSource(context, exoPlayer, dispatcherProvider)
-            return customSrc
+            return RTMPVideoSource(context, exoPlayer, dispatcherProvider)
         }
 
         override fun isSourceEquals(source: IVideoSourceInternal?): Boolean {

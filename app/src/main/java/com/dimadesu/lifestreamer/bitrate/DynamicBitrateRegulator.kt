@@ -42,6 +42,16 @@ data class SrtRegulatorSnapshot(
  */
 interface DynamicBitrateRegulator : IBitrateRegulator {
     fun updateVideoBitrateRange(range: BitrateRange)
+
+    /**
+     * Notifies the regulator that a video source switch / blur transition is active or has just
+     * occurred, starting/extending a short grace window (`~2s`) during which:
+     * - Low-bitrate blurred transition frames are not allowed to decay `TransportBitrateEstimator`
+     *   downward and clamp the target bitrate ceiling.
+     * - The immediate post-transition keyframe burst is treated with relaxed spike thresholds
+     *   (matching Moblin's `relaxedBitrate` behavior after scene switches).
+     */
+    fun notifyVideoSourceTransition() {}
 }
 
 /**

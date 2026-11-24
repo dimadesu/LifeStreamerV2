@@ -116,7 +116,10 @@ class ConcurrentDualCameraSource internal constructor(
         isStreaming = { true },
         // Front camera selfie view in the preview only; the stream is not mirrored.
         needMirroring = { true },
-        maxPreviewDimension = MAX_PREVIEW_DIMENSION
+        maxPreviewDimension = MAX_PREVIEW_DIMENSION,
+        configuredInputSize = {
+            savedConfig?.let { infoProviderFlow.value.getSurfaceSize(it.resolution) }
+        }
     )
 
     // Cameras must feed the processor while previewing, even when not streaming.
@@ -227,7 +230,13 @@ class ConcurrentDualCameraSource internal constructor(
 
     @SuppressLint("MissingPermission")
     override suspend fun resetOutputImpl() {
-        previewHelper.detachOutput()
+        resetOutputInternal(keepPreviewOutputOnProcessor = false)
+    }
+
+    private suspend fun resetOutputInternal(keepPreviewOutputOnProcessor: Boolean) {
+        if (!keepPreviewOutputOnProcessor) {
+            previewHelper.detachOutput()
+        }
         primaryCameraSource.resetOutput()
         secondaryCameraSource.resetOutput()
         secondarySurface?.let {
@@ -251,7 +260,10 @@ class ConcurrentDualCameraSource internal constructor(
         primaryCameraSource.configure(config)
         val secResolution = computeSecondaryResolution(config.resolution, compositionMode)
         secondaryCameraSource.configure(config.copy(resolution = secResolution))
+        previewHelper.refreshIfAttached()
     }
+
+    override fun needsPreviewRefresh(): Boolean = previewHelper.needsPreviewRefresh()
 
     /**
      * The preview is the composited frame, already rotated upright: returns a size with the
@@ -311,6 +323,14 @@ class ConcurrentDualCameraSource internal constructor(
     }
 
     override suspend fun release() {
+        releaseInternal(keepPreviewOutputOnProcessor = false)
+    }
+
+    override suspend fun releaseKeepingPreviewOutput() {
+        releaseInternal(keepPreviewOutputOnProcessor = true)
+    }
+
+    private suspend fun releaseInternal(keepPreviewOutputOnProcessor: Boolean) {
         if (isReleased) return
         isReleased = true
         isStreamRequested = false
@@ -326,14 +346,15 @@ class ConcurrentDualCameraSource internal constructor(
             secondaryCameraSource.release()
         } catch (_: Throwable) {}
 
-        previewHelper.release()
-        resetOutputImpl()
+        previewHelper.release(keepOutputOnProcessor = keepPreviewOutputOnProcessor)
+        resetOutputInternal(keepPreviewOutputOnProcessor = keepPreviewOutputOnProcessor)
         surfaceProcessor = null
     }
 
     companion object {
         private const val TAG = "ConcurrentDualCameraSource"
-        private const val MAX_PREVIEW_DIMENSION = 1280
+        private const val MAX_PREVIEW_DIMENSION =
+            SurfaceProcessorPreviewHelper.DEFAULT_MAX_PREVIEW_DIMENSION
     }
 }
 
