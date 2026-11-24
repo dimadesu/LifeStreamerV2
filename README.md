@@ -18,6 +18,7 @@ LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy
   - Noise reduction.
 - Switching from Android camera to Android camera improvements: reduce stuttering and frame freezes during transition, render black frames.
 - Android camera video source: no more video/audio stuttering or interruptions on published stream when app goes to/from background.
+- Blur transition on video source switch.
 
 ## The vision for V1
 
