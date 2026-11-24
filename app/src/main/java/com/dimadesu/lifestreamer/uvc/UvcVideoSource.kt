@@ -112,6 +112,7 @@ class UvcVideoSource(
         updateCachedFormat()
 
         mainHandler.post {
+            if (isReleased) return@post
             try {
                 outputSurface?.let { surface ->
                     Log.d(TAG, "Re-adding output surface after camera ready")
@@ -133,6 +134,7 @@ class UvcVideoSource(
         cancelPendingCleanup("startStream")
 
         mainHandler.post {
+            if (isReleased) return@post
             try {
                 updateCachedFormat()
                 outputSurface?.let { surface ->
@@ -193,13 +195,30 @@ class UvcVideoSource(
         val surfaceToRemove = outputSurface
         outputSurface = null
 
-        mainHandler.post {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
             try {
                 cameraHelper.stopPreview()
                 surfaceToRemove?.let { cameraHelper.removeSurface(it) }
-                Log.d(TAG, "UVC video source released (CameraHelper kept alive for reconnection)")
+                Log.d(TAG, "UVC video source released on main thread (CameraHelper kept alive)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error releasing: ${e.message}", e)
+            }
+        } else {
+            val latch = java.util.concurrent.CountDownLatch(1)
+            mainHandler.post {
+                try {
+                    cameraHelper.stopPreview()
+                    surfaceToRemove?.let { cameraHelper.removeSurface(it) }
+                    Log.d(TAG, "UVC video source released (CameraHelper kept alive for reconnection)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error releasing: ${e.message}", e)
+                } finally {
+                    latch.countDown()
+                }
+            }
+            try {
+                latch.await(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (_: InterruptedException) {
             }
         }
     }
@@ -212,6 +231,7 @@ class UvcVideoSource(
         previewHelper.attachIfReady()
 
         mainHandler.post {
+            if (isReleased) return@post
             try {
                 cancelPendingCleanup("setOutput")
                 cameraHelper.addSurface(surface, true)
@@ -241,6 +261,7 @@ class UvcVideoSource(
         cancelPendingCleanup("startPreview")
 
         mainHandler.post {
+            if (isReleased) return@post
             try {
                 outputSurface?.let { surface ->
                     cameraHelper.addSurface(surface, false)

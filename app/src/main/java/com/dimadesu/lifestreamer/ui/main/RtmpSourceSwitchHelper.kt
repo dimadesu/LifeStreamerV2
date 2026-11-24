@@ -240,6 +240,16 @@ internal object RtmpSourceSwitchHelper {
     ): kotlinx.coroutines.Job {
         var attemptCount = 0
         val maxAttempts = Int.MAX_VALUE // Keep retrying indefinitely
+
+        // Start processor blur transition immediately when the user switches to an RTMP source
+        // so the outgoing source blurs smoothly while ExoPlayer connects and buffers.
+        try {
+            @OptIn(io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi::class)
+            (currentStreamer.videoInput.processor as? io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal)
+                ?.startTransition(30)
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to start transition before RTMP connection: ${t.message}")
+        }
         
         // Start retry loop - use Main dispatcher for ExoPlayer thread safety
         // Return the Job so caller can cancel it when switching back to camera

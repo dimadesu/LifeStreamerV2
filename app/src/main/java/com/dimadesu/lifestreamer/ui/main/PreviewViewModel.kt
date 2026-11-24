@@ -3342,7 +3342,17 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         isHandlingDisconnection = true
         
         viewModelScope.launch {
+            val currentStreamer = serviceStreamer ?: return@launch
             try {
+                // Start blur transition before closing the remote endpoint so the last RTMP frame
+                // is captured into the transition FBO while its output surface is still active.
+                try {
+                    val fps = videoConfigLiveData.value?.fps ?: 30
+                    @OptIn(io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi::class)
+                    (currentStreamer.videoInput.processor as? io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal)
+                        ?.startTransition(fps)
+                } catch (_: Throwable) {}
+
                 if (!isStreaming) {
                     // Not streaming - use hot-swap behavior (no bitrate regulator to manage)
                     handleRtmpDisconnectionWithHotSwap(currentStreamer, isStreaming = false)
@@ -3960,29 +3970,34 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
 
         viewModelScope.launch {
             try {
-                when (videoSource) {
-                    is UvcVideoSource -> {
-                        Log.i(TAG, "Switching from UVC to Camera source")
+                when {
+                    videoSource is UvcVideoSource || (_userToggledUvc.value == true && videoSource is IBitmapSource) -> {
+                        Log.i(TAG, "Switching from UVC (or UVC bitmap fallback) to Camera source")
                         
                         // Mark that user toggled UVC OFF (back to camera)
                         _userToggledUvc.postValue(false)
                         _isScreenSource.postValue(false)
+                        val oldHelper = uvcCameraHelper
+                        uvcCameraHelper = null
                         
-                        // Switch back to camera (audio unchanged)
+                        // Switch back to camera first so setVideoSource captures the outgoing UVC
+                        // frame into the blur transition FBO and detaches UvcVideoSource's surface
+                        // before CameraHelper is closed.
                         currentStreamer.setVideoSource(CameraSourceFactory(lastUsedCameraId ?: application.cameraManager.cameras.firstOrNull() ?: "0"))
                         
-                        // Now explicitly release the CameraHelper since user toggled UVC OFF
-                        // (UvcVideoSource.release() no longer releases it to allow reconnection)
-                        uvcCameraHelper?.let { helper ->
-                            try {
-                                helper.closeCamera()
-                                helper.release()
-                                Log.d(TAG, "Released CameraHelper after user toggled UVC OFF")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error releasing CameraHelper: ${e.message}")
+                        // Close and release CameraHelper off the main/camera thread so closeCamera()
+                        // does not stall the switch or race with UvcVideoSource.release().
+                        oldHelper?.let { helper ->
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    helper.closeCamera()
+                                    helper.release()
+                                    Log.d(TAG, "Released CameraHelper after user toggled UVC OFF")
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Error releasing CameraHelper: ${e.message}")
+                                }
                             }
                         }
-                        uvcCameraHelper = null
                         
                         // Reapply audio monitoring if toggle is ON
                         if (_isMonitorAudioOn.value == true) {
@@ -3991,12 +4006,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                         
                         Log.i(TAG, "Switched to camera source")
                     }
-                    is ICameraSource -> {
-                        Log.i(TAG, "Switching from Camera to UVC source")
+                    videoSource is ICameraSource || videoSource is IBitmapSource -> {
+                        Log.i(TAG, "Switching from ${videoSource.javaClass.simpleName} to UVC source")
                         
                         // Remember current camera
-                        lastUsedCameraId = videoSource.cameraId
-                        Log.d(TAG, "Saved camera ID: $lastUsedCameraId")
+                        if (videoSource is ICameraSource) {
+                            lastUsedCameraId = videoSource.cameraId
+                            Log.d(TAG, "Saved camera ID: $lastUsedCameraId")
+                        }
                         
                         // Release any existing CameraHelper before creating a new one
                         uvcCameraHelper?.let { oldHelper ->
@@ -4029,6 +4046,14 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
                                     if (isUvcToggleOn && isOnBitmapFallback && !uvcReconnectionInProgress) {
                                         Log.i(TAG, "UVC camera re-attached while on bitmap fallback - auto-reconnecting")
                                         uvcReconnectionInProgress = true
+                                        // Start blur transition immediately on the bitmap fallback frame
+                                        // while USB device opens and negotiates format
+                                        try {
+                                            val fps = videoConfigLiveData.value?.fps ?: 30
+                                            @OptIn(io.github.thibaultbee.streampack.core.utils.InternalStreamPackApi::class)
+                                            (currentStreamer.videoInput.processor as? io.github.thibaultbee.streampack.core.elements.processing.video.ISurfaceProcessorInternal)
+                                                ?.startTransition(fps)
+                                        } catch (_: Throwable) {}
                                         // Select device to trigger onDeviceOpen -> onCameraOpen flow
                                         // This will switch back to UVC source automatically
                                         selectDevice(device)
