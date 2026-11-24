@@ -23,7 +23,7 @@ class MoblinSrtFightBitrateRegulator(
     private val moblinConfig: MoblinSrtFightConfig = MoblinSrtFightConfig(),
     private val onVideoTargetBitrateChange: ((Int) -> Unit),
     initialSnapshot: SrtRegulatorSnapshot? = null,
-    nanoTimeProvider: () -> Long = System::nanoTime
+    private val nanoTimeProvider: () -> Long = System::nanoTime
 ) : SnapshotableSrtRegulator {
 
     companion object {
@@ -32,6 +32,11 @@ class MoblinSrtFightBitrateRegulator(
 
         // Matches Moblin's adaptiveBitrateTransportMinimum (= adaptiveBitrateStart).
         private const val TRANSPORT_BITRATE_MINIMUM = ADAPTIVBITRATE_START
+
+        // Grace window during and immediately after a video source switch transition
+        // (prevents low-entropy blurred frames from pulling transportBitrateBps down and
+        // relaxes PIF spike sensitivity for the post-transition keyframe).
+        internal const val SOURCE_SWITCH_GRACE_NS = 2_000_000_000L // 2 seconds
     }
 
     private var videoBitrateRange: BitrateRange = initialVideoBitrateRange
@@ -59,6 +64,15 @@ class MoblinSrtFightBitrateRegulator(
     private val transportBitrateEstimator = TransportBitrateEstimator(nanoTimeProvider)
     private val transportBitrateBps: Long
         get() = transportBitrateEstimator.bitrateBps
+
+    private var transitionGraceUntilNs: Long = Long.MIN_VALUE
+
+    override fun notifyVideoSourceTransition() {
+        transitionGraceUntilNs = nanoTimeProvider() + SOURCE_SWITCH_GRACE_NS
+    }
+
+    private fun isInSourceSwitchGrace(nowNs: Long = nanoTimeProvider()): Boolean =
+        nowNs < transitionGraceUntilNs
 
     // Action logging for debugging
     private val actionHistory = mutableListOf<String>()
@@ -158,7 +172,10 @@ class MoblinSrtFightBitrateRegulator(
      * counter, giving the real recent send rate independently of what the encoder is configured for.
      */
     private fun updateTransportBitrate(byteSentTotal: Long) {
-        transportBitrateEstimator.update(byteSentTotal)
+        transportBitrateEstimator.update(
+            byteSentTotal = byteSentTotal,
+            allowDecrease = !isInSourceSwitchGrace()
+        )
     }
 
     /**
@@ -285,14 +302,21 @@ class MoblinSrtFightBitrateRegulator(
      * Calculate current bitrate - matches Moblin's calculateCurrentBitrate
      */
     private fun calculateCurrentBitrate() {
+        val inGrace = isInSourceSwitchGrace()
         var pifSpikeDiff = (fastPif - smoothPif).toLong()
         
-        // Lazy decrease
-        if (pifSpikeDiff > currentSettings.packetsInFlight) {
+        // Lazy decrease (skipped during source-switch grace so the post-transition keyframe burst
+        // doesn't cut currentMaximumBitrate)
+        if (!inGrace && pifSpikeDiff > currentSettings.packetsInFlight) {
             currentMaximumBitrate = (currentMaximumBitrate.toDouble() * 0.95).toLong()
         }
         
-        if (pifSpikeDiff <= (currentSettings.packetsInFlight / 5)) {
+        val spikeDeadzone = if (inGrace) {
+            currentSettings.packetsInFlight / 2
+        } else {
+            currentSettings.packetsInFlight / 5
+        }
+        if (pifSpikeDiff <= spikeDeadzone) {
             pifSpikeDiff = 0
         }
         if (pifSpikeDiff < 0) {
@@ -303,14 +327,14 @@ class MoblinSrtFightBitrateRegulator(
         }
         
         // Harder decrease
-        if (pifSpikeDiff == currentSettings.packetsInFlight) {
+        if (!inGrace && pifSpikeDiff == currentSettings.packetsInFlight) {
             currentMaximumBitrate -= 500_000
         }
         
         val pifDiffThing = currentSettings.packetsInFlight - pifSpikeDiff
         
         // Don't let the max bitrate run away from what SRT can actually send right now.
-        if (transportBitrateBps > 0) {
+        if (!inGrace && transportBitrateBps > 0) {
             val maxAllowedByTransport = max(
                 transportBitrateBps + TRANSPORT_BITRATE_MINIMUM,
                 (17 * transportBitrateBps) / 10

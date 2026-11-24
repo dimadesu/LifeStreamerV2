@@ -6,6 +6,7 @@ import com.dimadesu.lifestreamer.bitrate.RegulatorMode
 import com.dimadesu.lifestreamer.data.storage.DataStoreRepository
 import io.github.thibaultbee.streampack.core.configuration.BitrateRegulatorConfig
 import io.github.thibaultbee.streampack.core.elements.endpoints.MediaSinkType
+import io.github.thibaultbee.streampack.core.interfaces.IWithVideoSource
 import io.github.thibaultbee.streampack.core.regulator.controllers.IBitrateRegulatorController
 import io.github.thibaultbee.streampack.core.streamers.single.IVideoSingleStreamer
 import kotlinx.coroutines.flow.first
@@ -16,7 +17,10 @@ class StreamConfigurationHelper(private val storageRepository: DataStoreReposito
      * Builds the adaptive bitrate regulator factory for [sinkType] from stored settings, or
      * `null` if adaptive bitrate is disabled for that sink type (or the sink type isn't SRT/RTMP).
      */
-    suspend fun buildBitrateRegulatorFactoryOrNull(sinkType: MediaSinkType): IBitrateRegulatorController.Factory? {
+    suspend fun buildBitrateRegulatorFactoryOrNull(
+        sinkType: MediaSinkType,
+        isVideoTransitioningProvider: () -> Boolean = { false }
+    ): IBitrateRegulatorController.Factory? {
         if (sinkType != MediaSinkType.SRT && sinkType != MediaSinkType.RTMP) return null
         val config = storageRepository.bitrateRegulatorConfigFlow.first() ?: return null
         val mode = if (sinkType == MediaSinkType.SRT) {
@@ -27,7 +31,8 @@ class StreamConfigurationHelper(private val storageRepository: DataStoreReposito
         return DynamicBitrateRegulatorController.Factory(
             sinkType = sinkType,
             bitrateRegulatorConfig = config,
-            initialMode = mode
+            initialMode = mode,
+            isVideoTransitioningProvider = isVideoTransitioningProvider
         )
     }
 
@@ -39,7 +44,10 @@ class StreamConfigurationHelper(private val storageRepository: DataStoreReposito
      */
     suspend fun attachBitrateRegulator(streamer: IVideoSingleStreamer?, sinkType: MediaSinkType, tag: String) {
         if (streamer == null) return
-        val factory = buildBitrateRegulatorFactoryOrNull(sinkType)
+        val factory = buildBitrateRegulatorFactoryOrNull(
+            sinkType = sinkType,
+            isVideoTransitioningProvider = { isStreamerVideoTransitioning(streamer) }
+        )
         if (factory != null) {
             applySafeInitialBitrate(streamer, tag)
         }
@@ -94,12 +102,17 @@ class StreamConfigurationHelper(private val storageRepository: DataStoreReposito
         streamer.bitrateRegulatorControllerFactory = DynamicBitrateRegulatorController.Factory(
             sinkType = sinkType,
             bitrateRegulatorConfig = config,
-            initialMode = mode
+            initialMode = mode,
+            isVideoTransitioningProvider = { isStreamerVideoTransitioning(streamer) }
         )
         Log.i(
             tag,
             "Bitrate regulator attached mid-stream: sink=$sinkType, range=${config.videoBitrateRange.lower / 1000}k-${config.videoBitrateRange.upper / 1000}k, mode=$mode"
         )
+    }
+
+    private fun isStreamerVideoTransitioning(streamer: IVideoSingleStreamer): Boolean {
+        return (streamer as? IWithVideoSource)?.videoInput?.processor?.isTransitioningFlow?.value == true
     }
 
     suspend fun validateLocalRecordingCompatibility(): String? {
