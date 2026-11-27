@@ -66,6 +66,7 @@ fun VideoSettingsBottomDrawer(
         onSelectCameraFps = { video.setCameraFps(it) },
         onToggleMatchFps = { video.setMatchFps(it) },
         onSelectFps = { video.setFps(it) },
+        onToggleForceEncoderFps = { video.setForceEncoderFps(it) },
         onSelectBitrate = { video.setBitrateKbps(it) },
         onSelectProfile = { video.setProfile(it) },
         onSelectLevel = { video.setLevel(it) },
@@ -90,6 +91,7 @@ fun VideoSettingsBottomDrawer(
     onSelectCameraFps: (Int) -> Unit,
     onToggleMatchFps: (Boolean) -> Unit,
     onSelectFps: (Int) -> Unit,
+    onToggleForceEncoderFps: (Boolean) -> Unit = {},
     onSelectBitrate: (Int) -> Unit,
     onSelectProfile: (Int) -> Unit,
     onSelectLevel: (Int) -> Unit,
@@ -179,6 +181,13 @@ fun VideoSettingsBottomDrawer(
                     lineHeight = 15.sp
                 )
             }
+
+            SettingsSwitchRow(
+                title = stringResource(R.string.force_encoder_fps_title),
+                summary = stringResource(R.string.force_encoder_fps_summary),
+                checked = state.forceEncoderFps,
+                onCheckedChange = onToggleForceEncoderFps
+            )
 
             HorizontalDivider(color = Color(0x22FFFFFF), thickness = 0.5.dp)
 

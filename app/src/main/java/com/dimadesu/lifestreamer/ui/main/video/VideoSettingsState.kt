@@ -29,6 +29,7 @@ data class VideoSettingsState(
     val cameraFps: Int = ApplicationConstants.Video.defaultFps,
     val matchFps: Boolean = true,
     val fps: Int = ApplicationConstants.Video.defaultFps,
+    val forceEncoderFps: Boolean = false,
     val bitrateKbps: Int = ApplicationConstants.Video.defaultBitrateInBps / 1000,
     val profile: Int = 0,
     val level: Int = 0,
@@ -51,6 +52,7 @@ data class VideoSettingsState(
         cameraFps = cameraFps,
         matchFps = matchFps,
         fps = fps,
+        forceEncoderFps = forceEncoderFps,
         bitrateKbps = bitrateKbps,
         profile = profile,
         level = level
@@ -154,6 +156,7 @@ class VideoSettingsStateBuilder(private val application: Application) {
             cameraFps = cameraFps,
             matchFps = stored.matchFps,
             fps = fps,
+            forceEncoderFps = stored.forceEncoderFps,
             bitrateKbps = bitrate,
             profile = profile,
             level = level,
