@@ -16,6 +16,7 @@ data class StoredVideoSettings(
     val cameraFps: Int? = null,
     val matchFps: Boolean = true,
     val fps: Int? = null,
+    val forceEncoderFps: Boolean = false,
     val bitrateKbps: Int? = null,
     val profile: Int? = null,
     val level: Int? = null

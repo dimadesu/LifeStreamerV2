@@ -4392,15 +4392,20 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
         if (videoSource is ICameraSource) {
             lastUsedCameraId = videoSource.cameraId
         }
-        
-        val useCfr = true // Or whatever config you want
-        if (useCfr) {
-            val fps = videoConfigLiveData.value?.fps ?: 30
+
+        val videoConfig = videoConfigLiveData.value ?: storageRepository.videoConfigFlow.first()
+        if (videoConfig?.forceConstantFps == true) {
+            // Main SurfaceProcessor already enforces constant FPS at videoConfig.fps;
+            // skip local CFR in MediaProjectionVideoSource to avoid cascading two CFR loops.
+            Log.i(
+                TAG,
+                "switchToMediaProjectionVideoSource: Main processor enforces CFR (${videoConfig.fps} fps), using direct MediaProjection source"
+            )
+            currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection, cfrFps = 0))
+        } else {
+            val fps = videoConfig?.fps ?: 30
             Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to CFR MediaProjection source with fps=$fps")
             currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection, fps))
-        } else {
-            Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to default MediaProjection source")
-            currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection))
         }
     }
 
