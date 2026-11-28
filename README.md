@@ -33,6 +33,7 @@ LS V1:
 - Input switcher
 - Video/audio monitor
 - Outputs: RTMP/SRT/SRTLA with adaptive bitrate.
+- Keep modifications to StreamPack SDK to the minimum.
 
 A lot of people already use it and, in a way, it's perfect and complete as it is. It is sort of in a maintenance mode. I don't want to add any major changes to it for now.
 
@@ -59,6 +60,7 @@ LS V2 ideas:
   - Extend image (bitmap) source.
   - Overlays.
   - Video filters.
+- Allow myself to modify StreamPack SDK a lot more.
 - Etc.
 
 ## GitHub releases
