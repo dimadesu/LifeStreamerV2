@@ -8,6 +8,8 @@ LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy
 
 ![LifeStreamerV2 screenshot](docs/LifeStreamerV2-screenshot.png)
 
+Share ideas or report issues in Discord https://discord.gg/2UzEkU2AJW or create Git issues.
+
 ## LifeStreamerV2 new features on top of V1
 
 - Reimagined UI:
