@@ -6,6 +6,8 @@ For original (stable) LifeStreamer (version 1) go here https://github.com/dimade
 
 LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy experiments without affecting V1.
 
+![LifeStreamerV2 screenshot](docs/LifeStreamerV2-screenshot.png)
+
 ## LifeStreamerV2 new features on top of V1
 
 - Reimagined UI:
