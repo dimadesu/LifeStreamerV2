@@ -11,17 +11,18 @@ LifeStreamerV2 (major version 2.x.x) repo is a place to take risks and try crazy
 ## LifeStreamerV2 new features on top of V1
 
 - Reimagined UI:
-  - Main screen buttons grouped into categories.
-  - Separate settings screen removed.
-  - All settings are available on the main screen.
-- Dual camera support for Android cameras with picture-in-picture (PIP) and split view layouts.
-- Extra options for Android camera video source:
-  - Stabilisation: OIS/EIS/OFF.
-  - Noise reduction.
+  - Main screen buttons grouped into categories: VIDEO, AUDIO, ENDPOINT.
+  - Separate settings screen removed. All settings are available on the main screen.
+- Android camera video source:
+  - Dual camera support for Android cameras with picture-in-picture (PIP) and split view layouts.
+  - Extra options for Android camera video source:
+    - Stabilisation: OIS, EIS, OFF.
+    - Noise reduction.
+  - Background mode improved:
+    - No more video/audio stuttering or interruptions for published stream when app goes to/from background with Android camera source.
 - Switching video sources:
   - Reduce stuttering and frame freezes during transition.
   - Blur transition on video source switch.
-- Android camera video source: no more video/audio stuttering or interruptions for published stream when app goes to/from background.
 - Force video sources to render at 60 fps and more. UI toggle is called "Render all video sources at the configured video encoder FPS".
 
 ## The vision for V1
