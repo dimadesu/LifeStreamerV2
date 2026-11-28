@@ -4393,20 +4393,15 @@ class PreviewViewModel(private val application: Application) : ObservableViewMod
             lastUsedCameraId = videoSource.cameraId
         }
 
-        val videoConfig = videoConfigLiveData.value ?: storageRepository.videoConfigFlow.first()
-        if (videoConfig?.forceConstantFps == true) {
-            // Main SurfaceProcessor already enforces constant FPS at videoConfig.fps;
-            // skip local CFR in MediaProjectionVideoSource to avoid cascading two CFR loops.
-            Log.i(
-                TAG,
-                "switchToMediaProjectionVideoSource: Main processor enforces CFR (${videoConfig.fps} fps), using direct MediaProjection source"
-            )
-            currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection, cfrFps = 0))
-        } else {
-            val fps = videoConfig?.fps ?: 30
-            Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to CFR MediaProjection source with fps=$fps")
-            currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection, fps))
-        }
+        // Always pass the CFR fps. MediaProjectionVideoSource disables its own CFR loop when the
+        // *applied* source config has forceConstantFps enabled (main SurfaceProcessor paces instead).
+        // Don't decide here from stored settings: while streaming, config changes are deferred, so
+        // stored settings can differ from what is actually applied.
+        val fps = currentStreamer.videoConfigFlow.value?.fps
+            ?: (videoConfigLiveData.value ?: storageRepository.videoConfigFlow.first())?.fps
+            ?: 30
+        Log.i(TAG, "switchToMediaProjectionVideoSource: Switching to MediaProjection source with cfrFps=$fps")
+        currentStreamer.setVideoSource(MediaProjectionVideoSourceFactory(projection, fps))
     }
 
     /**
