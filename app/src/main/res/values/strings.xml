@@ -107,6 +107,9 @@
     <string name="video_fps">Video encoder FPS</string>
     <string name="video_fps_key">video_fps_key</string>
     <string name="default_fps">30</string>
+    <string name="force_encoder_fps_title">Render all video sources at the configured video encoder FPS</string>
+    <string name="force_encoder_fps_summary">Experimental. Duplicate or drop frames when FPS of the video source is less or more than the configured video encoder FPS. Frame timing might be a bit off.</string>
+    <string name="force_encoder_fps_key">force_encoder_fps_key</string>
 
     <string name="video_bitrate">Bitrate</string>
     <string name="video_bitrate_key">live_video_bitrate_key</string>

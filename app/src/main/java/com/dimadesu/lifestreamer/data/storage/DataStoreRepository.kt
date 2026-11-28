@@ -141,6 +141,9 @@ class DataStoreRepository(
             preferences[stringPreferencesKey(context.getString(R.string.video_fps_key))]?.toInt()
                 ?: ApplicationConstants.Video.defaultFps
         }
+        val forceEncoderFps =
+            preferences[booleanPreferencesKey(context.getString(R.string.force_encoder_fps_key))]
+                ?: false
         val profile =
             preferences[stringPreferencesKey(context.getString(R.string.video_profile_key))]?.toInt()
                 ?: VideoConfig.getBestProfile(mimeType)
@@ -153,6 +156,7 @@ class DataStoreRepository(
             resolution = resolution,
             fps = fps,
             cameraFps = cameraFps,
+            forceConstantFps = forceEncoderFps,
             profile = profile,
             level = level,
             customize = {
@@ -607,6 +611,7 @@ class DataStoreRepository(
             cameraFps = preferences[stringPreferencesKey(context.getString(R.string.camera_fps_key))]?.toIntOrNull(),
             matchFps = preferences[booleanPreferencesKey(context.getString(R.string.match_fps_key))] ?: true,
             fps = preferences[stringPreferencesKey(context.getString(R.string.video_fps_key))]?.toIntOrNull(),
+            forceEncoderFps = preferences[booleanPreferencesKey(context.getString(R.string.force_encoder_fps_key))] ?: false,
             bitrateKbps = preferences[intPreferencesKey(context.getString(R.string.video_bitrate_key))],
             profile = preferences[stringPreferencesKey(context.getString(R.string.video_profile_key))]?.toIntOrNull(),
             level = preferences[stringPreferencesKey(context.getString(R.string.video_level_key))]?.toIntOrNull()
@@ -800,6 +805,8 @@ class DataStoreRepository(
             preferences[booleanPreferencesKey(context.getString(R.string.video_resolution_hardware_filter_key))] =
                 settings.showHardwareResolutionsOnly
             preferences[booleanPreferencesKey(context.getString(R.string.match_fps_key))] = settings.matchFps
+            preferences[booleanPreferencesKey(context.getString(R.string.force_encoder_fps_key))] =
+                settings.forceEncoderFps
             settings.encoder?.let {
                 preferences[stringPreferencesKey(context.getString(R.string.video_encoder_key))] = it
             }

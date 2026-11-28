@@ -128,6 +128,8 @@ class VideoDrawerController(
 
     fun setFps(fps: Int) = update { it.copy(fps = fps) }
 
+    fun setForceEncoderFps(enabled: Boolean) = update { it.copy(forceEncoderFps = enabled) }
+
     fun setBitrateKbps(bitrateKbps: Int) = update { it.copy(bitrateKbps = bitrateKbps) }
 
     fun setProfile(profile: Int) = update { it.copy(profile = profile, level = null) }
